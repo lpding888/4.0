@@ -35,6 +35,30 @@ fashion-ai-saas/
 ├── deploy/                  # 部署 / 运维脚本 (TODO)
 ├── tests/                   # QA / 自动化验收测试 (TODO)
 ├── skills/                  # 角色/Agent能力说明书
+│   ├── product_planner_skill/    # 产品规划师技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── frontend_dev_skill/       # 前端开发工程师技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── backend_dev_skill/        # 后端开发工程师技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── scf_worker_skill/         # 云函数处理工程师技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── billing_guard_skill/      # 计费守卫员技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── qa_acceptance_skill/      # QA验收工程师技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   ├── reviewer_skill/           # 代码审查专家技能包
+│   │   ├── FLOW.md               # 标准工作流程
+│   │   └── CHECKLIST.md          # 自检清单
+│   └── codebuddy_deploy_skill/   # CodeBuddy部署专家技能包
+│       ├── FLOW.md               # 标准工作流程
+│       └── CHECKLIST.md          # 自检清单
 ├── docs/                    # 项目规格、验收标准、历史交付记录
 ├── .gitignore
 ├── CLAUDE.md               # AI助手工作指南
@@ -185,6 +209,40 @@ const QUOTA = 100;  // 后续调价需要改代码
 - **[技术栈指南](docs/TECH_STACK_GUIDE.md)** - 环境配置
 - **[部署说明](deploy/README.md)** - 部署流程和脚本
 - **[环境配置](deploy/README.md#环境变量模板)** - 配置模板
+
+### 🤖 AI角色技能手册
+
+#### 📋 产品规划师 (product_planner_skill)
+- **[标准工作流程](skills/product_planner_skill/FLOW.md)** - 9步标准需求拆解流程
+- **[自检清单](skills/product_planner_skill/CHECKLIST.md)** - 需求完整性自检
+
+#### 🎨 前端开发工程师 (frontend_dev_skill)
+- **[标准工作流程](skills/frontend_dev_skill/FLOW.md)** - 7步前端开发流程
+- **[自检清单](skills/frontend_dev_skill/CHECKLIST.md)** - 代码质量和用户体验检查
+
+#### ⚙️ 后端开发工程师 (backend_dev_skill)
+- **[标准工作流程](skills/backend_dev_skill/FLOW.md)** - 8步后端开发流程
+- **[自检清单](skills/backend_dev_skill/CHECKLIST.md)** - 安全性和性能检查
+
+#### 🌩️ 云函数处理工程师 (scf_worker_skill)
+- **[标准工作流程](skills/scf_worker_skill/FLOW.md)** - 6步云函数开发流程
+- **[自检清单](skills/scf_worker_skill/CHECKLIST.md)** - 云原生和成本控制检查
+
+#### 💰 计费守卫员 (billing_guard_skill)
+- **[标准工作流程](skills/billing_guard_skill/FLOW.md)** - 7步配额和计费管理流程
+- **[自检清单](skills/billing_guard_skill/CHECKLIST.md)** - 配额原子性和财务安全检查
+
+#### 🔍 QA验收工程师 (qa_acceptance_skill)
+- **[标准工作流程](skills/qa_acceptance_skill/FLOW.md)** - 6步功能验收测试流程
+- **[自检清单](skills/qa_acceptance_skill/CHECKLIST.md)** - 功能完整性和用户体验验收
+
+#### 👀 代码审查专家 (reviewer_skill)
+- **[标准工作流程](skills/reviewer_skill/FLOW.md)** - 7步代码审查流程
+- **[自检清单](skills/reviewer_skill/CHECKLIST.md)** - 代码质量和安全性审查
+
+#### 🚀 CodeBuddy部署专家 (codebuddy_deploy_skill)
+- **[标准工作流程](skills/codebuddy_deploy_skill/FLOW.md)** - 8步部署流程
+- **[自检清单](skills/codebuddy_deploy_skill/CHECKLIST.md)** - 部署安全和生产环境检查
 
 ### 📋 完整文档目录
 详细文档请查看 [`docs/`](docs/) 目录，包含：
