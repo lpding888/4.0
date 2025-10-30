@@ -275,6 +275,51 @@ export default function WorkspacePage() {
         </Col>
       </Row>
 
+      {/* 分销中心入口（艹，单独一个高奢风格卡片！）*/}
+      <div
+        onClick={() => router.push('/distribution/dashboard')}
+        style={{
+          marginBottom: '24px',
+          background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15))',
+          border: '1px solid rgba(6, 182, 212, 0.3)',
+          borderRadius: '16px',
+          padding: '24px',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          backdropFilter: 'blur(10px)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(59, 130, 246, 0.25))';
+          e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.5)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15))';
+          e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)';
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <Title level={3} style={{ margin: 0, marginBottom: '8px', color: '#06b6d4', fontWeight: 300 }}>
+              💰 分销中心
+            </Title>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+              成为分销员，推广赚佣金 · 每推荐1位用户购买会员，赚取15%佣金
+            </Text>
+          </div>
+          <Button
+            type="primary"
+            size="large"
+            style={{
+              background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+              border: 'none',
+              fontWeight: 600
+            }}
+          >
+            立即进入
+          </Button>
+        </div>
+      </div>
+
       {/* 功能区域 - 动态渲染功能卡片（艹，不再硬编码！）*/}
       {featuresLoading ? (
         <Card style={{ marginBottom: '24px' }}>

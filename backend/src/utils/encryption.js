@@ -2,176 +2,120 @@ const crypto = require('crypto');
 const logger = require('./logger');
 
 /**
- * 加密工具 - 用于加密敏感数据(如provider credentials)
- * 使用AES-256-GCM算法
+ * 敏感信息加密工具
+ * 使用AES-256-CBC算法加密身份证号等敏感信息
  */
+class EncryptionUtils {
+  constructor() {
+    this.algorithm = 'aes-256-cbc';
 
-// 从环境变量获取加密密钥,如果未设置则使用默认值(仅开发环境)
-const ENCRYPTION_KEY = process.env.CREDENTIALS_ENCRYPTION_KEY || 'default-dev-key-please-change-in-production-32chars';
+    // 从环境变量读取密钥（必须是32字节的hex字符串）
+    const key = process.env.CREDENTIALS_ENCRYPTION_KEY;
 
-// 确保密钥长度为32字节(256位)
-function getEncryptionKey() {
-  const key = Buffer.from(ENCRYPTION_KEY);
-  if (key.length !== 32) {
-    // 如果密钥长度不是32字节,使用SHA256哈希生成固定长度密钥
-    return crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
-  }
-  return key;
-}
-
-/**
- * 加密数据
- * @param {string} plainText - 明文
- * @returns {string} 加密后的数据(格式: iv:authTag:encryptedData,全部base64编码)
- */
-function encrypt(plainText) {
-  try {
-    if (!plainText) {
-      throw new Error('plainText不能为空');
+    if (!key) {
+      throw new Error('CREDENTIALS_ENCRYPTION_KEY环境变量未设置！');
     }
 
-    // 生成随机IV(初始化向量)
-    const iv = crypto.randomBytes(16);
-
-    // 创建加密器
-    const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
-
-    // 加密数据
-    let encrypted = cipher.update(plainText, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
-
-    // 获取认证标签
-    const authTag = cipher.getAuthTag();
-
-    // 返回格式: iv:authTag:encryptedData
-    return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`;
-
-  } catch (error) {
-    logger.error(`[Encryption] 加密失败: ${error.message}`);
-    throw new Error('数据加密失败');
-  }
-}
-
-/**
- * 解密数据
- * @param {string} encryptedText - 加密的数据(格式: iv:authTag:encryptedData)
- * @returns {string} 明文
- */
-function decrypt(encryptedText) {
-  try {
-    if (!encryptedText) {
-      throw new Error('encryptedText不能为空');
+    if (key.length !== 64) {
+      throw new Error('CREDENTIALS_ENCRYPTION_KEY必须是64位hex字符串（32字节）');
     }
 
-    // 分离IV、authTag和加密数据
-    const parts = encryptedText.split(':');
-    if (parts.length !== 3) {
-      throw new Error('加密数据格式错误');
+    this.key = Buffer.from(key, 'hex');
+  }
+
+  /**
+   * 加密身份证号
+   * @param {string} idCard - 明文身份证号
+   * @returns {string} 加密后的身份证号（格式: iv:encrypted）
+   */
+  encryptIdCard(idCard) {
+    try {
+      if (!idCard) {
+        return null;
+      }
+
+      // 生成随机IV
+      const iv = crypto.randomBytes(16);
+
+      // 创建加密器
+      const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+
+      // 加密
+      let encrypted = cipher.update(idCard, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+
+      // 返回格式: iv:encrypted
+      return iv.toString('hex') + ':' + encrypted;
+
+    } catch (error) {
+      logger.error('身份证号加密失败: ' + error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 解密身份证号
+   * @param {string} encryptedIdCard - 加密的身份证号（格式: iv:encrypted）
+   * @returns {string} 明文身份证号
+   */
+  decryptIdCard(encryptedIdCard) {
+    try {
+      if (!encryptedIdCard) {
+        return null;
+      }
+
+      // 分离IV和加密内容
+      const parts = encryptedIdCard.split(':');
+      if (parts.length !== 2) {
+        throw new Error('加密格式错误');
+      }
+
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+
+      // 创建解密器
+      const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+
+      // 解密
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+
+      return decrypted;
+
+    } catch (error) {
+      logger.error('身份证号解密失败: ' + error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 身份证号脱敏显示
+   * @param {string} idCard - 明文身份证号
+   * @returns {string} 脱敏后的身份证号（格式: 110101********1234）
+   */
+  maskIdCard(idCard) {
+    if (!idCard) {
+      return null;
     }
 
-    const iv = Buffer.from(parts[0], 'base64');
-    const authTag = Buffer.from(parts[1], 'base64');
-    const encrypted = parts[2];
+    // 保留前6位和后4位，中间用*代替
+    return idCard.replace(/(\d{6})\d{8}(\d{4})/, '$1********$2');
+  }
 
-    // 创建解密器
-    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), iv);
-    decipher.setAuthTag(authTag);
-
-    // 解密数据
-    let decrypted = decipher.update(encrypted, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-
-    return decrypted;
-
-  } catch (error) {
-    logger.error(`[Encryption] 解密失败: ${error.message}`);
-    throw new Error('数据解密失败');
+  /**
+   * 解密并脱敏身份证号
+   * @param {string} encryptedIdCard - 加密的身份证号
+   * @returns {string} 脱敏后的身份证号
+   */
+  decryptAndMaskIdCard(encryptedIdCard) {
+    try {
+      const decrypted = this.decryptIdCard(encryptedIdCard);
+      return this.maskIdCard(decrypted);
+    } catch (error) {
+      logger.error('解密并脱敏身份证号失败: ' + error.message);
+      return '********';
+    }
   }
 }
 
-/**
- * 加密JSON对象
- * @param {Object} obj - 要加密的对象
- * @returns {string} 加密后的字符串
- */
-function encryptJSON(obj) {
-  try {
-    const jsonStr = JSON.stringify(obj);
-    return encrypt(jsonStr);
-  } catch (error) {
-    logger.error(`[Encryption] JSON加密失败: ${error.message}`);
-    throw new Error('JSON加密失败');
-  }
-}
-
-/**
- * 解密JSON对象
- * @param {string} encryptedText - 加密的字符串
- * @returns {Object} 解密后的对象
- */
-function decryptJSON(encryptedText) {
-  try {
-    const jsonStr = decrypt(encryptedText);
-    return JSON.parse(jsonStr);
-  } catch (error) {
-    logger.error(`[Encryption] JSON解密失败: ${error.message}`);
-    throw new Error('JSON解密失败');
-  }
-}
-
-/**
- * 生成HMAC签名
- * @param {string} data - 要签名的数据
- * @param {string} secret - 密钥
- * @returns {string} 签名(hex格式)
- */
-function generateHMAC(data, secret) {
-  try {
-    return crypto
-      .createHmac('sha256', secret)
-      .update(data)
-      .digest('hex');
-  } catch (error) {
-    logger.error(`[Encryption] HMAC签名生成失败: ${error.message}`);
-    throw new Error('签名生成失败');
-  }
-}
-
-/**
- * 验证HMAC签名
- * @param {string} data - 原始数据
- * @param {string} signature - 签名
- * @param {string} secret - 密钥
- * @returns {boolean} 是否验证通过
- */
-function verifyHMAC(data, signature, secret) {
-  try {
-    const expectedSignature = generateHMAC(data, secret);
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-  } catch (error) {
-    logger.error(`[Encryption] HMAC签名验证失败: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * 生成随机密钥
- * @param {number} length - 密钥长度(字节)
- * @returns {string} base64编码的随机密钥
- */
-function generateRandomKey(length = 32) {
-  return crypto.randomBytes(length).toString('base64');
-}
-
-module.exports = {
-  encrypt,
-  decrypt,
-  encryptJSON,
-  decryptJSON,
-  generateHMAC,
-  verifyHMAC,
-  generateRandomKey
-};
+module.exports = new EncryptionUtils();

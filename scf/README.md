@@ -1,98 +1,195 @@
-# ⚡ 腾讯云函数 / 异步任务处理
+# ⚡ SCF Worker - 腾讯云函数工作体系
 
-> **状态**：开发中（TODO）
+> **状态**：✅ 开发完成（已实现所有任务卡功能）
 
 ## 📋 目录职责
 
-本目录用于存放腾讯云函数代码和异步任务处理逻辑，包括：
+本目录包含三个云函数和通用模块，负责处理主后端无法承载的重任务：
 
-- **云函数开发**：腾讯云Serverless函数
-- **大文件处理**：视频、音频等大文件异步处理
-- **RunningHub长耗时任务**：AI生成任务编排
-- **COS回调桥接**：对象存储事件处理
+- **视频合成** (video-compositor) - 多SKU合辑短片处理
+- **图片拼接** (image-compositor) - 九宫格/多图合成
+- **文本处理** (text-processor) - 文案生成和格式化
+- **通用模块** (common) - 日志、错误处理、文件下载
 
-## 🎯 预期功能模块
+## 🎯 已实现功能
 
-### 🎬 视频处理任务
-- 视频格式转换
-- 视频压缩优化
-- 多清晰度输出
-- 封面图生成
+### ✅ 视频合成云函数 (video-compositor)
+- ✅ 多视频片段拼接（支持转场效果）
+- ✅ 字幕叠加（自定义文本、位置、样式）
+- ✅ Logo 水印（9种位置、透明度控制）
+- ✅ 自动上传到 COS
+- ✅ 安全回调后端（HMAC-SHA256 签名）
 
-### 🤖 AI任务编排
-- RunningHub API调用封装
-- 长耗时任务状态管理
-- 任务失败重试机制
-- 结果回调处理
+### ✅ 图片拼接云函数 (image-compositor)
+- ✅ 九宫格布局（2x2, 3x3, 3x4, 4x4）
+- ✅ 图片自动缩放保持宽高比
+- ✅ 自定义间距和背景色
+- ✅ 高性能处理（Sharp库）
+- ✅ 输出清晰无失真
 
-### 📦 文件处理服务
-- COS事件触发处理
-- 图片批量处理
-- 文件格式验证
-- 存储空间管理
+### ✅ 文本处理云函数 (text-processor)
+- ✅ 模板变量替换
+- ✅ 两种内置模板（本周上新、商品展示）
+- ✅ JSON 格式输出
+- ✅ 易于扩展新模板
 
-### 🔔 通知服务
-- 任务完成通知
-- 系统状态监控
-- 异常告警处理
-- 日志收集分析
+### ✅ 通用能力
+- ✅ 统一日志系统（自动脱敏）
+- ✅ 标准化错误处理
+- ✅ 文件自动下载和清理
+- ✅ 回调签名验证（HMAC-SHA256）
+- ✅ 环境变量隔离
+- ✅ 临时文件自动清理
 
-## ⚠️ 开发注意事项
+## 📁 目录结构
 
-### 🔐 安全规范
-- ❌ **严禁**在云函数中硬编码密钥
-- ❌ **严禁**将生产配置提交到仓库
-- ✅ 使用腾讯云环境变量管理
-- ✅ 通过CAM控制访问权限
-
-### 🚀 性能优化
-- 合理设置函数超时时间
-- 优化冷启动时间
-- 控制函数内存使用
-- 实现请求去重机制
-
-### 🔄 错误处理
-- 完善的异常捕获机制
-- 任务失败自动重试
-- 详细的错误日志记录
-- 失败任务配额返还
-
-## 📚 开发资源
-- [腾讯云函数文档](https://cloud.tencent.com/document/product/583)
-- [RunningHub API文档](../docs/API_DOCUMENTATION.md)
-- [COS开发指南](../docs/TECH_STACK_GUIDE.md)
-
-## 🔧 部署配置
-
-### 环境变量示例
-```bash
-# 运行时配置
-RUNTIME=Node.js 16.13
-MEMORY_SIZE=512MB
-TIMEOUT=900s
-
-# API配置
-RUNNINGHUB_API_KEY=${RUNNINGHUB_API_KEY}
-TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
-TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
-
-# 存储配置
-COS_BUCKET=${COS_BUCKET}
-COS_REGION=${COS_REGION}
+```
+scf/
+├── README.md                        # 本文档
+├── deploy.sh                        # 一键部署脚本 ⭐
+│
+├── common/                          # 通用模块
+│   ├── logger.js                    # 日志工具（自动脱敏）
+│   ├── errorHandler.js              # 错误处理器
+│   └── fileDownloader.js            # 文件下载工具
+│
+├── video-compositor/                # 视频合成云函数
+│   ├── index.js                     # 主入口
+│   ├── package.json
+│   ├── config.js
+│   ├── serverless.yml               # 部署配置
+│   ├── README.md                    # 详细文档
+│   └── lib/
+│       ├── videoMerger.js           # 视频拼接（FFmpeg）
+│       ├── subtitleOverlay.js       # 字幕叠加
+│       ├── logoWatermark.js         # Logo水印
+│       ├── cosUploader.js           # COS上传
+│       └── callbackSender.js        # 回调发送（HMAC签名）
+│
+├── image-compositor/                # 图片拼接云函数
+│   ├── index.js
+│   ├── package.json
+│   ├── config.js
+│   ├── serverless.yml
+│   ├── README.md
+│   └── lib/
+│       ├── gridLayout.js            # 九宫格布局
+│       └── imageProcessor.js        # 图片处理（Sharp）
+│
+└── text-processor/                  # 文本处理云函数
+    ├── index.js
+    ├── package.json
+    ├── config.js
+    ├── serverless.yml
+    ├── README.md
+    ├── templates/                   # 文案模板
+    │   ├── weekly_drop.json
+    │   └── product_showcase.json
+    └── lib/
+        └── templateRenderer.js      # 模板渲染
 ```
 
-### IAM权限要求
-- COS读写权限
-- 云日志服务写入权限
-- API网关调用权限
-- 云数据库访问权限
+## 🚀 快速开始
 
-## 🚀 部署流程
-1. 本地开发和测试
-2. 配置函数环境和变量
-3. 打包上传到腾讯云
-4. 配置触发器和事件源
-5. 监控和日志配置
+### 1. 环境准备
+
+```bash
+# 腾讯云凭证
+export TENCENT_SECRET_ID="AKIDxxxxxxxxxxxxxxxx"
+export TENCENT_SECRET_KEY="xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# COS 配置
+export COS_BUCKET="your-bucket-name"
+export COS_REGION="ap-guangzhou"
+
+# 后端回调配置
+export BACKEND_API_URL="https://your-backend.com"
+export INTERNAL_CALLBACK_SECRET="your-secret-key-here"
+
+# 数据库加密密钥（32字节hex）
+export ENCRYPTION_KEY="$(node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')"
+```
+
+### 2. 一键部署
+
+```bash
+# 安装 Serverless Framework
+npm install -g serverless
+
+# 部署所有云函数
+cd scf
+bash deploy.sh
+```
+
+### 3. 初始化数据库
+
+```bash
+cd backend
+npm run seed:run
+```
+
+## 🔐 安全机制
+
+### 回调签名算法（HMAC-SHA256）
+
+```javascript
+// 拼接顺序：task_id + step_index + timestamp
+const payload = `${task_id}${step_index}${timestamp}`;
+const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+// 请求头
+headers: {
+  'X-Internal-Signature': signature,
+  'X-Timestamp': timestamp
+}
+```
+
+### 环境变量隔离
+
+所有敏感信息通过环境变量配置：
+- ✅ COS 访问凭证
+- ✅ 回调签名密钥
+- ✅ 后端 API 地址
+- ✅ 数据库加密密钥
+
+### 日志自动脱敏
+
+自动过滤敏感字段：`credentials`, `secret`, `password`, `token` 等
+
+## 📊 性能指标
+
+| 指标 | 视频合成 | 图片拼接 | 文本处理 |
+|------|---------|---------|---------|
+| 内存 | 3GB | 1GB | 512MB |
+| 超时 | 300秒 | 60秒 | 30秒 |
+| 并发建议 | 50 | 100 | 100 |
+
+## 🚨 红线提醒
+
+### ❌ 绝对禁止
+1. 不触碰计费/配额
+2. 不暴露内部接口
+3. 不直接操作数据库
+4. 不打印敏感信息
+5. 不跳过回调验证
+
+### ✅ 必须遵守
+1. 必须回调通知后端
+2. 必须清理临时文件
+3. 必须签名验证
+4. 必须脱敏日志
+
+## 📚 详细文档
+
+- [视频合成云函数](./video-compositor/README.md)
+- [图片拼接云函数](./image-compositor/README.md)
+- [文本处理云函数](./text-processor/README.md)
+
+## 👥 联系信息
+
+- 维护者: SCF Worker Team
+- 文档版本: v1.0.0
+- 最后更新: 2025-10-29
 
 ---
 

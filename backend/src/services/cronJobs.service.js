@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const providerHealthService = require('./providerHealth.service');
+const commissionService = require('./commission.service');
 const logger = require('../utils/logger');
 
 /**
@@ -25,7 +26,8 @@ class CronJobsService {
       // 2. 清理过期任务 - 每小时执行一次
       // this.scheduleTaskCleanup();
 
-      // 3. 其他定时任务可以在这里添加
+      // 3. 解冻佣金 - 每小时执行一次
+      this.scheduleUnfreezeCommissions();
 
       logger.info(`[CronJobsService] 已启动${this.jobs.length}个定时任务`);
 
@@ -132,6 +134,40 @@ class CronJobsService {
     } catch (error) {
       logger.error(
         `[CronJobsService] 调度任务清理失败: ${error.message}`,
+        error
+      );
+    }
+  }
+
+  /**
+   * 调度解冻佣金定时任务
+   * 每小时执行一次,将冻结期已结束的佣金转为可提现
+   */
+  scheduleUnfreezeCommissions() {
+    try {
+      // Cron表达式: 0 * * * * (每小时的第0分钟)
+      const job = cron.schedule('0 * * * *', async () => {
+        try {
+          logger.info('[CronJobs] 开始执行解冻佣金任务');
+
+          await commissionService.unfreezeCommissions();
+
+          logger.info('[CronJobs] 解冻佣金任务完成');
+
+        } catch (error) {
+          logger.error(
+            `[CronJobs] 解冻佣金任务异常: ${error.message}`,
+            error
+          );
+        }
+      });
+
+      this.jobs.push(job);
+      logger.info('[CronJobsService] 解冻佣金定时任务已启动 (每小时)');
+
+    } catch (error) {
+      logger.error(
+        `[CronJobsService] 调度解冻佣金失败: ${error.message}`,
         error
       );
     }

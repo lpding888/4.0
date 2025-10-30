@@ -8,17 +8,25 @@ const logger = require('../utils/logger');
 class FeatureController {
   /**
    * GET /api/features
-   * 获取当前用户可用的功能卡片列表
+   * 获取功能卡片列表
+   * 艹！未登录返回所有启用的功能，已登录返回用户可用的功能！
    */
   async getFeatures(req, res) {
     try {
-      const userId = req.user.id; // 从JWT中间件获取用户ID
+      let features;
 
-      const features = await featureService.getAvailableFeatures(userId);
+      // 如果未登录，返回所有启用的功能（首页展示用）
+      if (!req.user) {
+        features = await featureService.getAllEnabledFeatures();
+      } else {
+        // 如果已登录，返回用户可用的功能（根据权限过滤）
+        const userId = req.user.id;
+        features = await featureService.getAvailableFeatures(userId);
+      }
 
       res.json({
         success: true,
-        features
+        data: features
       });
 
     } catch (error) {

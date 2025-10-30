@@ -108,9 +108,10 @@ class AuthService {
    * 登录/注册
    * @param {string} phone - 手机号
    * @param {string} code - 验证码
+   * @param {string} referrerId - 推荐人用户ID(可选)
    * @returns {Promise<{token: string, user: object}>}
    */
-  async login(phone, code) {
+  async login(phone, code, referrerId = null) {
     // 1. 验证码校验
     await this.verifyCode(phone, code);
 
@@ -118,20 +119,33 @@ class AuthService {
     let user = await db('users').where('phone', phone).first();
 
     if (!user) {
-      // 用户不存在,创建新用户
-      const userId = generateId();
-      await db('users').insert({
-        id: userId,
-        phone,
-        isMember: false,
-        quota_remaining: 0,
-        quota_expireAt: null,
-        created_at: new Date(),
-        updated_at: new Date()
+      // 用户不存在,创建新用户(在事务中处理)
+      await db.transaction(async (trx) => {
+        const userId = generateId();
+
+        // 创建用户
+        await trx('users').insert({
+          id: userId,
+          phone,
+          referrer_id: referrerId || null, // 记录推荐人
+          isMember: false,
+          quota_remaining: 0,
+          quota_expireAt: null,
+          created_at: new Date(),
+          updated_at: new Date()
+        });
+
+        // 如果有推荐人,绑定推荐关系
+        if (referrerId) {
+          const distributionService = require('./distribution.service');
+          await distributionService.bindReferralRelationship(trx, referrerId, userId);
+          logger.info(`推荐关系绑定尝试: referrerId=${referrerId}, userId=${userId}`);
+        }
+
+        logger.info(`新用户注册: userId=${userId}, phone=${phone}, referrerId=${referrerId}`);
       });
 
-      user = await db('users').where('id', userId).first();
-      logger.info(`新用户注册: userId=${userId}, phone=${phone}`);
+      user = await db('users').where('phone', phone).first();
     }
 
     // 3. 标记验证码已使用
@@ -159,7 +173,7 @@ class AuthService {
       user: {
         id: user.id,
         phone: user.phone,
-        role: user.role || 'user', // 艹，怎么能忘记role字段！
+        role: user.role || 'user',
         isMember: user.isMember,
         quota_remaining: user.quota_remaining,
         quota_expireAt: user.quota_expireAt

@@ -1,0 +1,42 @@
+service: image-compositor
+
+provider:
+  name: tencentcloud
+  runtime: Nodejs18.15  # 腾讯云最新版本
+  region: ${env:TENCENT_REGION, 'ap-guangzhou'}
+  memorySize: 1024
+  timeout: 60
+  environment:
+    TENCENT_SECRET_ID: ${env:TENCENT_SECRET_ID}
+    TENCENT_SECRET_KEY: ${env:TENCENT_SECRET_KEY}
+    COS_BUCKET: ${env:COS_BUCKET}
+    COS_REGION: ${env:COS_REGION, 'ap-guangzhou'}
+    INTERNAL_CALLBACK_SECRET: ${env:INTERNAL_CALLBACK_SECRET}
+    BACKEND_API_URL: ${env:BACKEND_API_URL}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+
+functions:
+  compositor:
+    handler: index.main_handler
+    description: 图片拼接云函数 - 九宫格/多图合成
+    events:
+      - apigw:
+          name: image-compositor-api
+          parameters:
+            serviceId: ${env:APIGW_SERVICE_ID}
+            environment: ${env:APIGW_ENVIRONMENT, 'release'}
+            endpoints:
+              - path: /image-compositor
+                method: POST
+                description: 图片拼接接口
+
+plugins:
+  - serverless-tencent-scf
+
+custom:
+  exclude:
+    - .git/**
+    - .gitignore
+    - node_modules/**/.cache/**
+    - README.md
+    - test/**

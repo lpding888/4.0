@@ -119,3 +119,170 @@ export interface Asset {
   metadata?: any;
   created_at: string;
 }
+
+// ============ 分销代理系统类型定义 ============
+
+// 分销员状态类型
+export type DistributorStatus = 'none' | 'pending' | 'active' | 'disabled';
+
+// 佣金状态类型
+export type CommissionStatus = 'frozen' | 'settled' | 'withdrawn';
+
+// 提现状态类型
+export type WithdrawalStatus = 'pending' | 'approved' | 'rejected';
+
+// 提现方式类型
+export type WithdrawalMethod = 'wechat' | 'alipay';
+
+// 分销员状态信息
+export interface DistributorStatusInfo {
+  status: DistributorStatus;
+  inviteCode?: string;
+  inviteLink?: string;
+  appliedAt?: string;
+  approvedAt?: string;
+}
+
+// 分销中心数据概览
+export interface DistributionDashboard {
+  totalReferrals: number;
+  totalCommission: number;
+  availableCommission: number;
+  withdrawnCommission: number;
+}
+
+// 推广用户信息
+export interface Referral {
+  userId: string;
+  phone: string;
+  registeredAt: string;
+  hasPaid: boolean;
+  commissionAmount?: number;
+  avatar?: string;
+}
+
+// 推广用户列表响应
+export interface ReferralsResponse {
+  referrals: Referral[];
+  total: number;
+}
+
+// 佣金记录
+export interface Commission {
+  id: string;
+  orderId: string;
+  orderAmount: number;
+  commissionAmount: number;
+  status: CommissionStatus;
+  createdAt: string;
+  settledAt?: string;
+  freezeUntil?: string;
+  referredUserPhone?: string;
+}
+
+// 佣金记录列表响应
+export interface CommissionsResponse {
+  commissions: Commission[];
+  total: number;
+}
+
+// 提现申请信息
+export interface Withdrawal {
+  id: string;
+  amount: number;
+  method: WithdrawalMethod;
+  accountInfo: {
+    account: string;
+    name: string;
+  };
+  status: WithdrawalStatus;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectReason?: string;
+}
+
+// 提现记录列表响应
+export interface WithdrawalsResponse {
+  withdrawals: Withdrawal[];
+  total: number;
+}
+
+// 管理端 - 分销员详细信息
+export interface DistributorDetail {
+  id: string;
+  userId: string;
+  phone: string;
+  realName: string;
+  idCard: string;
+  contact: string;
+  channel?: string;
+  inviteCode: string;
+  status: DistributorStatus;
+  appliedAt: string;
+  approvedAt?: string;
+  totalReferrals: number;
+  totalCommission: number;
+  availableCommission: number;
+  withdrawnCommission: number;
+}
+
+// 管理端 - 分销员列表项
+export interface DistributorListItem {
+  id: string;
+  userId: string;
+  phone: string;
+  realName: string;
+  status: DistributorStatus;
+  appliedAt: string;
+  approvedAt?: string;
+  totalReferrals: number;
+  totalCommission: number;
+}
+
+// 管理端 - 分销员列表响应
+export interface DistributorsResponse {
+  distributors: DistributorListItem[];
+  total: number;
+}
+
+// 管理端 - 提现申请（含分销员信息）
+export interface WithdrawalAdmin extends Withdrawal {
+  distributorName: string;
+  phone: string;
+}
+
+// 管理端 - 提现列表响应
+export interface WithdrawalsAdminResponse {
+  withdrawals: WithdrawalAdmin[];
+  total: number;
+  pending_count?: number;
+}
+
+// 管理端 - 分销数据统计
+export interface DistributionStats {
+  totalDistributors: number;
+  activeDistributors: number;
+  totalReferrals: number;
+  paidReferrals: number;
+  totalCommissionPaid: number;
+  pendingWithdrawals: number;
+  pendingWithdrawalAmount: number;
+  referralTrend?: Array<{ date: string; count: number }>;
+  commissionTrend?: Array<{ date: string; amount: number }>;
+  topDistributors: Array<{
+    id: string;
+    realName: string;
+    phone: string;
+    referrals: number;
+    commission: number;
+  }>;
+}
+
+// 管理端 - 佣金设置
+export interface DistributionSettings {
+  commissionRate: number;
+  minWithdrawal: number;
+  freezeDays: number;
+  autoApprove: boolean;
+}

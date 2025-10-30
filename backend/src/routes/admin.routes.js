@@ -44,4 +44,42 @@ router.delete('/features/:featureId', authenticate, requireAdmin, adminControlle
 // 管理员查看所有用户素材
 router.get('/assets', authenticate, requireAdmin, assetController.getAllAssets);
 
+// ========== 分销代理管理 ==========
+
+// 分销员列表
+router.get('/distributors', authenticate, requireAdmin, adminController.getDistributors);
+
+// 分销员详细信息
+router.get('/distributors/:id', authenticate, requireAdmin, adminController.getDistributorDetail);
+
+// 分销员推广用户列表
+router.get('/distributors/:id/referrals', authenticate, requireAdmin, adminController.getDistributorReferrals);
+
+// 分销员佣金记录
+router.get('/distributors/:id/commissions', authenticate, requireAdmin, adminController.getDistributorCommissions);
+
+// 审核分销员申请
+router.patch('/distributors/:id/approve', authenticate, requireAdmin, adminController.approveDistributor);
+
+// 禁用分销员
+router.patch('/distributors/:id/disable', authenticate, requireAdmin, adminController.disableDistributor);
+
+// 提现申请列表
+router.get('/withdrawals', authenticate, requireAdmin, adminController.getWithdrawals);
+
+// 审核通过提现
+router.patch('/withdrawals/:id/approve', authenticate, requireAdmin, adminController.approveWithdrawal);
+
+// 拒绝提现
+router.patch('/withdrawals/:id/reject', authenticate, requireAdmin, adminController.rejectWithdrawal);
+
+// 分销数据统计
+router.get('/distribution/stats', authenticate, requireAdmin, adminController.getDistributionStats);
+
+// 获取佣金设置
+router.get('/distribution/settings', authenticate, requireAdmin, adminController.getDistributionSettings);
+
+// 更新佣金设置
+router.put('/distribution/settings', authenticate, requireAdmin, adminController.updateDistributionSettings);
+
 module.exports = router;

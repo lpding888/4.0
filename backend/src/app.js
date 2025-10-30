@@ -115,6 +115,7 @@ app.use('/api/system-config', require('./routes/systemConfig.routes'));
 app.use('/api/features', require('./routes/feature.routes'));
 app.use('/api/scf', require('./routes/scfCallback.routes'));
 app.use('/api/assets', require('./routes/asset.routes'));
+app.use('/api/distribution', require('./routes/distribution.routes')); // 分销代理路由
 
 // 404处理
 app.use(notFoundHandler);

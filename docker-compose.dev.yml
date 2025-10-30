@@ -1,0 +1,69 @@
+services:
+  # MySQL 8.0 测试数据库
+  mysql:
+    image: mysql:8.0
+    container_name: ai-photo-mysql-dev
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: dev_password_123
+      MYSQL_DATABASE: ai_photo
+      MYSQL_USER: dev_user
+      MYSQL_PASSWORD: dev_password
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pdev_password_123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 7.0 缓存服务
+  redis:
+    image: redis:7-alpine
+    container_name: ai-photo-redis-dev
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储 (本地模拟腾讯云COS)
+  minio:
+    image: minio/minio:latest
+    container_name: ai-photo-minio-dev
+    restart: always
+    ports:
+      - "9000:9000"      # API端口
+      - "9001:9001"      # 控制台端口
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local

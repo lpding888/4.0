@@ -1,0 +1,21 @@
+{
+  "name": "video-compositor",
+  "version": "1.0.0",
+  "description": "视频合成云函数 - 多SKU合辑短片处理",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "tencentcloud-sdk-nodejs": "^4.0.0",
+    "cos-nodejs-sdk-v5": "^2.12.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "engines": {
+    "node": ">=18.15.0"
+  }
+}

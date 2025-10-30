@@ -17,6 +17,7 @@ const app = require('./app');
 const logger = require('./utils/logger');
 const videoPollingService = require('./services/videoPolling.service');
 const cronJobsService = require('./services/cronJobs.service');
+const { startUnfreezeCommissionsJob, stopUnfreezeCommissionsJob } = require('../cron/unfreeze-commissions');
 
 const PORT = process.env.PORT || 3000;
 
@@ -41,6 +42,14 @@ const server = app.listen(PORT, () => {
   } catch (error) {
     logger.error('Failed to start cron jobs service:', error);
   }
+
+  // 启动佣金解冻定时任务
+  try {
+    startUnfreezeCommissionsJob();
+    logger.info('💰 Commission unfreezing job started');
+  } catch (error) {
+    logger.error('Failed to start commission unfreezing job:', error);
+  }
 });
 
 // 优雅关闭
@@ -61,6 +70,14 @@ process.on('SIGTERM', () => {
     logger.info('Cron jobs service stopped');
   } catch (error) {
     logger.error('Error stopping cron jobs service:', error);
+  }
+
+  // 停止佣金解冻定时任务
+  try {
+    stopUnfreezeCommissionsJob();
+    logger.info('Commission unfreezing job stopped');
+  } catch (error) {
+    logger.error('Error stopping commission unfreezing job:', error);
   }
 
   server.close(() => {
@@ -86,6 +103,14 @@ process.on('SIGINT', () => {
     logger.info('Cron jobs service stopped');
   } catch (error) {
     logger.error('Error stopping cron jobs service:', error);
+  }
+
+  // 停止佣金解冻定时任务
+  try {
+    stopUnfreezeCommissionsJob();
+    logger.info('Commission unfreezing job stopped');
+  } catch (error) {
+    logger.error('Error stopping commission unfreezing job:', error);
   }
 
   server.close(() => {

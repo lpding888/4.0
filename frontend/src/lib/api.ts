@@ -212,6 +212,111 @@ class APIClient {
     delete: (assetId: string, params?: { delete_cos_file?: boolean }) =>
       this.client.delete<APIResponse>(`/assets/${assetId}`, { params })
   };
+
+  // ============ 分销代理系统API ============
+
+  // 用户端 - 分销相关
+  distribution = {
+    // 申请成为分销员
+    apply: (data: {
+      realName: string;
+      idCard: string;
+      contact: string;
+      channel?: string;
+    }) => this.client.post<APIResponse>('/distribution/apply', data),
+
+    // 查询分销员状态
+    getStatus: () =>
+      this.client.get<APIResponse>('/distribution/status'),
+
+    // 分销中心数据概览
+    getDashboard: () =>
+      this.client.get<APIResponse>('/distribution/dashboard'),
+
+    // 推广用户列表
+    getReferrals: (params?: { status?: string; limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/distribution/referrals', { params }),
+
+    // 佣金明细
+    getCommissions: (params?: { status?: string; limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/distribution/commissions', { params }),
+
+    // 提现记录
+    getWithdrawals: (params?: { limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>('/distribution/withdrawals', { params }),
+
+    // 申请提现
+    createWithdrawal: (data: {
+      amount: number;
+      method: 'wechat' | 'alipay';
+      accountInfo: {
+        account: string;
+        name: string;
+      };
+    }) => this.client.post<APIResponse>('/distribution/withdraw', data)
+  };
+
+  // 管理端 - 分销管理（扩展admin对象）
+  adminDistribution = {
+    // 分销员列表
+    getDistributors: (params?: {
+      status?: string;
+      keyword?: string;
+      limit?: number;
+      offset?: number;
+    }) => this.client.get<APIResponse>('/admin/distributors', { params }),
+
+    // 分销员详情
+    getDistributor: (id: string) =>
+      this.client.get<APIResponse>(`/admin/distributors/${id}`),
+
+    // 分销员推广用户列表
+    getDistributorReferrals: (id: string, params?: { limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>(`/admin/distributors/${id}/referrals`, { params }),
+
+    // 分销员佣金记录
+    getDistributorCommissions: (id: string, params?: { limit?: number; offset?: number }) =>
+      this.client.get<APIResponse>(`/admin/distributors/${id}/commissions`, { params }),
+
+    // 审核分销员申请
+    approveDistributor: (id: string) =>
+      this.client.patch<APIResponse>(`/admin/distributors/${id}/approve`),
+
+    // 禁用分销员
+    disableDistributor: (id: string) =>
+      this.client.patch<APIResponse>(`/admin/distributors/${id}/disable`),
+
+    // 提现申请列表
+    getWithdrawals: (params?: {
+      status?: string;
+      limit?: number;
+      offset?: number;
+    }) => this.client.get<APIResponse>('/admin/withdrawals', { params }),
+
+    // 审核通过提现
+    approveWithdrawal: (id: string) =>
+      this.client.patch<APIResponse>(`/admin/withdrawals/${id}/approve`),
+
+    // 拒绝提现
+    rejectWithdrawal: (id: string, data: { reason: string }) =>
+      this.client.patch<APIResponse>(`/admin/withdrawals/${id}/reject`, data),
+
+    // 分销数据统计
+    getStats: () =>
+      this.client.get<APIResponse>('/admin/distribution/stats'),
+
+    // 获取佣金设置
+    getSettings: () =>
+      this.client.get<APIResponse>('/admin/distribution/settings'),
+
+    // 更新佣金设置
+    updateSettings: (data: {
+      commissionRate: number;
+      minWithdrawal: number;
+      freezeDays: number;
+      autoApprove: boolean;
+    }) => this.client.put<APIResponse>('/admin/distribution/settings', data)
+  };
 }
 
 export const api = new APIClient();

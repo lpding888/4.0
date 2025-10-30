@@ -7,6 +7,37 @@ const logger = require('../utils/logger');
  */
 class FeatureService {
   /**
+   * 获取所有启用的功能卡片（公开接口，无需登录）
+   * @returns {Promise<Array>} 功能卡片列表
+   */
+  async getAllEnabledFeatures() {
+    try {
+      // 查询所有启用且未删除的功能卡片
+      const allFeatures = await db('feature_definitions')
+        .where('is_enabled', true)
+        .whereNull('deleted_at')
+        .select(
+          'feature_id',
+          'display_name',
+          'category',
+          'description',
+          'plan_required',
+          'quota_cost',
+          'rate_limit_policy',
+          'output_type',
+          'save_to_asset_library'
+        );
+
+      logger.info(`[FeatureService] 获取所有启用功能 count=${allFeatures.length}`);
+      return allFeatures;
+
+    } catch (error) {
+      logger.error(`[FeatureService] 获取所有启用功能失败: ${error.message}`, { error });
+      throw error;
+    }
+  }
+
+  /**
    * 获取用户可用的功能卡片列表
    * @param {string} userId - 用户ID
    * @returns {Promise<Array>} 功能卡片列表
