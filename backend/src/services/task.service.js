@@ -42,6 +42,8 @@ class TaskService {
           status: 'pending',
           inputUrl: inputImageUrl,
           params: JSON.stringify(params),
+          eligible_for_refund: true, // 🔥 设置为有资格返还配额
+          refunded: false, // 🔥 初始化为未返还
           created_at: now,
           updated_at: now,
         });
@@ -139,6 +141,8 @@ class TaskService {
           feature_id: featureId,
           status: 'pending',
           input_data: JSON.stringify(inputData),
+          eligible_for_refund: true, // 🔥 设置为有资格返还配额
+          refunded: false, // 🔥 初始化为未返还
           created_at: now,
           updated_at: now,
           // 保留旧字段兼容性（type是NOT NULL字段，用feature_id作为type的占位值）
@@ -205,6 +209,7 @@ class TaskService {
       const params = task.params ? JSON.parse(task.params) : {};
       const resultUrls = task.resultUrls ? JSON.parse(task.resultUrls) : [];
 
+      // 艹！不能返回内部字段vendorTaskId给前端！
       return {
         id: task.id,
         type: task.type,
@@ -212,7 +217,7 @@ class TaskService {
         inputImageUrl: task.inputImageUrl,
         params,
         resultUrls,
-        vendorTaskId: task.vendorTaskId,
+        // vendorTaskId: task.vendorTaskId, // 🔥 禁止！内部字段不能暴露
         coverUrl: task.coverUrl,
         thumbnailUrl: task.thumbnailUrl,
         errorMessage: task.errorMessage,
@@ -262,13 +267,16 @@ class TaskService {
 
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
 
-      // 如果任务失败,返还配额
+      // 如果任务失败,返还配额（艹！必须检查eligible_for_refund）
       if (status === 'failed') {
         const task = await db('tasks').where('id', taskId).first();
         if (task) {
           const refundAmount = this.getQuotaCost(task.type);
-          await quotaService.refund(task.userId, refundAmount, `任务失败返还:${taskId}`);
-          logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
+          // 🔥 修复参数顺序：taskId在前，userId在后
+          const result = await quotaService.refund(taskId, task.userId, refundAmount, `任务失败返还:${taskId}`);
+          if (result.refunded) {
+            logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
+          }
         }
       }
 
@@ -390,15 +398,13 @@ class TaskService {
    */
   async handleVideoTaskFailure(taskId, userId, errorMessage) {
     try {
-      // 更新任务状态为失败
+      // 更新任务状态为失败（updateStatus内部会自动返还配额）
       await this.updateStatus(taskId, 'failed', {
         errorMessage: errorMessage
       });
 
-      const refundAmount = this.getQuotaCost('video_generate');
-      await quotaService.refund(userId, refundAmount, `视频任务失败返还:${taskId}`);
-
-      logger.info(`[TaskService] 视频任务失败处理完成 taskId=${taskId} userId=${userId} 已返还配额`);
+      // 艹！不要在这里再次返还配额，updateStatus已经返还了！
+      logger.info(`[TaskService] 视频任务失败处理完成 taskId=${taskId} userId=${userId}`);
 
     } catch (error) {
       logger.error(`[TaskService] 视频任务失败处理异常 taskId=${taskId} error=${error.message}`);
@@ -460,13 +466,14 @@ class TaskService {
   }
 
   /**
-   * 返还配额
+   * 返还配额（艹！必须传taskId，防止重复返还）
+   * @param {string} taskId - 任务ID
    * @param {string} userId - 用户ID
    * @param {number} amount - 返还数量
    * @param {string} reason - 返还原因
    */
-  async refundQuota(userId, amount, reason) {
-    return await quotaService.refund(userId, amount, reason);
+  async refundQuota(taskId, userId, amount, reason) {
+    return await quotaService.refund(taskId, userId, amount, reason);
   }
 }
 

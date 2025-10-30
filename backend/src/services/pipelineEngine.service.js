@@ -295,16 +295,20 @@ class PipelineEngine {
         .first();
 
       if (feature && task.userId) {
-        await quotaService.refund(
+        // 🔥 修复参数顺序：taskId在前，userId在后
+        const result = await quotaService.refund(
+          taskId,
           task.userId,
           feature.quota_cost,
           `Pipeline失败返还:${taskId}`
         );
 
-        logger.info(
-          `[PipelineEngine] 配额已返还 taskId=${taskId} ` +
-          `userId=${task.userId} amount=${feature.quota_cost}`
-        );
+        if (result.refunded) {
+          logger.info(
+            `[PipelineEngine] 配额已返还 taskId=${taskId} ` +
+            `userId=${task.userId} amount=${feature.quota_cost}`
+          );
+        }
       }
 
       logger.error(

@@ -52,26 +52,59 @@ class QuotaService {
 
   /**
    * 返还配额(任务失败时)
+   * 艹！必须检查eligible_for_refund和refunded，防止重复返还！
+   *
+   * @param {string} taskId - 任务ID（用于检查是否已返还）
    * @param {string} userId - 用户ID
    * @param {number} amount - 返还数量(默认1)
    * @param {string} reason - 返还原因
-   * @returns {Promise<{remaining: number}>}
+   * @returns {Promise<{remaining: number, refunded: boolean}>}
    */
-  async refund(userId, amount = 1, reason = '') {
+  async refund(taskId, userId, amount = 1, reason = '') {
     return await db.transaction(async (trx) => {
-      // 1. 返还配额
+      // 1. 检查任务是否有资格返还，并且没有返还过
+      const task = await trx('tasks')
+        .where('id', taskId)
+        .forUpdate() // 🔥 行锁，防止并发重复返还
+        .first();
+
+      if (!task) {
+        throw { errorCode: 4004, message: '任务不存在' };
+      }
+
+      // 2. 检查是否有资格返还
+      if (!task.eligible_for_refund) {
+        logger.warn(`配额返还失败: 任务无资格返还 taskId=${taskId}`);
+        return { remaining: 0, refunded: false };
+      }
+
+      // 3. 检查是否已经返还过（防止重复返还）
+      if (task.refunded) {
+        logger.warn(`配额返还失败: 任务已返还过配额 taskId=${taskId}`);
+        return { remaining: 0, refunded: false };
+      }
+
+      // 4. 返还配额
       await trx('users')
         .where('id', userId)
         .increment('quota_remaining', amount);
 
-      // 2. 获取返还后的配额
+      // 5. 标记任务为已返还
+      await trx('tasks')
+        .where('id', taskId)
+        .update({
+          refunded: true,
+          refunded_at: new Date()
+        });
+
+      // 6. 获取返还后的配额
       const user = await trx('users')
         .where('id', userId)
         .first();
 
-      logger.info(`配额返还成功: userId=${userId}, amount=${amount}, reason=${reason}, remaining=${user.quota_remaining}`);
+      logger.info(`配额返还成功: taskId=${taskId}, userId=${userId}, amount=${amount}, reason=${reason}, remaining=${user.quota_remaining}`);
 
-      return { remaining: user.quota_remaining };
+      return { remaining: user.quota_remaining, refunded: true };
     });
   }
 
