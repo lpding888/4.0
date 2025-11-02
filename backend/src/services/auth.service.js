@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const { generateCode, generateId } = require('../utils/generator');
 const logger = require('../utils/logger');
 const axios = require('axios');
@@ -308,6 +309,153 @@ class AuthService {
         message: '微信登录失败'
       };
     }
+  }
+
+  /**
+   * 密码登录 (P0-007)
+   * @param {string} phone - 手机号
+   * @param {string} password - 密码
+   * @returns {Promise<{token: string, user: object}>}
+   */
+  async passwordLogin(phone, password) {
+    // 1. 查询用户
+    const user = await db('users').where('phone', phone).first();
+
+    if (!user) {
+      throw {
+        statusCode: 401,
+        errorCode: 2007,
+        message: '手机号或密码错误'
+      };
+    }
+
+    // 2. 验证密码
+    if (!user.password) {
+      throw {
+        statusCode: 401,
+        errorCode: 2008,
+        message: '该用户未设置密码,请使用验证码登录'
+      };
+    }
+
+    const isPasswordValid = await this.verifyPassword(password, user.password);
+    if (!isPasswordValid) {
+      throw {
+        statusCode: 401,
+        errorCode: 2007,
+        message: '手机号或密码错误'
+      };
+    }
+
+    // 3. 生成JWT token
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        phone: user.phone
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: process.env.JWT_EXPIRE || '7d'
+      }
+    );
+
+    logger.info(`密码登录成功: userId=${user.id}, phone=${phone}`);
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role || 'user',
+        isMember: user.isMember,
+        quota_remaining: user.quota_remaining,
+        quota_expireAt: user.quota_expireAt
+      }
+    };
+  }
+
+  /**
+   * 设置/修改密码 (P0-007)
+   * @param {string} userId - 用户ID
+   * @param {string} newPassword - 新密码
+   * @param {string} oldPassword - 旧密码(修改密码时需要)
+   * @returns {Promise<{success: boolean}>}
+   */
+  async setPassword(userId, newPassword, oldPassword = null) {
+    // 1. 查询用户
+    const user = await db('users').where('id', userId).first();
+
+    if (!user) {
+      throw {
+        statusCode: 404,
+        errorCode: 1004,
+        message: '用户不存在'
+      };
+    }
+
+    // 2. 如果用户已有密码,验证旧密码
+    if (user.password && oldPassword) {
+      const isOldPasswordValid = await this.verifyPassword(oldPassword, user.password);
+      if (!isOldPasswordValid) {
+        throw {
+          statusCode: 401,
+          errorCode: 2009,
+          message: '旧密码错误'
+        };
+      }
+    } else if (user.password && !oldPassword) {
+      throw {
+        statusCode: 400,
+        errorCode: 2010,
+        message: '修改密码需要提供旧密码'
+      };
+    }
+
+    // 3. 密码强度校验（至少6位）
+    if (newPassword.length < 6) {
+      throw {
+        statusCode: 400,
+        errorCode: 2011,
+        message: '密码长度至少6位'
+      };
+    }
+
+    // 4. 加密新密码
+    const hashedPassword = await this.hashPassword(newPassword);
+
+    // 5. 更新数据库
+    await db('users')
+      .where('id', userId)
+      .update({
+        password: hashedPassword,
+        updated_at: new Date()
+      });
+
+    logger.info(`用户设置密码成功: userId=${userId}`);
+
+    return {
+      success: true
+    };
+  }
+
+  /**
+   * 密码加密
+   * @param {string} password - 明文密码
+   * @returns {Promise<string>} 加密后的密码
+   */
+  async hashPassword(password) {
+    const saltRounds = 10;
+    return await bcrypt.hash(password, saltRounds);
+  }
+
+  /**
+   * 密码验证
+   * @param {string} password - 明文密码
+   * @param {string} hashedPassword - 加密后的密码
+   * @returns {Promise<boolean>} 是否匹配
+   */
+  async verifyPassword(password, hashedPassword) {
+    return await bcrypt.compare(password, hashedPassword);
   }
 
   /**
