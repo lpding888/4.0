@@ -156,11 +156,12 @@ class AuthService {
       .where('code', code)
       .update({ used: true });
 
-    // 4. 生成JWT token
+    // 4. 生成JWT token (包含role字段 - P0-009)
     const token = jwt.sign(
       {
         userId: user.id,
-        phone: user.phone
+        phone: user.phone,
+        role: user.role || 'user'
       },
       process.env.JWT_SECRET,
       {
@@ -272,12 +273,13 @@ class AuthService {
         user = await db('users').where('wechat_openid', openid).first();
       }
 
-      // 3. 生成JWT token (使用P0-002的双Token机制)
+      // 3. 生成JWT token (包含role字段 - P0-009)
       const token = jwt.sign(
         {
           userId: user.id,
           phone: user.phone,
-          openid: user.wechat_openid
+          openid: user.wechat_openid,
+          role: user.role || 'user'
         },
         process.env.JWT_SECRET,
         {
@@ -347,11 +349,12 @@ class AuthService {
       };
     }
 
-    // 3. 生成JWT token
+    // 3. 生成JWT token (包含role字段 - P0-009)
     const token = jwt.sign(
       {
         userId: user.id,
-        phone: user.phone
+        phone: user.phone,
+        role: user.role || 'user'
       },
       process.env.JWT_SECRET,
       {

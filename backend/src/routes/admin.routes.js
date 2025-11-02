@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
 const assetController = require('../controllers/asset.controller');
-const { authenticate } = require('../middlewares/auth.middleware');
-const { requireAdmin } = require('../middlewares/adminAuth.middleware');
+const { authenticate, requireAdmin } = require('../middlewares/auth.middleware'); // P0-009: 统一认证中间件
 
 /**
  * 管理后台路由

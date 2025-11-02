@@ -3,7 +3,13 @@
  * 用于存储API密钥、提示词、系统参数等动态配置
  */
 
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const hasTable = await knex.schema.hasTable('system_configs');
+  if (hasTable) {
+    console.log('✓ system_configs表已存在，跳过迁移');
+    return;
+  }
+
   return knex.schema.createTable('system_configs', function(table) {
     // 主键
     table.increments('id').primary();
