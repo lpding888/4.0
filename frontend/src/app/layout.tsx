@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import Navigation from '@/components/Navigation';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -8,6 +10,11 @@ export const metadata: Metadata = {
   description: '专业的服装图片AI处理服务,提供基础修图和AI模特上身功能',
 };
 
+/**
+ * RootLayout - 根布局
+ *
+ * 艹，包含导航栏，支持青蓝玻璃拟态主题！
+ */
 export default function RootLayout({
   children,
 }: {
@@ -15,10 +22,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body>
-        <ConfigProvider locale={zhCN}>
-          {children}
-        </ConfigProvider>
+      <body className="bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950 min-h-screen">
+        <ErrorBoundary>
+          <ConfigProvider locale={zhCN}>
+            <Navigation />
+            {children}
+          </ConfigProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

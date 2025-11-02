@@ -38,8 +38,8 @@ export default function TaskHistoryPage() {
       }
 
       const response = await api.task.list(params);
-      setTasks(response.data.tasks || []);
-      setTotal(response.data.total || 0);
+      setTasks((response.data as any)?.tasks || []);
+      setTotal((response.data as any)?.total || 0);
     } catch (error) {
       message.error('获取任务列表失败');
     } finally {

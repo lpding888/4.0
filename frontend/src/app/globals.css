@@ -1,13 +1,279 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   高奢时装AI控制台 - 全局视觉系统
+   ============================================ */
+
+:root {
+  /* 青蓝玻璃拟态主题 (默认) */
+  --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #064e3b 100%);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --accent-cyan: #06b6d4;
+  --accent-teal: #14b8a6;
+  --accent-rose: #f43f5e;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+
+  /* 赛博朋克霓虹主题 (备用) */
+  --cyber-primary: linear-gradient(135deg, #1a0033 0%, #330066 50%, #4d0099 100%);
+  --cyber-glass: rgba(255, 0, 128, 0.1);
+  --cyber-border: rgba(0, 255, 255, 0.3);
+  --cyber-pink: #ff0080;
+  --cyber-cyan: #00ffff;
+  --cyber-purple: #9933ff;
+  --cyber-yellow: #ffff00;
+
+  /* 极光流体主题 (备用) */
+  --aurora-primary: linear-gradient(135deg, #0d1117 0%, #1a2f1a 50%, #2d1b69 100%);
+  --aurora-glass: rgba(46, 213, 115, 0.08);
+  --aurora-border: rgba(0, 206, 209, 0.25);
+  --aurora-green: #2ed573;
+  --aurora-teal: #00ced1;
+  --aurora-purple: #8e44ad;
+  --aurora-gold: #f39c12;
+}
+
+/* 默认使用青蓝玻璃主题 */
 body {
   margin: 0;
   padding: 0;
+  min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* 高奢时装深色渐变舞台背景 */
+  background: var(--primary-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+}
+
+/* 添加青蓝光斑效果（可选，轻微舞台效果） */
+body::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle at 30% 50%,
+    rgba(6, 182, 212, 0.1) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  z-index: -1;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ============================================
+   玻璃拟态卡片组件
+   ============================================ */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-card:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  transition: all 0.3s ease;
+}
+
+/* ============================================
+   按钮系统 - 霓虹细描边
+   ============================================ */
+.btn-neon-primary {
+  background: transparent;
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-neon-primary:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: var(--accent-teal);
+  color: var(--accent-teal);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+}
+
+.btn-neon-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-neon-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ============================================
+   状态标签系统 - 胶囊形状
+   ============================================ */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-width: 1px;
+}
+
+/* Processing状态 - 青蓝霓虹描边 */
+.status-processing {
+  background: rgba(20, 184, 166, 0.2);
+  border-color: rgba(20, 184, 166, 0.5);
+  color: var(--accent-teal);
+}
+
+/* Done状态 - 青色描边 */
+.status-done {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: var(--accent-cyan);
+}
+
+/* Failed状态 - 玫红描边 */
+.status-failed {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: var(--accent-rose);
+}
+
+/* Pending状态 - 灰色描边 */
+.status-pending {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.5);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ============================================
+   文字层级系统
+   ============================================ */
+.text-hero {
+  font-size: 3rem;
+  font-weight: 300;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.text-title {
+  font-size: 2rem;
+  font-weight: 300;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.text-subtitle {
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.text-body {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.text-caption {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* 强调文字 - 青蓝色 */
+.text-accent {
+  color: var(--accent-cyan);
+}
+
+.text-accent-teal {
+  color: var(--accent-teal);
+}
+
+/* ============================================
+   呼吸动画 (用于processing状态)
+   ============================================ */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.8);
+  }
+}
+
+.pulse-indicator {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ============================================
+   主题切换支持 (通过data-theme属性)
+   ============================================ */
+[data-theme="glass"] {
+  --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #064e3b 100%);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --accent-primary: var(--accent-cyan);
+  --accent-secondary: var(--accent-teal);
+  --accent-error: var(--accent-rose);
+}
+
+[data-theme="cyber"] {
+  --primary-gradient: var(--cyber-primary);
+  --glass-bg: var(--cyber-glass);
+  --glass-border: var(--cyber-border);
+  --accent-primary: var(--cyber-cyan);
+  --accent-secondary: var(--cyber-pink);
+  --accent-error: var(--cyber-yellow);
+}
+
+[data-theme="aurora"] {
+  --primary-gradient: var(--aurora-primary);
+  --glass-bg: var(--aurora-glass);
+  --glass-border: var(--aurora-border);
+  --accent-primary: var(--aurora-green);
+  --accent-secondary: var(--aurora-teal);
+  --accent-error: var(--aurora-gold);
+}
+
+/* ============================================
+   响应式设计优化
+   ============================================ */
+@media (max-width: 768px) {
+  .text-hero {
+    font-size: 2rem;
+  }
+
+  .text-title {
+    font-size: 1.5rem;
+  }
+
+  /* 移动端简化光效，保持性能 */
+  body::before {
+    display: none;
+  }
 }

@@ -1,0 +1,392 @@
+{
+  "meta": {
+    "fileName": "03-business-features.json",
+    "platform": "miniprogram",
+    "category": "商业版功能",
+    "taskCount": 7,
+    "totalEstimatedHours": 44,
+    "generatedBy": "Product Planner (AI老王)",
+    "generatedAt": "2025-11-01",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "taskId": "MOBILE-MP-017",
+      "title": "商业工作台 - 任务卡片 + 状态流转",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-MP-003"],
+      "description": "实现商业工作台页面，展示AI任务列表（图片/视频生成、批量处理等），任务卡片显示状态（待处理、处理中、已完成、失败），支持筛选、排序、刷新。",
+      "technicalRequirements": [
+        "任务列表（虚拟滚动支持1000+任务）",
+        "任务卡片（显示任务类型、状态、进度、创建时间）",
+        "状态标签（待处理、处理中、已完成、失败）",
+        "进度条（实时更新）",
+        "筛选功能（按状态、类型、时间）",
+        "排序功能（最新、最早、进度）",
+        "下拉刷新、上拉加载更多",
+        "空状态提示（暂无任务）",
+        "状态轮询（30秒更新一次）"
+      ],
+      "acceptanceCriteria": [
+        "任务列表正确展示",
+        "状态标签正确显示",
+        "进度条实时更新",
+        "筛选排序生效",
+        "状态轮询正常",
+        "下拉刷新正常",
+        "虚拟滚动流畅",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/dashboard/index.tsx",
+        "packages/miniprogram/src/pages/business/dashboard/index.module.scss",
+        "packages/miniprogram/src/components/TaskCard/index.tsx",
+        "packages/miniprogram/src/hooks/useTaskList.ts",
+        "packages/miniprogram/src/pages/business/dashboard/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供任务列表API",
+        "Backend: 支持状态轮询"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通任务管理和实时状态更新。你的任务是实现一个高效、直观的商业工作台页面。",
+        "user": "请实现商业工作台页面：\n\n**核心功能：**\n\n1. **任务列表组件**\n```typescript\nimport { VirtualList } from '@tarojs/components';\nimport { useTaskList } from '@/hooks/useTaskList';\nimport { TaskCard } from '@/components/TaskCard';\n\nconst BusinessDashboard: React.FC = () => {\n  const {\n    tasks,\n    loading,\n    hasMore,\n    loadMore,\n    refresh,\n    filter,\n    setFilter,\n    sort,\n    setSort\n  } = useTaskList();\n\n  return (\n    <View className={styles.container}>\n      {/* 筛选栏 */}\n      <View className={styles.toolbar}>\n        <Tabs value={filter.status} onChange={(status) => setFilter({ ...filter, status })}>\n          <Tab value=\"all\">全部</Tab>\n          <Tab value=\"pending\">待处理</Tab>\n          <Tab value=\"processing\">处理中</Tab>\n          <Tab value=\"completed\">已完成</Tab>\n          <Tab value=\"failed\">失败</Tab>\n        </Tabs>\n      </View>\n\n      {/* 任务列表 */}\n      <VirtualList\n        height=\"calc(100vh - 100px)\"\n        itemCount={tasks.length}\n        itemSize={150}\n        overscanCount={5}\n      >\n        {({ index, style }) => (\n          <View style={style}>\n            <TaskCard data={tasks[index]} />\n          </View>\n        )}\n      </VirtualList>\n\n      {loading && <LoadingSpinner />}\n      {!hasMore && <Text>没有更多了</Text>}\n    </View>\n  );\n};\n```\n\n2. **TaskCard组件**\n```typescript\ninterface TaskCardProps {\n  data: Task;\n}\n\nconst TaskCard: React.FC<TaskCardProps> = ({ data }) => {\n  const statusColor = {\n    pending: '#faad14',\n    processing: '#1890ff',\n    completed: '#52c41a',\n    failed: '#f5222d'\n  };\n\n  return (\n    <View className={styles.taskCard}>\n      {/* 状态标签 */}\n      <View className={styles.header}>\n        <Tag color={statusColor[data.status]}>{data.statusText}</Tag>\n        <Text className={styles.time}>{formatTime(data.createdAt)}</Text>\n      </View>\n\n      {/* 任务信息 */}\n      <View className={styles.content}>\n        <Text className={styles.title}>{data.title}</Text>\n        <Text className={styles.type}>{data.type}</Text>\n      </View>\n\n      {/* 进度条 */}\n      {data.status === 'processing' && (\n        <Progress percent={data.progress} strokeColor=\"#1890ff\" />\n      )}\n\n      {/* 操作按钮 */}\n      <View className={styles.actions}>\n        {data.status === 'completed' && (\n          <Button size=\"small\" onClick={() => handleViewResult(data.id)}>\n            查看结果\n          </Button>\n        )}\n        {data.status === 'failed' && (\n          <Button size=\"small\" onClick={() => handleRetry(data.id)}>\n            重试\n          </Button>\n        )}\n      </View>\n    </View>\n  );\n};\n```\n\n3. **useTaskList Hook（状态轮询）**\n```typescript\nexport function useTaskList() {\n  const [tasks, setTasks] = useState<Task[]>([]);\n  const [filter, setFilter] = useState({ status: 'all' });\n  const intervalRef = useRef<NodeJS.Timeout>();\n\n  // 加载任务列表\n  const loadTasks = async () => {\n    const response = await apiClient.get('/api/business/tasks', {\n      params: filter\n    });\n    setTasks(response.data.tasks);\n  };\n\n  // 启动轮询\n  useEffect(() => {\n    loadTasks();\n\n    // 30秒轮询一次\n    intervalRef.current = setInterval(() => {\n      loadTasks();\n    }, 30000);\n\n    return () => {\n      if (intervalRef.current) {\n        clearInterval(intervalRef.current);\n      }\n    };\n  }, [filter]);\n\n  return {\n    tasks,\n    filter,\n    setFilter,\n    refresh: loadTasks\n  };\n}\n```\n\n参考GPT-5方案中的任务管理实现（第5节商业版功能）。\n\n**验收标准：**\n- 任务列表正确\n- 状态轮询正常\n- 筛选排序生效\n- 进度条实时更新"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["轮询机制", "状态管理", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["轮询测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-018",
+      "title": "AI图片生成任务发起页",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-MP-009"],
+      "description": "实现AI图片生成任务发起页，支持上传商品图片、选择模特（性别、体型、肤色）、选择场景（室内/室外）、选择风格，提交任务后跳转到工作台。",
+      "technicalRequirements": [
+        "上传商品图片（支持多张）",
+        "选择模特（性别、体型、肤色）",
+        "选择场景（室内/室外、具体场景）",
+        "选择风格（商务、休闲、运动等）",
+        "实时预览（mock预览）",
+        "配额检查（显示剩余次数）",
+        "表单验证（图片必传）",
+        "提交任务后跳转到工作台"
+      ],
+      "acceptanceCriteria": [
+        "图片上传正常",
+        "模特选择正常",
+        "场景选择正常",
+        "风格选择正常",
+        "实时预览正确",
+        "配额检查生效",
+        "表单验证正常",
+        "提交成功跳转",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/task/image-generation/index.tsx",
+        "packages/miniprogram/src/pages/business/task/image-generation/index.module.scss",
+        "packages/miniprogram/src/components/ModelSelector/index.tsx",
+        "packages/miniprogram/src/components/SceneSelector/index.tsx",
+        "packages/miniprogram/src/pages/business/task/__tests__/image-generation.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供配额检查API",
+        "Backend: 提供任务提交API",
+        "COS: 上传商品图片"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通表单设计和AI功能集成。你的任务是实现一个直观、易用的AI图片生成任务发起页。",
+        "user": "请实现AI图片生成任务发起页，包含图片上传、模特选择、场景选择、风格选择、实时预览、配额检查等功能。参考GPT-5方案中的任务发起实现（第5节）。\n\n**核心功能：**\n1. 图片上传（多张）\n2. 模特选择器\n3. 场景选择器\n4. 风格选择器\n5. 实时预览\n6. 配额检查\n7. 提交任务\n\n**验收标准：**\n- 上传正常\n- 选择流畅\n- 预览正确\n- 配额生效\n- 提交成功"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["表单设计", "AI集成", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["任务发起测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-019",
+      "title": "AI视频生成任务发起页",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-018"],
+      "description": "实现AI视频生成任务发起页，支持上传视频/图片、选择动作（走路、转圈、挥手）、选择时长（5s/10s/15s）、选择音乐，提交任务。",
+      "technicalRequirements": [
+        "上传视频/图片",
+        "选择动作（走路、转圈、挥手等）",
+        "选择时长（5s/10s/15s）",
+        "选择音乐（预设音乐库）",
+        "实时预览（mock预览）",
+        "配额检查（显示剩余次数）",
+        "表单验证（视频/图片必传）",
+        "提交任务后跳转到工作台"
+      ],
+      "acceptanceCriteria": [
+        "视频/图片上传正常",
+        "动作选择正常",
+        "时长选择正常",
+        "音乐选择正常",
+        "实时预览正确",
+        "配额检查生效",
+        "表单验证正常",
+        "提交成功跳转",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/task/video-generation/index.tsx",
+        "packages/miniprogram/src/pages/business/task/video-generation/index.module.scss",
+        "packages/miniprogram/src/components/ActionSelector/index.tsx",
+        "packages/miniprogram/src/components/MusicSelector/index.tsx",
+        "packages/miniprogram/src/pages/business/task/__tests__/video-generation.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供配额检查API",
+        "Backend: 提供任务提交API",
+        "COS: 上传视频/图片"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通视频处理和AI功能集成。你的任务是实现一个功能完善、交互流畅的AI视频生成任务发起页。",
+        "user": "请实现AI视频生成任务发起页，包含视频/图片上传、动作选择、时长选择、音乐选择、实时预览、配额检查等功能。参考GPT-5方案中的视频任务发起实现（第5节）。\n\n**核心功能：**\n1. 视频/图片上传\n2. 动作选择器\n3. 时长选择器\n4. 音乐选择器\n5. 实时预览\n6. 配额检查\n7. 提交任务\n\n**验收标准：**\n- 上传正常\n- 选择流畅\n- 预览正确\n- 配额生效\n- 提交成功"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["视频处理", "AI集成", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["视频任务测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-020",
+      "title": "批量处理任务发起页",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-018"],
+      "description": "实现批量处理任务发起页，支持批量上传商品图片（最多100张）、选择统一模特/场景/风格、提交批量任务，显示批量上传进度。",
+      "technicalRequirements": [
+        "批量上传图片（最多100张）",
+        "显示上传进度（进度条 + 文件列表）",
+        "选择统一模特/场景/风格",
+        "支持分组（按类别分组）",
+        "配额检查（批量任务消耗配额更多）",
+        "提交批量任务后跳转到工作台",
+        "支持暂停/恢复上传"
+      ],
+      "acceptanceCriteria": [
+        "批量上传正常",
+        "上传进度正确显示",
+        "统一选择生效",
+        "分组功能正常",
+        "配额检查生效",
+        "提交成功跳转",
+        "暂停/恢复正常",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/task/batch-processing/index.tsx",
+        "packages/miniprogram/src/pages/business/task/batch-processing/index.module.scss",
+        "packages/miniprogram/src/components/BatchUploader/index.tsx",
+        "packages/miniprogram/src/hooks/useBatchUpload.ts",
+        "packages/miniprogram/src/pages/business/task/__tests__/batch-processing.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供批量任务提交API",
+        "COS: 支持批量上传"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通批量文件上传和队列管理。你的任务是实现一个高效、稳定的批量处理任务发起页。",
+        "user": "请实现批量处理任务发起页，包含批量上传、进度显示、统一选择、分组功能、配额检查等功能。参考GPT-5方案中的批量处理实现（第5节）。\n\n**核心功能：**\n1. 批量上传（最多100张）\n2. 上传进度显示\n3. 统一选择\n4. 分组功能\n5. 配额检查\n6. 暂停/恢复上传\n\n**验收标准：**\n- 批量上传稳定\n- 进度显示准确\n- 统一选择生效\n- 分组正常\n- 配额生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["批量上传逻辑", "队列管理", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["批量上传测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-021",
+      "title": "任务结果查看页 - 预览 + 下载",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-017"],
+      "description": "实现任务结果查看页，展示AI生成的图片/视频结果，支持预览、下载、分享、删除、重新生成。",
+      "technicalRequirements": [
+        "图片预览（支持缩放、滑动切换）",
+        "视频预览（支持播放、暂停）",
+        "下载功能（保存到相册）",
+        "分享功能（生成海报）",
+        "删除功能（二次确认）",
+        "重新生成（使用相同参数）",
+        "显示生成参数（模特、场景、风格）",
+        "显示生成时间、消耗配额"
+      ],
+      "acceptanceCriteria": [
+        "图片预览正常",
+        "视频预览正常",
+        "下载功能正常",
+        "分享海报生成正常",
+        "删除功能正常",
+        "重新生成正常",
+        "参数展示正确",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/result/index.tsx",
+        "packages/miniprogram/src/pages/business/result/index.module.scss",
+        "packages/miniprogram/src/components/ResultPreview/index.tsx",
+        "packages/miniprogram/src/hooks/useResultDownload.ts",
+        "packages/miniprogram/src/pages/business/result/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供结果详情API",
+        "Backend: 提供删除API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通媒体预览和文件下载。你的任务是实现一个功能完善、交互流畅的任务结果查看页。",
+        "user": "请实现任务结果查看页，包含图片/视频预览、下载、分享、删除、重新生成等功能。参考GPT-5方案中的结果查看实现（第5节）。\n\n**核心功能：**\n1. 图片/视频预览\n2. 下载功能\n3. 分享功能\n4. 删除功能\n5. 重新生成\n6. 参数展示\n\n**验收标准：**\n- 预览流畅\n- 下载正常\n- 分享生成正确\n- 删除成功\n- 重新生成正常"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["媒体预览", "下载逻辑", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["预览测试", "下载测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-022",
+      "title": "配额管理页 - 余额 + 购买套餐",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-001"],
+      "description": "实现配额管理页，展示当前配额余额、使用记录、购买套餐、充值记录等。",
+      "technicalRequirements": [
+        "展示配额余额（图片生成、视频生成）",
+        "使用记录（时间、类型、消耗配额）",
+        "购买套餐（套餐列表、价格、优惠）",
+        "充值记录（时间、金额、配额）",
+        "支付集成（微信支付）",
+        "优惠券功能（输入优惠码）"
+      ],
+      "acceptanceCriteria": [
+        "配额余额正确展示",
+        "使用记录正确",
+        "套餐列表正确",
+        "充值记录正确",
+        "支付流程正常",
+        "优惠券功能正常",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/quota/index.tsx",
+        "packages/miniprogram/src/pages/business/quota/index.module.scss",
+        "packages/miniprogram/src/components/QuotaCard/index.tsx",
+        "packages/miniprogram/src/components/PackageList/index.tsx",
+        "packages/miniprogram/src/pages/business/quota/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供配额信息API",
+        "Backend: 提供购买套餐API",
+        "Backend: 微信支付集成"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通支付集成和配额管理。你的任务是实现一个清晰、易用的配额管理页。",
+        "user": "请实现配额管理页，包含配额余额、使用记录、购买套餐、充值记录、支付集成等功能。参考GPT-5方案中的配额管理实现（第5节）。\n\n**核心功能：**\n1. 配额余额展示\n2. 使用记录\n3. 购买套餐\n4. 充值记录\n5. 微信支付\n6. 优惠券\n\n**验收标准：**\n- 余额正确\n- 记录准确\n- 套餐清晰\n- 支付流畅\n- 优惠券生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["支付集成", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["支付流程测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-023",
+      "title": "商业数据分析页 - 图表 + 报表",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-017"],
+      "description": "实现商业数据分析页，展示任务统计（总任务数、成功率、平均耗时）、配额使用趋势、任务类型分布等，支持导出报表。",
+      "technicalRequirements": [
+        "使用ECharts绘制图表",
+        "展示任务统计（总任务数、成功率、平均耗时）",
+        "配额使用趋势（折线图，最近30天）",
+        "任务类型分布（饼图）",
+        "任务状态分布（柱状图）",
+        "导出报表（PDF/Excel）",
+        "时间范围筛选（最近7天、30天、自定义）"
+      ],
+      "acceptanceCriteria": [
+        "图表渲染正确",
+        "统计数据准确",
+        "趋势图正确",
+        "分布图正确",
+        "导出功能正常",
+        "时间筛选生效",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/business/analytics/index.tsx",
+        "packages/miniprogram/src/pages/business/analytics/index.module.scss",
+        "packages/miniprogram/src/components/Charts/LineChart.tsx",
+        "packages/miniprogram/src/hooks/useBusinessAnalytics.ts",
+        "packages/miniprogram/src/pages/business/analytics/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供统计数据API",
+        "Backend: 提供导出报表API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通数据可视化和报表生成。你的任务是实现一个数据丰富、洞察清晰的商业数据分析页。",
+        "user": "请实现商业数据分析页，包含图表展示、统计数据、趋势分析、分布分析、导出报表等功能。参考GPT-5方案中的数据分析实现（第5节）。\n\n**核心功能：**\n1. ECharts图表\n2. 任务统计\n3. 配额趋势\n4. 类型分布\n5. 导出报表\n6. 时间筛选\n\n**验收标准：**\n- 图表正确\n- 数据准确\n- 趋势清晰\n- 导出正常\n- 筛选生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["图表实现", "数据准确性"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["图表测试", "导出测试", "单元测试"]
+      },
+      "status": "Ready"
+    }
+  ]
+}

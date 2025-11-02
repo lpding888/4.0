@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "fileName": "05-optimization.json",
+    "platform": "miniprogram",
+    "category": "性能优化",
+    "taskCount": 2,
+    "totalEstimatedHours": 10,
+    "generatedBy": "Product Planner (AI老王)",
+    "generatedAt": "2025-11-01",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "taskId": "MOBILE-MP-028",
+      "title": "包体积优化 + 代码分割",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-002"],
+      "description": "优化小程序包体积，确保主包<700KB，总包体积<20MB，通过代码分割、tree-shaking、图片压缩、依赖优化等手段减小包体积。",
+      "technicalRequirements": [
+        "主包体积<700KB（压缩后）",
+        "总包体积<20MB",
+        "代码分割（React.lazy + Suspense）",
+        "Tree-shaking（移除未使用代码）",
+        "图片压缩（使用webp格式）",
+        "依赖优化（按需引入）",
+        "字体图标（使用iconfont，不要用图片）",
+        "代码压缩（terser）",
+        "分析报告（webpack-bundle-analyzer）"
+      ],
+      "acceptanceCriteria": [
+        "主包<700KB",
+        "总包<20MB",
+        "代码分割生效",
+        "tree-shaking生效",
+        "图片压缩正常",
+        "依赖优化完成",
+        "分析报告完整"
+      ],
+      "deliverables": [
+        "packages/miniprogram/config/optimization.js",
+        "packages/miniprogram/docs/bundle-analysis.md",
+        "packages/miniprogram/docs/optimization-report.md"
+      ],
+      "needsCoordination": [],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通前端性能优化和包体积优化。你的任务是优化小程序包体积，确保符合微信小程序限制。",
+        "user": "请优化小程序包体积：\n\n**优化策略：**\n\n1. **代码分割**\n```typescript\n// 使用React.lazy延迟加载\nconst WardrobeList = React.lazy(() => import('@/pages/wardrobe/list'));\nconst BusinessDashboard = React.lazy(() => import('@/pages/business/dashboard'));\n\n// 路由配置\nconst routes = [\n  {\n    path: '/wardrobe/list',\n    component: () => (\n      <Suspense fallback={<Loading />}>\n        <WardrobeList />\n      </Suspense>\n    )\n  }\n];\n```\n\n2. **Tree-shaking**\n```javascript\n// 按需引入lodash\nimport debounce from 'lodash/debounce'; // ✅\nimport { debounce } from 'lodash'; // ❌\n\n// 按需引入Ant Design\nimport { Button } from 'antd'; // ❌ 会引入整个antd\nimport Button from 'antd/es/button'; // ✅ 只引入Button\n```\n\n3. **图片优化**\n- 使用webp格式（体积减小30%）\n- 压缩图片（TinyPNG）\n- 使用CDN（不要打包到小程序）\n- 使用iconfont（不要用图片图标）\n\n4. **依赖优化**\n```json\n// package.json\n{\n  \"dependencies\": {\n    // 移除未使用的依赖\n    // \"moment\": \"^2.29.4\" // ❌ 体积大（230KB），改用day.js\n    \"dayjs\": \"^1.11.7\" // ✅ 体积小（2KB）\n  }\n}\n```\n\n5. **Webpack配置优化**\n```javascript\n// config/prod.js\nmodule.exports = {\n  optimization: {\n    minimizer: [\n      new TerserPlugin({\n        terserOptions: {\n          compress: {\n            drop_console: true, // 移除console\n            drop_debugger: true // 移除debugger\n          }\n        }\n      })\n    ],\n    splitChunks: {\n      chunks: 'all',\n      cacheGroups: {\n        vendors: {\n          test: /[\\\\/]node_modules[\\\\/]/,\n          priority: -10\n        }\n      }\n    }\n  }\n};\n```\n\n6. **分析包体积**\n```bash\n# 使用webpack-bundle-analyzer\nnpm run build:weapp -- --analyze\n```\n\n参考GPT-5方案中的性能优化实现（第8节）。\n\n**验收标准：**\n- 主包<700KB\n- 总包<20MB\n- 优化策略生效\n- 分析报告完整"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["优化策略", "配置正确性"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["包体积测试", "真机测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-029",
+      "title": "首屏性能优化 + 骨架屏",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-001"],
+      "description": "优化首屏加载性能，确保首屏渲染<2s，通过骨架屏、预加载、缓存等手段提升用户体验。",
+      "technicalRequirements": [
+        "首屏渲染时间<2s（真机测试）",
+        "骨架屏（Skeleton）",
+        "预加载关键资源（预连接、预加载）",
+        "缓存策略（配置缓存、图片缓存）",
+        "懒加载（图片、组件）",
+        "优化渲染路径（减少重排重绘）",
+        "性能监控（上报首屏时间）",
+        "性能报告（Lighthouse）"
+      ],
+      "acceptanceCriteria": [
+        "首屏<2s",
+        "骨架屏正确显示",
+        "预加载生效",
+        "缓存策略生效",
+        "懒加载正常",
+        "性能监控上报",
+        "Lighthouse评分≥90"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/Skeleton/index.tsx",
+        "packages/miniprogram/src/utils/performance.ts",
+        "packages/miniprogram/docs/performance-report.md"
+      ],
+      "needsCoordination": [
+        "Backend: 优化API响应时间"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通首屏性能优化和用户体验提升。你的任务是优化首屏加载性能，确保用户体验流畅。",
+        "user": "请优化首屏性能：\n\n**优化策略：**\n\n1. **骨架屏**\n```typescript\nconst Skeleton: React.FC = () => {\n  return (\n    <View className={styles.skeleton}>\n      <View className={styles.avatarSkeleton} />\n      <View className={styles.textSkeleton} />\n      <View className={styles.textSkeleton} />\n    </View>\n  );\n};\n\n// 使用\nconst WardrobeList: React.FC = () => {\n  const { loading, items } = useWardrobeList();\n\n  if (loading) {\n    return <Skeleton />;\n  }\n\n  return <List items={items} />;\n};\n```\n\n2. **预加载关键资源**\n```html\n<!-- app.config.ts -->\n<link rel=\"preconnect\" href=\"https://api.example.com\" />\n<link rel=\"preload\" href=\"/assets/fonts/icon.woff2\" as=\"font\" />\n```\n\n3. **缓存策略**\n```typescript\n// 配置缓存（30分钟）\nconst config = await apiClient.get('/api/config', {\n  cache: true,\n  cacheTime: 30 * 60 * 1000\n});\n\n// 图片缓存\n<Image src={url} lazyLoad cache />\n```\n\n4. **懒加载**\n```typescript\n// 图片懒加载\nconst LazyImage: React.FC<{ src: string }> = ({ src }) => {\n  const [loaded, setLoaded] = useState(false);\n  const ref = useRef<HTMLImageElement>(null);\n\n  useEffect(() => {\n    const observer = new IntersectionObserver((entries) => {\n      if (entries[0].isIntersecting) {\n        setLoaded(true);\n        observer.disconnect();\n      }\n    });\n\n    if (ref.current) {\n      observer.observe(ref.current);\n    }\n\n    return () => observer.disconnect();\n  }, []);\n\n  return (\n    <Image ref={ref} src={loaded ? src : placeholder} />\n  );\n};\n```\n\n5. **性能监控**\n```typescript\nclass PerformanceMonitor {\n  static reportFirstPaint() {\n    const fp = performance.getEntriesByType('paint')[0]?.startTime;\n    apiClient.post('/api/metrics/first-paint', { time: fp });\n  }\n\n  static reportFirstContentfulPaint() {\n    const fcp = performance.getEntriesByType('paint')[1]?.startTime;\n    apiClient.post('/api/metrics/fcp', { time: fcp });\n  }\n}\n\n// 在app.tsx中上报\nuseEffect(() => {\n  PerformanceMonitor.reportFirstPaint();\n  PerformanceMonitor.reportFirstContentfulPaint();\n}, []);\n```\n\n参考GPT-5方案中的首屏优化实现（第8节）。\n\n**验收标准：**\n- 首屏<2s\n- 骨架屏正确\n- 缓存生效\n- 监控上报\n- Lighthouse≥90"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["优化策略", "监控逻辑"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["首屏性能测试", "真机测试"]
+      },
+      "status": "Ready"
+    }
+  ]
+}

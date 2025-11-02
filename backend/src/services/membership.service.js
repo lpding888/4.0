@@ -23,7 +23,8 @@ class MembershipService {
       id: orderId,
       userId,
       status: 'pending',
-      amount: price,
+      amount: price, // 原价(分)
+      final_amount: price, // 实付金额(分) - 暂时等于原价,支持优惠券后会不同
       channel,
       transactionId: null,
       createdAt: new Date(),
@@ -128,6 +129,20 @@ class MembershipService {
       });
 
       logger.info(`会员开通成功: userId=${order.userId}, quota=${quota}, expireAt=${expireAt}`);
+
+      // 🔥 新增：触发佣金计算（首单计佣）
+      try {
+        const commissionService = require('./commission.service');
+        await commissionService.calculateAndCreateCommission(
+          trx,
+          order.userId,
+          order.id,
+          order.final_amount / 100 // 🔥 使用实付金额,而非原价
+        );
+      } catch (error) {
+        // 佣金计算失败不影响开通会员
+        logger.error(`佣金计算失败: orderId=${orderId}, error=${error.message}`);
+      }
     });
 
     return { success: true };

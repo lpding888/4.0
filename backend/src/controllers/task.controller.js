@@ -8,6 +8,79 @@ const logger = require('../utils/logger');
  */
 class TaskController {
   /**
+   * 基于功能卡片创建任务（新架构）
+   * POST /api/task/create-by-feature
+   */
+  async createByFeature(req, res, next) {
+    try {
+      const { featureId, inputData } = req.body;
+      const userId = req.user.id;
+
+      // 参数验证
+      if (!featureId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 4001,
+            message: '缺少必要参数:featureId'
+          }
+        });
+      }
+
+      if (!inputData || typeof inputData !== 'object') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 4001,
+            message: 'inputData必须是一个对象'
+          }
+        });
+      }
+
+      // 创建任务
+      const task = await taskService.createByFeature(userId, featureId, inputData);
+
+      logger.info(
+        `[TaskController] Feature任务创建成功 taskId=${task.taskId} ` +
+        `userId=${userId} featureId=${featureId}`
+      );
+
+      res.json({
+        success: true,
+        data: task
+      });
+
+    } catch (error) {
+      logger.error(`[TaskController] 创建Feature任务失败: ${error.message}`, error);
+
+      // 处理限流错误
+      if (error.errorCode === 4029) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: error.errorCode,
+            message: error.message,
+            rateLimitInfo: error.rateLimitInfo
+          }
+        });
+      }
+
+      // 处理其他业务错误
+      if (error.errorCode) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: error.errorCode,
+            message: error.message
+          }
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  /**
    * 创建任务
    * POST /api/task/create
    */

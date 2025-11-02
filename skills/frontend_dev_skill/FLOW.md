@@ -82,3 +82,156 @@
 - 代码要符合TypeScript类型安全要求
 - 组件要有适当的错误边界处理
 - 页面加载性能要符合Lighthouse标准
+
+---
+
+## 依赖规范
+
+### Frontend Dev Skill必须参考的规范文档
+
+在开发前端功能时，Frontend Dev必须参考以下规范文档，确保实现符合平台标准：
+
+#### 1. FEATURE_DEFINITION_SPEC.md（功能定义规范）
+
+**用途**：理解功能卡片的数据结构和权限控制逻辑
+
+**必读章节**：
+- **access_scope权限模式**：理解`plan`和`whitelist`两种权限模式
+- **前后端协作规范**：理解`GET /api/features`接口的响应格式
+- **前端展示规则**：只展示后端返回的功能列表，不允许本地判断权限
+- **注意事项**：禁止硬编码`feature_id`到前端代码
+
+**使用场景**：
+- 渲染工作台功能卡片时
+- 判断用户能看到哪些功能时
+- 实现功能卡片的点击跳转时
+
+**示例**：
+```typescript
+// ✅ 正确：从后端动态获取功能列表
+const features = await fetch('/api/features?enabled=true');
+features.forEach(feature => renderFeatureCard(feature));
+
+// ❌ 错误：前端本地判断权限
+if (user.membershipLevel === 'PRO') {
+  showFeature('model_pose12'); // 禁止
+}
+```
+
+---
+
+#### 2. FORM_SCHEMA_SPEC.md（表单Schema规范）
+
+**用途**：实现动态表单组件，根据form_schema渲染不同功能的表单
+
+**必读章节**：
+- **Form Schema字段定义**：理解`fields`、`submitButton`、`successRedirect`等字段
+- **Field字段类型**：理解所有支持的字段类型（`image`、`text`、`select`等）
+- **前端实现规范**：必须实现通用的`<DynamicForm>`组件，禁止为每个功能写死页面
+- **提交处理**：理解如何将表单数据打包成`input_data`提交给后端
+
+**使用场景**：
+- 实现功能表单页面时
+- 渲染不同类型的表单字段时
+- 处理表单提交逻辑时
+
+**核心原则**：
+- ✅ **一个动态表单组件，渲染所有功能**
+- ❌ **禁止为每个功能写死单独页面**（如`pages/task/basic-clean.tsx`）
+
+**示例**：
+```typescript
+// ✅ 正确：动态表单组件
+<DynamicForm
+  schema={schema}
+  featureId={featureId}
+  onSubmit={handleSubmit}
+/>
+
+// ❌ 错误：为每个功能写死页面
+// pages/task/basic-clean.tsx
+// pages/task/model-pose12.tsx
+```
+
+---
+
+#### 3. BILLING_AND_POLICY_SPEC.md（计费和策略规范）
+
+**用途**：理解配额显示和会员权限逻辑
+
+**必读章节**：
+- **商业模型：会员+配额**：理解平台的计费模式
+- **注意事项/禁止事项**：理解前端的权限边界
+
+**使用场景**：
+- 显示用户配额余额时
+- 判断用户是否能创建任务时（根据后端返回的会员状态）
+- 引导用户购买会员时
+
+**核心原则**：
+- ✅ 前端只展示配额，不算配额
+- ✅ 配额充足性由后端校验，前端只做提示
+- ❌ 禁止前端假装加减配额本地显示
+
+**示例**：
+```typescript
+// ✅ 正确：从后端获取会员状态
+const { isMember, quota_remaining } = await fetch('/api/membership/status');
+if (quota_remaining > 0) {
+  enableCreateButton();
+} else {
+  showPurchaseDialog();
+}
+
+// ❌ 错误：前端本地计算配额
+quota_remaining -= 1;  // 禁止
+```
+
+---
+
+### Frontend Dev的职责边界
+
+#### ✅ Frontend Dev可以做的事
+
+1. **展示功能列表**：根据后端返回的功能列表动态渲染
+2. **动态表单渲染**：根据`form_schema`动态渲染不同功能的表单
+3. **提交任务请求**：调用`POST /api/tasks`创建任务
+4. **展示任务结果**：轮询任务状态，展示结果或错误信息
+5. **显示配额余额**：展示后端返回的`quota_remaining`
+6. **引导购买会员**：在配额不足时引导用户购买会员
+
+#### ❌ Frontend Dev不能做的事
+
+1. ❌ **不能本地判断权限**：只展示后端返回的功能列表
+2. ❌ **不能为每个功能写死页面**：必须动态渲染表单
+3. ❌ **不能直连供应商API**：所有请求必须通过后端
+4. ❌ **不能操作配额**：配额的扣减和返还只能由后端完成
+5. ❌ **不能展示内部字段**：如`vendorTaskId`、`provider_ref`、`API_KEY`
+6. ❌ **不能硬编码价格**：必须从后端接口获取价格
+
+---
+
+### 关键检查清单
+
+在提交代码前，Frontend Dev必须自检：
+
+- [ ] 是否为每个功能写死了单独页面？（禁止）
+- [ ] 是否使用了动态表单组件？（必须）
+- [ ] 是否本地判断了权限？（禁止）
+- [ ] 是否展示了内部字段（`vendorTaskId`等）？（禁止）
+- [ ] 是否硬编码了价格？（禁止）
+- [ ] 是否本地操作了配额？（禁止）
+- [ ] 是否直连了供应商API？（禁止）
+
+---
+
+### 总结
+
+Frontend Dev的核心职责是**展示和提交**，不负责权限判断、配额计算、业务逻辑。
+
+所有业务规则和数据操作都由后端完成，前端只需要：
+1. 调用后端接口获取数据
+2. 根据规范动态渲染UI
+3. 提交用户输入给后端处理
+
+**遵循这些规范，才能确保前端实现符合平台架构标准！**

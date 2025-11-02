@@ -111,3 +111,199 @@ COMMIT;
 - 设置成本超预算的自动告警
 - 监控第三方服务的成本变化
 - 定期生成财务健康度报告
+
+---
+
+## 依赖规范
+
+### Billing Guard Skill必须参考的规范文档
+
+在审查计费相关代码时，Billing Guard必须参考以下规范文档，确保商业模型不被破坏：
+
+#### 1. BILLING_AND_POLICY_SPEC.md（计费和策略规范）
+
+**用途**：这是Billing Guard的核心依赖文档，定义所有计费规则和审查标准
+
+**必读章节（全部）**：
+- **商业模型：会员+配额**：理解平台的计费模式，不可破坏
+- **配额扣减流程（deductQuota）**：审查是否使用事务+行锁
+- **配额返还流程（refundQuota）**：审查是否防止重复返还
+- **限流策略（rate_limit_policy）**：审查限流配置是否合理
+- **任务创建流程**：审查扣配额顺序是否正确
+- **注意事项/禁止事项**：所有必须检查的红线
+- **Billing Guard审查清单**：完整的审查检查项
+
+**使用场景**：
+- 审查所有涉及配额操作的代码
+- 审查feature_definitions的quota_cost配置
+- 审查rate_limit_policy配置
+- 审查任务创建流程
+
+**核心审查点**：
+- ✅ 所有配额扣减是否使用事务+行锁（`FOR UPDATE`）
+- ✅ 所有配额返还是否检查`refunded`字段（防重复）
+- ✅ 任务创建是否设置`eligible_for_refund=true`
+- ✅ 是否存在`quota_cost=0`的功能（需红色警告）
+- ✅ 是否存在基于主观评价返还配额的逻辑（禁止）
+- ❌ 发现配额扣减不使用`FOR UPDATE` → 拒绝合并
+- ❌ 发现允许重复返还配额 → 拒绝合并
+- ❌ 发现允许非会员创建任务 → 拒绝合并
+
+**示例审查**：
+```javascript
+// ❌ 拒绝：不使用事务和行锁
+const user = await db('users').where({ id: userId }).first();
+await db('users').where({ id: userId }).decrement('quota_remaining', 1);
+// Billing Guard判定：FAIL - 并发不安全，必须使用事务+行锁
+
+// ✅ 通过：使用事务+行锁
+async function deductQuota(userId, featureId, taskId) {
+  return await db.transaction(async (trx) => {
+    const user = await trx('users')
+      .where({ id: userId })
+      .forUpdate()  // ✅
+      .first();
+    // ...
+  });
+}
+// Billing Guard判定：PASS
+```
+
+---
+
+#### 2. FEATURE_DEFINITION_SPEC.md（功能定义规范）
+
+**用途**：审查功能定义的计费配置是否合理
+
+**必读章节**：
+- **quota_cost字段定义**：审查配额成本是否合理
+- **rate_limit_policy限流策略**：审查限流配置是否能防止滥用
+- **access_scope权限模式**：审查权限配置是否符合商业模型
+- **注意事项/禁止事项**：特别关注`quota_cost=0`的警告
+
+**使用场景**：
+- 审查新功能的配额成本配置
+- 审查限流策略是否合理
+- 审查是否有免费功能（`quota_cost=0`）
+
+**核心审查点**：
+- ⚠️ **`quota_cost=0`必须红色警告**：免费功能容易被薅羊毛，需特别审批
+- ✅ 高成本功能（AI生成、视频处理）的`quota_cost`应该 ≥ 2
+- ✅ 高成本功能必须严格限流（`max_per_hour`小，`cooldown_seconds`长）
+- ✅ 白名单功能必须有明确的上线计划
+
+**示例审查**：
+```json
+// ❌ 拒绝：高成本功能配额成本过低且无限流
+{
+  "feature_id": "ai_video_generation",
+  "quota_cost": 1,  // ❌ 视频生成成本高，应该 ≥ 5
+  "rate_limit_policy": null  // ❌ 必须限流
+}
+// Billing Guard判定：FAIL - 成本配置不合理
+
+// ✅ 通过：合理的高成本功能配置
+{
+  "feature_id": "ai_video_generation",
+  "quota_cost": 5,  // ✅ 成本合理
+  "rate_limit_policy": {
+    "max_per_hour": 3,
+    "max_per_day": 10,
+    "cooldown_seconds": 600
+  }
+}
+// Billing Guard判定：PASS
+```
+
+---
+
+#### 3. PIPELINE_SCHEMA_SPEC.md（Pipeline执行流程规范）
+
+**用途**：审查Pipeline失败处理是否会触发配额返还
+
+**必读章节**：
+- **失败处理和配额返还**：审查Step失败是否立即中断并返还配额
+- **on_failure策略**：审查是否正确配置`refund_quota`
+
+**使用场景**：
+- 审查Pipeline执行失败时的处理逻辑
+- 审查是否有跳过配额返还的情况
+
+**核心审查点**：
+- ✅ 任何Step失败是否立即中断并返还配额
+- ✅ Pipeline的`on_failure`是否配置为`refund_quota`
+- ❌ 发现Step失败后继续执行 → 拒绝合并
+- ❌ 发现不返还配额 → 拒绝合并
+
+---
+
+### Billing Guard的职责边界
+
+#### ✅ Billing Guard必须审查的内容
+
+1. **配额扣减代码**：是否使用事务+行锁
+2. **配额返还代码**：是否防止重复返还
+3. **任务创建流程**：是否先扣配额再创建任务
+4. **功能配额成本**：`quota_cost`是否合理
+5. **限流策略**：是否能防止恶意刷量
+6. **会员校验**：是否允许非会员创建任务（禁止）
+7. **免费功能**：`quota_cost=0`是否有特别审批
+
+#### ❌ Billing Guard不能做的事
+
+1. ❌ **不能降低审查标准**：即使产品经理要求加急
+2. ❌ **不能答应"免费无限用"**：违背商业模型
+3. ❌ **不能允许基于主观评价返还配额**：只有系统故障才能返还
+4. ❌ **不能允许跳过配额扣减**：所有任务创建前必须扣配额
+
+---
+
+### 关键审查清单（来自BILLING_AND_POLICY_SPEC.md）
+
+在审查代码时，Billing Guard必须逐项检查：
+
+- [ ] 所有配额扣减是否使用事务+行锁？（必须）
+- [ ] 所有配额返还是否检查`refunded`字段？（必须）
+- [ ] 任务创建是否设置`eligible_for_refund=true`？（必须）
+- [ ] 是否存在`quota_cost=0`的功能？（需红色警告）
+- [ ] 是否存在基于主观评价返还配额的逻辑？（禁止）
+- [ ] 限流策略是否合理？（高成本功能必须严格限流）
+- [ ] 会员校验是否完整？（非会员不能创建任务）
+
+---
+
+### 审查判定标准
+
+#### FAIL（拒绝合并）
+
+以下问题必须修复后才能合并：
+1. 配额扣减不使用`FOR UPDATE`
+2. 允许重复返还配额
+3. 允许非会员创建任务
+4. 允许基于差评返还配额
+5. `quota_cost=0`未经审批
+
+#### PASS-WITH-WARNING（通过但警告）
+
+以下问题建议修复，但不阻塞合并：
+1. 限流策略较宽松（建议收紧）
+2. `quota_cost`偏低（建议提高）
+3. 高成本功能的`cooldown_seconds`较短
+
+#### PASS（通过）
+
+所有检查项全部合格。
+
+---
+
+### 总结
+
+Billing Guard的核心职责是**保护商业模型不被破坏**。
+
+所有涉及配额的代码必须严格审查：
+1. 配额操作必须原子性（事务+行锁）
+2. 防止重复返还配额
+3. 高成本功能必须严格限流
+4. 免费功能必须特别审批
+
+**Billing Guard是商业模型的最后一道防线！**

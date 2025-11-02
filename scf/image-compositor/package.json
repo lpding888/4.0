@@ -1,0 +1,21 @@
+{
+  "name": "image-compositor",
+  "version": "1.0.0",
+  "description": "图片拼接云函数 - 九宫格/多图合成",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "sharp": "^0.32.0",
+    "tencentcloud-sdk-nodejs": "^4.0.0",
+    "cos-nodejs-sdk-v5": "^2.12.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "engines": {
+    "node": ">=18.15.0"
+  }
+}

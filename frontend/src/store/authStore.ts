@@ -6,6 +6,7 @@ interface AuthState {
   user: User | null;
   token: string | null;
   setAuth: (user: User, token: string) => void;
+  setUser: (user: User) => void; // 老王我给你加上这个，免得你们到处乱用
   clearAuth: () => void;
   updateUser: (user: Partial<User>) => void;
 }
@@ -19,6 +20,12 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token });
         if (typeof window !== 'undefined') {
           localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+      },
+      setUser: (user) => {
+        set({ user });
+        if (typeof window !== 'undefined') {
           localStorage.setItem('user', JSON.stringify(user));
         }
       },

@@ -1,0 +1,27 @@
+{
+  "角色": "SRE（运维工程师）",
+  "职责": "负责异常指标告警系统，监控任务成功率、API性能、错误率等技术指标",
+  "任务数量": 1,
+  "任务列表": [
+    {
+      "id": "DATA-ALERT-001",
+      "department": "告警与报表",
+      "title": "异常指标告警（任务成功率/错误率/时延）",
+      "objective": "对关键业务与技术指标进行阈值与自适应基线监控，秒级告警。",
+      "scope": "任务成功率、API p95、错误率、QPS、日志异常模式。",
+      "inputs": ["Prometheus 指标", "ClickHouse 汇总", "ELK 规则"],
+      "outputs": ["告警规则库", "告警路由与合并", "值班手册"],
+      "data_sources": ["Prometheus", "Redis/OLAP", "ELK"],
+      "metrics": ["告警命中率", "误报率", "平均确认时长"],
+      "acceptance_criteria": ["误报<5%", "平均确认<5min", "告警合并减少噪声>40%"],
+      "tasks": ["阈值与基线配置", "路由与分级", "合并/抑制策略", "钉钉/邮件通知"],
+      "owner": "SRE",
+      "stakeholders": ["数据平台", "研发", "运营"],
+      "dependencies": ["DATA-VIS-001"],
+      "effort": "8人日",
+      "priority": "P0",
+      "risks": ["告警风暴", "阈值配置失真"],
+      "mitigation": ["抖动抑制与去重", "基于分位与季节性建模"]
+    }
+  ]
+}

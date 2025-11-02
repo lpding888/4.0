@@ -98,3 +98,143 @@
 - 使用预置并发减少冷启动延迟
 - 定期清理无用函数和存储资源
 - 监控函数执行成本，及时优化
+
+---
+
+## 依赖规范
+
+### SCF Worker Skill必须参考的规范文档
+
+在开发SCF云函数时，SCF Worker必须参考以下规范文档，确保实现符合平台标准：
+
+#### 1. PIPELINE_SCHEMA_SPEC.md（Pipeline执行流程规范）
+
+**用途**：理解SCF在Pipeline中的角色和回调机制
+
+**必读章节**：
+- **Step类型详解 - type: scf**：理解SCF类型Step的执行逻辑
+- **SCF回调机制**：理解如何回调后端接口更新任务状态
+- **输入输出映射**：理解`input_mapping`和`output_mapping`规则
+- **失败处理和配额返还**：理解Step失败时的处理逻辑
+
+**使用场景**：
+- 实现SCF云函数的主处理逻辑时
+- 发送回调请求给后端时
+- 处理输入参数和生成输出结果时
+
+**核心原则**：
+- ✅ SCF只能通过回调接口更新状态（不直接操作数据库）
+- ✅ 回调请求必须包含签名验证
+- ✅ 处理失败时必须通过回调通知后端（触发配额返还）
+- ❌ 禁止SCF直接操作数据库
+- ❌ 禁止跳过签名发送
+
+**示例**：
+```javascript
+// ✅ 正确：发送回调并验证签名
+const crypto = require('crypto');
+const axios = require('axios');
+
+async function sendCallback(taskId, stepIndex, status, output) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const payload = `${taskId}${stepIndex}${timestamp}`;
+  const signature = crypto
+    .createHmac('sha256', process.env.INTERNAL_CALLBACK_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  await axios.post(
+    `${process.env.BACKEND_URL}/api/internal/tasks/${taskId}/steps/${stepIndex}/callback`,
+    {
+      status: status,  // "success" | "failed"
+      output: output
+    },
+    {
+      headers: {
+        'X-Internal-Signature': signature,
+        'X-Timestamp': timestamp
+      }
+    }
+  );
+}
+
+// ❌ 错误：直接操作数据库
+await db('task_steps').where({ id: stepId }).update({ output: ... });  // 禁止
+```
+
+---
+
+#### 2. BILLING_AND_POLICY_SPEC.md（计费和策略规范）
+
+**用途**：理解配额返还机制，确保失败时正确触发
+
+**必读章节**：
+- **任务创建流程**：理解`eligible_for_refund`字段的作用
+- **配额返还流程**：理解后端如何返还配额
+- **失败处理规则**：理解什么情况下会触发返还
+
+**使用场景**：
+- SCF处理失败时
+- 调用回调接口时（`status: "failed"`）
+
+**核心原则**：
+- ✅ SCF处理失败时必须发送`status: "failed"`回调
+- ✅ 后端收到失败回调后会自动返还配额
+- ❌ SCF不能直接操作配额
+
+**示例**：
+```javascript
+// ✅ 正确：处理失败时发送失败回调
+try {
+  const result = await processVideo(inputUrl);
+  await sendCallback(taskId, stepIndex, 'success', { video_url: result.url });
+} catch (error) {
+  // 发送失败回调，后端会自动返还配额
+  await sendCallback(taskId, stepIndex, 'failed', { error_message: error.message });
+}
+```
+
+---
+
+### SCF Worker的职责边界
+
+#### ✅ SCF Worker可以做的事
+
+1. **处理大文件**：下载COS输入文件，处理后上传到COS输出路径
+2. **调用供应商API**：调用外部AI服务（如RunningHub、Stable Diffusion）
+3. **复杂编排**：多个供应商API的编排和容错
+4. **异步处理**：长耗时任务（视频合成、批量处理等）
+5. **回调后端**：完成或失败后调用回调接口通知后端
+
+#### ❌ SCF Worker不能做的事
+
+1. ❌ **不能直接操作数据库**：必须通过回调接口
+2. ❌ **不能跳过签名验证**：回调请求必须包含签名
+3. ❌ **不能操作配额**：配额的扣减和返还只能由后端完成
+4. ❌ **不能暴露敏感信息**：不能在日志或回调中暴露API密钥
+
+---
+
+### 关键检查清单
+
+在提交SCF代码前，必须自检：
+
+- [ ] 是否通过回调接口更新任务状态？（必须）
+- [ ] 回调请求是否包含签名？（必须）
+- [ ] 签名算法是否与后端一致？（必须）
+- [ ] 处理失败时是否发送`status: "failed"`回调？（必须）
+- [ ] 是否直接操作了数据库？（禁止）
+- [ ] 是否暴露了敏感信息？（禁止）
+
+---
+
+### 总结
+
+SCF Worker的核心职责是**大文件处理、异步任务、供应商编排**。
+
+所有状态更新必须通过回调接口完成：
+1. 下载输入文件 → 处理 → 上传输出文件
+2. 完成时发送`status: "success"`回调
+3. 失败时发送`status: "failed"`回调（触发配额返还）
+
+**遵循这些规范，才能确保SCF实现符合平台架构标准！**

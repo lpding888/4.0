@@ -1,0 +1,42 @@
+service: text-processor
+
+provider:
+  name: tencentcloud
+  runtime: Nodejs18.15  # 腾讯云最新版本
+  region: ${env:TENCENT_REGION, 'ap-guangzhou'}
+  memorySize: 512
+  timeout: 30
+  environment:
+    TENCENT_SECRET_ID: ${env:TENCENT_SECRET_ID}
+    TENCENT_SECRET_KEY: ${env:TENCENT_SECRET_KEY}
+    COS_BUCKET: ${env:COS_BUCKET}
+    COS_REGION: ${env:COS_REGION, 'ap-guangzhou'}
+    INTERNAL_CALLBACK_SECRET: ${env:INTERNAL_CALLBACK_SECRET}
+    BACKEND_API_URL: ${env:BACKEND_API_URL}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+
+functions:
+  processor:
+    handler: index.main_handler
+    description: 文本处理云函数 - 文案生成/格式化
+    events:
+      - apigw:
+          name: text-processor-api
+          parameters:
+            serviceId: ${env:APIGW_SERVICE_ID}
+            environment: ${env:APIGW_ENVIRONMENT, 'release'}
+            endpoints:
+              - path: /text-processor
+                method: POST
+                description: 文本处理接口
+
+plugins:
+  - serverless-tencent-scf
+
+custom:
+  exclude:
+    - .git/**
+    - .gitignore
+    - node_modules/**/.cache/**
+    - README.md
+    - test/**

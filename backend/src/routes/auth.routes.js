@@ -18,6 +18,27 @@ router.post('/send-code', authController.sendCode);
 router.post('/login', authController.login);
 
 /**
+ * @route POST /api/auth/wechat-login
+ * @desc 微信登录
+ * @access Public
+ */
+router.post('/wechat-login', authController.wechatLogin);
+
+/**
+ * @route POST /api/auth/password-login
+ * @desc 密码登录
+ * @access Public
+ */
+router.post('/password-login', authController.passwordLogin);
+
+/**
+ * @route POST /api/auth/set-password
+ * @desc 设置/修改密码
+ * @access Private
+ */
+router.post('/set-password', authenticate, authController.setPassword);
+
+/**
  * @route GET /api/auth/me
  * @desc 获取当前用户信息
  * @access Private

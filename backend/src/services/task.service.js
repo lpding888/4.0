@@ -1,6 +1,10 @@
 const db = require('../config/database');
 const { nanoid } = require('nanoid');
 const quotaService = require('./quota.service');
+const videoGenerateService = require('./videoGenerate.service');
+const featureService = require('./feature.service');
+const pipelineEngine = require('./pipelineEngine.service');
+const { checkFeatureRateLimit } = require('../middlewares/rateLimiter.middleware');
 const logger = require('../utils/logger');
 
 /**
@@ -10,56 +14,173 @@ class TaskService {
   /**
    * 创建任务
    * @param {string} userId - 用户ID
-   * @param {string} type - 任务类型: basic_clean | model_pose12
+   * @param {string} type - 任务类型: basic_clean | model_pose12 | video_generate
    * @param {string} inputImageUrl - 输入图片URL
    * @param {Object} params - 任务参数
    */
   async create(userId, type, inputImageUrl, params = {}) {
+    let taskId;
     try {
-      // 1. 验证任务类型
-      const validTypes = ['basic_clean', 'model_pose12'];
+      const validTypes = ['basic_clean', 'model_pose12', 'video_generate'];
       if (!validTypes.includes(type)) {
         throw { errorCode: 4001, message: '无效的任务类型' };
       }
 
-      // 2. 检查用户会员状态
-      const user = await db('users').where('id', userId).first();
-      if (!user) {
-        throw { errorCode: 4004, message: '用户不存在' };
-      }
-      if (!user.isMember) {
-        throw { errorCode: 4003, message: '请先开通会员' };
-      }
+      const quotaCost = this.getQuotaCost(type);
 
-      // 3. 扣减配额(使用事务,确保原子性)
-      await quotaService.deduct(userId, 1);
+      const result = await db.transaction(async (trx) => {
+        // 1. 扣减配额(在事务中)
+        await quotaService.deduct(userId, quotaCost, trx);
 
-      // 4. 创建任务记录
-      const taskId = nanoid();
-      const now = new Date();
+        // 2. 创建任务记录(在事务中)
+        taskId = nanoid();
+        const now = new Date();
+        await trx('tasks').insert({
+          id: taskId,
+          userId,
+          type,
+          status: 'pending',
+          inputUrl: inputImageUrl,
+          params: JSON.stringify(params),
+          eligible_for_refund: true, // 🔥 设置为有资格返还配额
+          refunded: false, // 🔥 初始化为未返还
+          created_at: now,
+          updated_at: now,
+        });
 
-      await db('tasks').insert({
-        id: taskId,
-        userId,
-        type,
-        status: 'pending', // pending -> processing -> success/failed
-        inputImageUrl,
-        params: JSON.stringify(params),
-        created_at: now,
-        updated_at: now
+        return {
+          taskId,
+          type,
+          status: 'pending',
+          createdAt: now.toISOString(),
+        };
       });
 
-      logger.info(`[TaskService] 任务创建成功 taskId=${taskId} userId=${userId} type=${type}`);
+      logger.info(`[TaskService] 任务创建成功 taskId=${taskId} userId=${userId} type=${type} quotaCost=${quotaCost}`);
 
-      return {
-        taskId,
-        type,
-        status: 'pending',
-        createdAt: now.toISOString()
-      };
+      // 3. 异步处理视频生成任务(在事务成功后)
+      if (type === 'video_generate') {
+        this.processVideoGenerateTask(taskId, inputImageUrl, params)
+          .catch(err => {
+            logger.error(`[TaskService] 视频任务异步处理失败: ${err.message}`, { taskId });
+            this.handleVideoTaskFailure(taskId, userId, err.message);
+          });
+      }
 
+      return result;
     } catch (error) {
       logger.error(`[TaskService] 创建任务失败: ${error.message}`, { userId, type, error });
+      // 如果事务失败且是视频任务，确保不会触发异步处理
+      if (type === 'video_generate' && taskId) {
+        // 任务创建失败，但ID已生成，可能需要额外清理逻辑
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 基于功能卡片创建任务（新架构）
+   * @param {string} userId - 用户ID
+   * @param {string} featureId - 功能ID
+   * @param {Object} inputData - 输入数据（由前端表单提交）
+   * @returns {Promise<Object>} 创建的任务信息
+   */
+  async createByFeature(userId, featureId, inputData = {}) {
+    let taskId;
+    try {
+      // 1. 获取功能定义
+      const feature = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .whereNull('deleted_at')
+        .first();
+
+      if (!feature) {
+        throw { errorCode: 4004, message: '功能不存在' };
+      }
+
+      if (!feature.is_enabled) {
+        throw { errorCode: 4003, message: '功能已禁用' };
+      }
+
+      // 2. 检查用户权限
+      const hasAccess = await featureService.checkUserAccess(userId, feature);
+      if (!hasAccess) {
+        throw { errorCode: 4003, message: '无权使用该功能' };
+      }
+
+      // 3. 检查限流
+      const rateLimitResult = await checkFeatureRateLimit(
+        featureId,
+        feature.rate_limit_policy,
+        userId
+      );
+
+      if (!rateLimitResult.allowed) {
+        throw {
+          errorCode: 4029,
+          message: '请求过于频繁，请稍后再试',
+          rateLimitInfo: {
+            resetAt: rateLimitResult.resetAt,
+            remaining: rateLimitResult.remaining
+          }
+        };
+      }
+
+      // 4. 在事务中扣配额并创建任务
+      const result = await db.transaction(async (trx) => {
+        // 扣减配额
+        await quotaService.deduct(userId, feature.quota_cost, trx);
+
+        // 创建任务记录
+        taskId = nanoid();
+        const now = new Date();
+
+        await trx('tasks').insert({
+          id: taskId,
+          userId,
+          feature_id: featureId,
+          status: 'pending',
+          input_data: JSON.stringify(inputData),
+          eligible_for_refund: true, // 🔥 设置为有资格返还配额
+          refunded: false, // 🔥 初始化为未返还
+          created_at: now,
+          updated_at: now,
+          // 保留旧字段兼容性（type是NOT NULL字段，用feature_id作为type的占位值）
+          type: featureId,
+          inputUrl: inputData.imageUrl || '',
+          params: null
+        });
+
+        return {
+          taskId,
+          featureId,
+          status: 'pending',
+          createdAt: now.toISOString(),
+          quotaCost: feature.quota_cost
+        };
+      });
+
+      logger.info(
+        `[TaskService] Feature任务创建成功 taskId=${taskId} userId=${userId} ` +
+        `featureId=${featureId} quotaCost=${feature.quota_cost}`
+      );
+
+      // 异步执行Pipeline（不阻塞响应）
+      pipelineEngine.executePipeline(taskId, featureId, inputData)
+        .catch(err => {
+          logger.error(
+            `[TaskService] Pipeline执行异常 taskId=${taskId} error=${err.message}`,
+            { taskId, featureId, error: err }
+          );
+        });
+
+      return result;
+
+    } catch (error) {
+      logger.error(
+        `[TaskService] 创建Feature任务失败: ${error.message}`,
+        { userId, featureId, error }
+      );
       throw error;
     }
   }
@@ -88,6 +209,7 @@ class TaskService {
       const params = task.params ? JSON.parse(task.params) : {};
       const resultUrls = task.resultUrls ? JSON.parse(task.resultUrls) : [];
 
+      // 艹！不能返回内部字段vendorTaskId给前端！
       return {
         id: task.id,
         type: task.type,
@@ -95,7 +217,11 @@ class TaskService {
         inputImageUrl: task.inputImageUrl,
         params,
         resultUrls,
+        // vendorTaskId: task.vendorTaskId, // 🔥 禁止！内部字段不能暴露
+        coverUrl: task.coverUrl,
+        thumbnailUrl: task.thumbnailUrl,
         errorMessage: task.errorMessage,
+        errorReason: task.errorReason,
         createdAt: task.created_at,
         updatedAt: task.updated_at,
         completedAt: task.completed_at
@@ -141,12 +267,16 @@ class TaskService {
 
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
 
-      // 如果任务失败,返还配额
+      // 如果任务失败,返还配额（艹！必须检查eligible_for_refund）
       if (status === 'failed') {
         const task = await db('tasks').where('id', taskId).first();
         if (task) {
-          await quotaService.refund(task.userId, 1, `任务失败返还:${taskId}`);
-          logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId}`);
+          const refundAmount = this.getQuotaCost(task.type);
+          // 🔥 修复参数顺序：taskId在前，userId在后
+          const result = await quotaService.refund(taskId, task.userId, refundAmount, `任务失败返还:${taskId}`);
+          if (result.refunded) {
+            logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
+          }
         }
       }
 
@@ -225,6 +355,87 @@ class TaskService {
   }
 
   /**
+   * 处理视频生成任务
+   * @param {string} taskId - 任务ID
+   * @param {string} inputImageUrl - 输入图片URL
+   * @param {Object} params - 任务参数
+   */
+  async processVideoGenerateTask(taskId, inputImageUrl, params) {
+    try {
+      logger.info(`[TaskService] 开始处理视频生成任务 taskId=${taskId}`);
+
+      // 更新任务状态为processing
+      await this.updateStatus(taskId, 'processing');
+
+      // 调用视频生成服务
+      const videoResult = await videoGenerateService.processVideoTask(
+        taskId,
+        inputImageUrl,
+        params
+      );
+
+      // 保存vendorTaskId到数据库
+      await db('tasks')
+        .where('id', taskId)
+        .update({
+          vendorTaskId: videoResult.vendorTaskId,
+          updated_at: new Date()
+        });
+
+      logger.info(`[TaskService] 视频生成任务处理完成 taskId=${taskId} vendorTaskId=${videoResult.vendorTaskId}`);
+
+    } catch (error) {
+      logger.error(`[TaskService] 视频生成任务处理失败 taskId=${taskId} error=${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * 处理视频任务失败
+   * @param {string} taskId - 任务ID
+   * @param {string} userId - 用户ID
+   * @param {string} errorMessage - 错误信息
+   */
+  async handleVideoTaskFailure(taskId, userId, errorMessage) {
+    try {
+      // 更新任务状态为失败（updateStatus内部会自动返还配额）
+      await this.updateStatus(taskId, 'failed', {
+        errorMessage: errorMessage
+      });
+
+      // 艹！不要在这里再次返还配额，updateStatus已经返还了！
+      logger.info(`[TaskService] 视频任务失败处理完成 taskId=${taskId} userId=${userId}`);
+
+    } catch (error) {
+      logger.error(`[TaskService] 视频任务失败处理异常 taskId=${taskId} error=${error.message}`);
+    }
+  }
+
+  /**
+   * 获取任务类型的配额消耗
+   * @param {string} type - 任务类型
+   * @returns {number} 配额消耗数量
+   */
+  getQuotaCost(type) {
+    const key = `QUOTA_COST_${type.toUpperCase()}`;
+    return parseInt(process.env[key] || '1', 10);
+  }
+
+  /**
+   * 获取任务类型的中文名称
+   * @param {string} type - 任务类型
+   * @returns {string} 中文名称
+   */
+  getTaskTypeLabel(type) {
+    const labels = {
+      'basic_clean': '基础修图',
+      'model_pose12': 'AI模特12分镜',
+      'video_generate': '服装视频生成'
+    };
+    return labels[type] || type;
+  }
+
+  /**
    * 删除超时的pending任务
    * (定时任务使用,超过10分钟未处理的任务自动标记为failed)
    */
@@ -252,6 +463,17 @@ class TaskService {
       logger.error(`[TaskService] 清理超时任务失败: ${error.message}`, error);
       throw error;
     }
+  }
+
+  /**
+   * 返还配额（艹！必须传taskId，防止重复返还）
+   * @param {string} taskId - 任务ID
+   * @param {string} userId - 用户ID
+   * @param {number} amount - 返还数量
+   * @param {string} reason - 返还原因
+   */
+  async refundQuota(taskId, userId, amount, reason) {
+    return await quotaService.refund(taskId, userId, amount, reason);
   }
 }
 

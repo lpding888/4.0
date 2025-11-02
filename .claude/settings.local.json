@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run db:migrate:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(git pull:*)",
+      "Bash(npm test:*)",
+      "Bash(mysql:*)",
+      "Bash(docker exec:*)",
+      "Bash(NODE_ENV=test npm run db:migrate:*)",
+      "Bash(NODE_ENV=test npm test:*)",
+      "Bash(export NODE_ENV=test)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(npm run db:seed:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(backend/src/db/migrations/20251102000001_create_refresh_tokens.js)",
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(git rm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

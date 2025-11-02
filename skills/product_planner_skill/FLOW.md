@@ -71,3 +71,79 @@
 - 不能使用模糊不清的描述
 - 不能跨技能包分配任务
 - 不能在需求中包含技术实现细节
+---
+
+## 依赖规范
+
+### Product Planner Skill必须参考的规范文档
+
+在设计新功能时，Product Planner必须参考以下规范文档，确保输出符合平台标准：
+
+#### 1. 所有4个核心SPEC文档（全部必读）
+
+Product Planner需要理解所有规范文档，才能输出完整的产品规划：
+
+**FEATURE_DEFINITION_SPEC.md**：
+- 设计功能时定义`feature_id`、`access_scope`、`quota_cost`、`rate_limit_policy`
+- 确定功能的权限模式（套餐权限 or 白名单）
+- 设置合理的配额成本和限流策略
+
+**FORM_SCHEMA_SPEC.md**：
+- 设计用户表单时定义`form_schema`
+- 列出所有字段（类型、校验规则、依赖关系）
+- 确保前端可以动态渲染（不写死页面）
+
+**PIPELINE_SCHEMA_SPEC.md**：
+- 设计任务执行流程时定义`pipeline_schema`
+- 列出所有Step（类型、供应商、输入输出映射）
+- 配置多供应商降级（`provider_candidates`）
+
+**BILLING_AND_POLICY_SPEC.md**：
+- 定义配额扣减/返还规则
+- 确保符合"会员+配额"商业模型
+- 设置合理的限流策略（防止滥用）
+
+#### 2. Product Planner输出格式（来自FLOW.md）
+
+Product Planner的输出必须包含9个部分：
+1. 需求背景/目标
+2. 用户完整使用流程
+3. 页面级需求（交给frontend_dev_skill）
+4. 后端接口需求（交给backend_dev_skill）
+5. 云函数/大文件处理需求（交给scf_worker_skill）
+6. 计费与配额策略（交给billing_guard_skill）
+7. 验收标准（交给qa_acceptance_skill）
+8. 任务卡清单
+9. 总结给老板
+
+每个部分必须引用相应的SPEC文档标准。
+
+#### 3. 使用规范的典型流程
+
+1. **阅读需求** → 理解业务目标
+2. **参考FEATURE_DEFINITION_SPEC** → 定义功能基本信息
+3. **参考FORM_SCHEMA_SPEC** → 设计用户表单
+4. **参考PIPELINE_SCHEMA_SPEC** → 设计执行流程
+5. **参考BILLING_AND_POLICY_SPEC** → 定义计费规则
+6. **输出完整产品规划** → 分派给各技能包
+
+#### 4. 自检清单（来自CHECKLIST.md）
+
+在输出前必须自检：
+- [ ] 是否把需求拆解成前端/后端/云函数/计费/QA等各个模块？
+- [ ] 每个模块的需求是否符合对应的SPEC文档标准？
+- [ ] 是否定义了清晰的权限边界和职责分工？
+- [ ] 是否识别了涉及真实扣费、会员额度扣减的风险？
+- [ ] 是否明确了交付要push develop + 准备PR描述？
+
+### 总结
+
+Product Planner的核心职责是**定需求，分工，确保符合所有规范**。
+
+所有产品规划必须基于4个SPEC文档：
+1. 功能定义符合FEATURE_DEFINITION_SPEC
+2. 表单设计符合FORM_SCHEMA_SPEC
+3. Pipeline设计符合PIPELINE_SCHEMA_SPEC
+4. 计费策略符合BILLING_AND_POLICY_SPEC
+
+**Product Planner是规范的第一执行者！**

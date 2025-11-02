@@ -1,0 +1,53 @@
+{
+  "taskId": "BACKEND-P0-001",
+  "title": "Saga模式配额管理 - Reserve/Confirm/Cancel三阶段事务补偿",
+  "department": "Backend",
+  "priority": "P0",
+  "estimatedHours": 10,
+  "dependencies": [],
+  "description": "使用Saga模式重构配额管理系统，实现Reserve → Confirm | Cancel三阶段事务补偿机制。创建quota_transactions表记录每个阶段状态，支持幂等性操作，确保Pipeline执行失败时能正确回滚配额。",
+  "technicalRequirements": [
+    "创建quota_transactions表，包含字段：id, task_id, user_id, amount, phase(reserved/confirmed/cancelled), idempotent_done, created_at",
+    "实现QuotaService的三个核心方法：reserve(预留配额)、confirm(确认扣减)、cancel(退还配额)",
+    "所有操作使用Knex事务包裹，确保原子性",
+    "使用forUpdate()行级锁防止并发冲突",
+    "幂等性设计：同一taskId的confirm/cancel操作只能执行一次",
+    "修改TaskService，在任务创建时调用reserve，执行成功调用confirm，失败调用cancel",
+    "修改PipelineEngine，在Pipeline执行失败时触发cancel流程"
+  ],
+  "acceptanceCriteria": [
+    "quota_transactions表已创建，包含所有必需字段和索引（task_id唯一索引）",
+    "QuotaService实现完整的reserve/confirm/cancel方法，所有操作在事务中执行",
+    "Pipeline执行失败时，配额能正确退还到用户账户",
+    "同一任务重复调用confirm/cancel不会重复扣减/退还配额（幂等性验证）",
+    "单元测试覆盖率 ≥ 85%，包含正常流程、失败流程、幂等性测试",
+    "集成测试验证：创建任务 → Pipeline失败 → 配额自动退还"
+  ],
+  "deliverables": [
+    "backend/src/db/migrations/20250102000001_create_quota_transactions.ts",
+    "backend/src/services/quota.service.ts（重构版）",
+    "backend/src/services/task.service.ts（集成Saga模式）",
+    "backend/src/services/pipelineEngine.service.ts（集成cancel触发）",
+    "backend/tests/services/quota.service.spec.ts（Saga模式完整测试）",
+    "backend/tests/integration/quota-saga.spec.ts（端到端测试）"
+  ],
+  "needsCoordination": [
+    "需要通知QA团队：新增quota_transactions表，需要测试配额回滚场景",
+    "需要通知运维：生产环境迁移需要执行新的数据库迁移脚本"
+  ],
+  "aiPromptSuggestion": {
+    "system": "你是一名资深的Backend开发工程师，精通Node.js + TypeScript + Knex.js + MySQL。你擅长使用Saga模式实现分布式事务补偿，确保数据一致性。你遵循SOLID原则，代码必须包含完整的类型定义、错误处理和单元测试。",
+    "user": "## 任务目标\n实现Saga模式的配额管理系统，解决Pipeline执行失败时配额无法回滚的问题。\n\n## 具体要求\n\n### 1. 数据库迁移\n创建`backend/src/db/migrations/20250102000001_create_quota_transactions.ts`：\n- 表名：`quota_transactions`\n- 字段：\n  - id: VARCHAR(32) PRIMARY KEY（UUID去掉横杠）\n  - task_id: VARCHAR(32) UNIQUE NOT NULL（关联tasks表）\n  - user_id: VARCHAR(32) NOT NULL（关联users表）\n  - amount: INT NOT NULL（配额数量，正数）\n  - phase: ENUM('reserved', 'confirmed', 'cancelled') NOT NULL\n  - idempotent_done: BOOLEAN DEFAULT TRUE（防止重复操作）\n  - created_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n  - updated_at: TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP\n- 索引：\n  - UNIQUE INDEX idx_task_id (task_id)\n  - INDEX idx_user_id (user_id)\n  - INDEX idx_phase (phase)\n\n### 2. QuotaService重构\n创建`backend/src/services/quota.service.ts`，实现以下方法：\n\n#### reserve(userId: string, taskId: string, amount = 1): Promise<void>\n- 使用Knex事务包裹所有操作\n- 使用forUpdate()锁定用户行\n- 检查用户配额是否足够（quota_remaining >= amount）\n- 扣减users表的quota_remaining字段\n- 插入quota_transactions记录，phase='reserved'\n- 如果配额不足，抛出AppError(ErrorCode.QUOTA_INSUFFICIENT)\n\n#### confirm(taskId: string): Promise<void>\n- 查询quota_transactions记录（WHERE task_id AND phase='reserved'）\n- 如果不存在或idempotent_done=true，直接返回（幂等性）\n- 更新phase='confirmed'\n\n#### cancel(taskId: string): Promise<void>\n- 使用Knex事务包裹\n- 查询quota_transactions记录（WHERE task_id AND phase='reserved'）\n- 如果不存在或phase!='reserved'，直接返回（幂等性）\n- 退还配额：users表quota_remaining字段 +amount\n- 更新quota_transactions的phase='cancelled'\n\n### 3. 集成到TaskService\n修改`backend/src/services/task.service.ts`：\n- 在createTask方法中，调用quotaService.reserve()预留配额\n- 如果reserve失败，抛出错误，不创建任务\n\n### 4. 集成到PipelineEngine\n修改`backend/src/services/pipelineEngine.service.ts`：\n- 在executePipeline方法的try-catch中：\n  - 成功：调用quotaService.confirm(taskId)\n  - 失败：调用quotaService.cancel(taskId)\n\n### 5. 单元测试\n创建`backend/tests/services/quota.service.spec.ts`：\n- 测试用例1：reserve正常流程（配额足够）\n- 测试用例2：reserve失败（配额不足）\n- 测试用例3：reserve → confirm流程（配额正确扣减）\n- 测试用例4：reserve → cancel流程（配额正确退还）\n- 测试用例5：重复confirm的幂等性（不会重复扣减）\n- 测试用例6：重复cancel的幂等性（不会重复退还）\n- 测试用例7：并发reserve测试（使用forUpdate锁）\n\n### 6. 集成测试\n创建`backend/tests/integration/quota-saga.spec.ts`：\n- 测试用例1：创建任务 → Pipeline执行成功 → 配额confirm\n- 测试用例2：创建任务 → Pipeline执行失败 → 配额cancel\n- 测试用例3：多个任务并发执行，配额正确管理\n\n## 代码示例参考\n\n### QuotaService.reserve()实现示例\n```typescript\nimport { db } from '../db';\nimport { AppError, ErrorCode } from '../utils/errors';\nimport { v4 as uuid } from 'uuid';\n\nexport class QuotaService {\n  async reserve(userId: string, taskId: string, amount = 1): Promise<void> {\n    return db.transaction(async (trx) => {\n      // 锁定用户行\n      const user = await trx('users')\n        .where({ id: userId })\n        .forUpdate()\n        .first();\n\n      if (!user || user.quota_remaining < amount) {\n        throw new AppError(\n          ErrorCode.QUOTA_INSUFFICIENT,\n          '配额不足,请续费',\n          403\n        );\n      }\n\n      // 扣减配额\n      await trx('users')\n        .where({ id: userId })\n        .update({\n          quota_remaining: user.quota_remaining - amount,\n        });\n\n      // 记录Reserve阶段\n      await trx('quota_transactions').insert({\n        id: uuid().replace(/-/g, ''),\n        task_id: taskId,\n        user_id: userId,\n        amount,\n        phase: 'reserved',\n        idempotent_done: true,\n      });\n    });\n  }\n}\n```\n\n## 交付验收标准\n1. 所有代码使用TypeScript编写，类型定义完整\n2. 使用统一的AppError错误处理\n3. 所有数据库操作在事务中执行\n4. 单元测试覆盖率 ≥ 85%\n5. 集成测试覆盖核心场景\n6. 代码符合ESLint规范\n\n## 注意事项\n- ⚠️ reserve操作必须使用forUpdate()行级锁，防止并发超卖\n- ⚠️ 所有数据库操作必须在事务中执行，确保原子性\n- ⚠️ 幂等性设计非常重要，防止重复confirm/cancel\n- ⚠️ 错误处理要完善，区分配额不足、任务不存在等不同错误"
+  },
+  "reviewPolicy": {
+    "requiresReview": true,
+    "reviewers": ["Reviewer"],
+    "reviewFocus": ["事务完整性", "幂等性设计", "并发安全性", "错误处理"]
+  },
+  "qaPolicy": {
+    "requiresQA": true,
+    "testingScope": ["Unit", "Integration", "Concurrency"],
+    "testingDepth": "Thorough"
+  },
+  "status": "Ready"
+}

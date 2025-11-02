@@ -1,0 +1,568 @@
+const db = require('../config/database');
+const logger = require('../utils/logger');
+const { generateId } = require('../utils/generator');
+const encryptionUtils = require('../utils/encryption');
+
+/**
+ * 分销代理服务
+ */
+class DistributionService {
+  /**
+   * 生成唯一邀请码
+   */
+  async generateInviteCode() {
+    let code;
+    let exists = true;
+
+    while (exists) {
+      // 生成6位大写字母+数字邀请码
+      code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const distributor = await db('distributors')
+        .where({ invite_code: code })
+        .first();
+      exists = !!distributor;
+    }
+
+    return code;
+  }
+
+  /**
+   * 申请成为分销员
+   */
+  async applyDistributor(userId, applyData) {
+    const { realName, idCard, contact, channel } = applyData;
+
+    // 检查用户是否存在
+    const user = await db('users').where({ id: userId }).first();
+    if (!user) {
+      throw {
+        statusCode: 404,
+        errorCode: 6001,
+        message: '用户不存在'
+      };
+    }
+
+    // 检查是否已申请
+    const existingDistributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (existingDistributor) {
+      if (existingDistributor.status === 'pending') {
+        throw {
+          statusCode: 400,
+          errorCode: 6002,
+          message: '您的申请正在审核中'
+        };
+      } else if (existingDistributor.status === 'active') {
+        throw {
+          statusCode: 400,
+          errorCode: 6003,
+          message: '您已经是分销员'
+        };
+      } else if (existingDistributor.status === 'disabled') {
+        throw {
+          statusCode: 400,
+          errorCode: 6004,
+          message: '您的分销员资格已被禁用'
+        };
+      }
+    }
+
+    // 生成邀请码
+    const inviteCode = await this.generateInviteCode();
+    // 🔥 加密身份证号（法律合规）
+    const encryptedIdCard = encryptionUtils.encryptIdCard(idCard);
+
+    // 创建分销员记录
+    const distributorId = generateId(8);
+    await db('distributors').insert({
+      id: distributorId,
+      user_id: userId,
+      real_name: realName,
+      id_card: encryptedIdCard, // 🔥 存储加密后的身份证号
+      contact,
+      channel,
+      status: 'pending',
+      invite_code: inviteCode,
+      total_commission: 0,
+      available_commission: 0,
+      withdrawn_commission: 0,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+
+    logger.info(`分销员申请提交: userId=${userId}, distributorId=${distributorId}`);
+
+    return {
+      distributorId,
+      inviteCode,
+      status: 'pending'
+    };
+  }
+
+  /**
+   * 绑定推荐关系（在事务中执行）
+   */
+  async bindReferralRelationship(trx, referrerUserId, referredUserId) {
+    // 检查自己推荐自己
+    if (referrerUserId === referredUserId) {
+      logger.warn(`自己推荐自己,忽略: referrerUserId=${referrerUserId}`);
+      return null;
+    }
+
+    // 查询推荐人是否是分销员
+    const referrer = await trx('distributors')
+      .where({ user_id: referrerUserId, status: 'active' })
+      .first();
+
+    if (!referrer) {
+      logger.info(`推荐人不是分销员,不绑定关系: referrerUserId=${referrerUserId}`);
+      return null;
+    }
+
+    // 检查被推荐人是否已有推荐关系
+    const existingRelation = await trx('referral_relationships')
+      .where({ referred_user_id: referredUserId })
+      .first();
+
+    if (existingRelation) {
+      logger.info(`被推荐人已有推荐关系,不重复绑定: referredUserId=${referredUserId}`);
+      return null;
+    }
+
+    // 创建推荐关系
+    const relationId = generateId(8);
+    await trx('referral_relationships').insert({
+      id: relationId,
+      referrer_user_id: referrerUserId,
+      referred_user_id: referredUserId,
+      referrer_distributor_id: referrer.id,
+      created_at: new Date()
+    });
+
+    logger.info(`推荐关系绑定成功: relationId=${relationId}, referrerId=${referrerUserId}, referredId=${referredUserId}`);
+
+    return relationId;
+  }
+
+  /**
+   * 查询分销员状态（简单版本）
+   */
+  async getDistributorStatus(userId) {
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor) {
+      return {
+        isDistributor: false,
+        status: null,
+        inviteCode: null,
+        inviteLink: null
+      };
+    }
+
+    const baseUrl = process.env.FRONTEND_URL || 'https://yourapp.com';
+    const inviteLink = `${baseUrl}/register?ref=${distributor.user_id}`;
+
+    return {
+      isDistributor: true,
+      status: distributor.status,
+      inviteCode: distributor.invite_code,
+      inviteLink: inviteLink,
+      approvalTime: distributor.approval_time
+    };
+  }
+
+  /**
+   * 查询分销员详细信息（用户端）
+   */
+  async getDistributorDetail(userId) {
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor) {
+      throw {
+        statusCode: 404,
+        errorCode: 6007,
+        message: '您不是分销员'
+      };
+    }
+
+    // 查询用户信息
+    const user = await db('users')
+      .where({ id: userId })
+      .select('id', 'phone', 'created_at')
+      .first();
+
+    // 查询推荐用户总数
+    const totalReferrals = await db('referral_relationships')
+      .where({ referrer_distributor_id: distributor.id })
+      .count('id as count')
+      .first();
+
+    // 查询已付费推荐用户数
+    const paidReferrals = await db('referral_relationships as rr')
+      .join('orders as o', 'rr.referred_user_id', 'o.userId')
+      .where({ 'rr.referrer_distributor_id': distributor.id, 'o.status': 'paid' })
+      .countDistinct('rr.referred_user_id as count')
+      .first();
+
+    // 查询冻结佣金
+    const frozenCommission = await db('commissions')
+      .where({ distributor_id: distributor.id, status: 'frozen' })
+      .sum('commission_amount as total')
+      .first();
+
+    // 查询待审核提现
+    const pendingWithdrawal = await db('withdrawals')
+      .where({ distributor_id: distributor.id, status: 'pending' })
+      .sum('amount as total')
+      .first();
+
+    const baseUrl = process.env.FRONTEND_URL || 'https://yourapp.com';
+    const inviteLink = `${baseUrl}/register?ref=${distributor.user_id}`;
+
+    return {
+      // 基本信息
+      id: distributor.id,
+      userId: distributor.user_id,
+      phone: user.phone,
+      realName: distributor.real_name,
+      contact: distributor.contact,
+      channel: distributor.channel,
+      status: distributor.status,
+      inviteCode: distributor.invite_code,
+      inviteLink: inviteLink,
+
+      // 申请与审核信息
+      appliedAt: distributor.created_at,
+      approvalTime: distributor.approval_time,
+
+      // 推广数据
+      totalReferrals: parseInt(totalReferrals.count) || 0,
+      paidReferrals: parseInt(paidReferrals.count) || 0,
+
+      // 佣金数据
+      totalCommission: parseFloat(distributor.total_commission) || 0,
+      availableCommission: parseFloat(distributor.available_commission) || 0,
+      frozenCommission: parseFloat(frozenCommission.total) || 0,
+      withdrawnCommission: parseFloat(distributor.withdrawn_commission) || 0,
+      pendingWithdrawal: parseFloat(pendingWithdrawal.total) || 0
+    };
+  }
+
+  /**
+   * 获取分销中心数据概览
+   */
+  async getDashboard(userId) {
+    // 查询分销员信息
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor || distributor.status !== 'active') {
+      throw {
+        statusCode: 403,
+        errorCode: 6005,
+        message: '您不是活跃的分销员'
+      };
+    }
+
+    // 查询推荐用户总数
+    const totalReferrals = await db('referral_relationships')
+      .where({ referrer_distributor_id: distributor.id })
+      .count('id as count')
+      .first();
+
+    // 查询已付费推荐用户数
+    const paidReferrals = await db('referral_relationships as rr')
+      .join('orders as o', 'rr.referred_user_id', 'o.userId')
+      .where({ 'rr.referrer_distributor_id': distributor.id, 'o.status': 'paid' })
+      .countDistinct('rr.referred_user_id as count')
+      .first();
+
+    // 查询冻结佣金
+    const frozenCommission = await db('commissions')
+      .where({ distributor_id: distributor.id, status: 'frozen' })
+      .sum('commission_amount as total')
+      .first();
+
+    return {
+      totalReferrals: parseInt(totalReferrals.count) || 0,
+      paidReferrals: parseInt(paidReferrals.count) || 0,
+      totalCommission: parseFloat(distributor.total_commission) || 0,
+      availableCommission: parseFloat(distributor.available_commission) || 0,
+      frozenCommission: parseFloat(frozenCommission.total) || 0,
+      withdrawnCommission: parseFloat(distributor.withdrawn_commission) || 0
+    };
+  }
+
+  /**
+   * 获取推广用户列表
+   */
+  async getReferrals(userId, { status = 'all', limit = 20, offset = 0 }) {
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor || distributor.status !== 'active') {
+      throw {
+        statusCode: 403,
+        errorCode: 6005,
+        message: '您不是活跃的分销员'
+      };
+    }
+
+    // 构建查询
+    let query = db('referral_relationships as rr')
+      .join('users as u', 'rr.referred_user_id', 'u.id')
+      .leftJoin('orders as o', function() {
+        this.on('u.id', 'o.userId').andOn('o.status', db.raw('?', ['paid']));
+      })
+      .leftJoin('commissions as c', function() {
+        this.on('rr.referred_user_id', 'c.referred_user_id')
+          .andOn('c.distributor_id', db.raw('?', [distributor.id]));
+      })
+      .where('rr.referrer_distributor_id', distributor.id)
+      .select(
+        'u.id as userId',
+        'u.phone',
+        'rr.created_at as registeredAt',
+        db.raw('IF(o.id IS NOT NULL, true, false) as hasPaid'),
+        db.raw('MAX(o.paidAt) as paidAt'),
+        db.raw('SUM(c.commission_amount) as commissionAmount')
+      )
+      .groupBy('u.id', 'u.phone', 'rr.created_at');
+
+    // 状态过滤
+    if (status === 'paid') {
+      query = query.havingRaw('hasPaid = true');
+    } else if (status === 'unpaid') {
+      query = query.havingRaw('hasPaid = false');
+    }
+
+    // 获取总数
+    const countQuery = query.clone();
+    const totalResult = await countQuery.count('* as count').first();
+    const total = parseInt(totalResult.count) || 0;
+
+    // 分页查询
+    const referrals = await query
+      .orderBy('rr.created_at', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    // 脱敏手机号
+    const formattedReferrals = referrals.map(r => ({
+      userId: r.userId,
+      phone: r.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2'),
+      registeredAt: r.registeredAt,
+      hasPaid: r.hasPaid,
+      paidAt: r.paidAt,
+      commissionAmount: parseFloat(r.commissionAmount) || 0
+    }));
+
+    return {
+      referrals: formattedReferrals,
+      total
+    };
+  }
+
+  /**
+   * 获取佣金明细
+   */
+  async getCommissions(userId, { status = 'all', limit = 20, offset = 0 }) {
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor || distributor.status !== 'active') {
+      throw {
+        statusCode: 403,
+        errorCode: 6005,
+        message: '您不是活跃的分销员'
+      };
+    }
+
+    // 构建查询
+    let query = db('commissions as c')
+      .join('users as u', 'c.referred_user_id', 'u.id')
+      .where('c.distributor_id', distributor.id)
+      .select(
+        'c.id',
+        'c.order_id as orderId',
+        'u.phone',
+        'c.order_amount as orderAmount',
+        'c.commission_amount as commissionAmount',
+        'c.status',
+        'c.created_at as createdAt',
+        'c.settled_at as settledAt'
+      );
+
+    // 状态过滤
+    if (status !== 'all') {
+      query = query.where('c.status', status);
+    }
+
+    // 获取总数
+    const total = await query.clone().count('* as count').first();
+
+    // 分页查询
+    const commissions = await query
+      .orderBy('c.created_at', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    // 脱敏手机号
+    const formattedCommissions = commissions.map(c => ({
+      id: c.id,
+      orderId: c.orderId,
+      referredUserPhone: c.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2'),
+      orderAmount: parseFloat(c.orderAmount),
+      commissionAmount: parseFloat(c.commissionAmount),
+      status: c.status,
+      createdAt: c.createdAt,
+      settledAt: c.settledAt
+    }));
+
+    return {
+      commissions: formattedCommissions,
+      total: parseInt(total.count) || 0
+    };
+  }
+
+  /**
+   * 申请提现（使用行锁+事务）
+   */
+  async createWithdrawal(userId, withdrawalData) {
+    const { amount, method, accountInfo } = withdrawalData;
+
+    // 校验金额格式
+    if (!amount || amount < 0) {
+      throw {
+        statusCode: 400,
+        errorCode: 6006,
+        message: '提现金额无效'
+      };
+    }
+
+    return await db.transaction(async (trx) => {
+      // 使用行锁查询分销员
+      const distributor = await trx('distributors')
+        .where({ user_id: userId })
+        .forUpdate()
+        .first();
+
+      if (!distributor) {
+        throw {
+          statusCode: 403,
+          errorCode: 6007,
+          message: '您不是分销员'
+        };
+      }
+
+      if (distributor.status !== 'active') {
+        throw {
+          statusCode: 403,
+          errorCode: 6008,
+          message: '您的分销员资格已被禁用'
+        };
+      }
+
+      // 获取最低提现金额配置
+      const settings = await trx('distribution_settings').where({ id: 1 }).first();
+      const minAmount = settings?.min_withdrawal_amount || 100;
+
+      if (amount < minAmount) {
+        throw {
+          statusCode: 400,
+          errorCode: 6009,
+          message: `提现金额不能低于¥${minAmount}`
+        };
+      }
+
+      // 检查可提现余额
+      if (distributor.available_commission < amount) {
+        throw {
+          statusCode: 400,
+          errorCode: 6010,
+          message: `可提现余额不足(当前¥${distributor.available_commission})`
+        };
+      }
+
+      // 扣除可提现余额
+      await trx('distributors')
+        .where({ id: distributor.id })
+        .decrement('available_commission', amount);
+
+      // 创建提现记录
+      const withdrawalId = generateId(8);
+      await trx('withdrawals').insert({
+        id: withdrawalId,
+        distributor_id: distributor.id,
+        amount,
+        method,
+        account_info: JSON.stringify(accountInfo),
+        status: 'pending',
+        created_at: new Date()
+      });
+
+      logger.info(`提现申请创建成功: withdrawalId=${withdrawalId}, amount=${amount}`);
+
+      return withdrawalId;
+    });
+  }
+
+  /**
+   * 获取提现记录
+   */
+  async getWithdrawals(userId, { limit = 20, offset = 0 }) {
+    const distributor = await db('distributors')
+      .where({ user_id: userId })
+      .first();
+
+    if (!distributor || distributor.status !== 'active') {
+      throw {
+        statusCode: 403,
+        errorCode: 6005,
+        message: '您不是活跃的分销员'
+      };
+    }
+
+    // 查询提现记录
+    const withdrawals = await db('withdrawals')
+      .where({ distributor_id: distributor.id })
+      .select('*')
+      .orderBy('created_at', 'desc')
+      .limit(limit)
+      .offset(offset);
+
+    // 获取总数
+    const total = await db('withdrawals')
+      .where({ distributor_id: distributor.id })
+      .count('id as count')
+      .first();
+
+    // 格式化结果
+    const formattedWithdrawals = withdrawals.map(w => ({
+      id: w.id,
+      amount: parseFloat(w.amount),
+      method: w.method,
+      accountInfo: JSON.parse(w.account_info),
+      status: w.status,
+      rejectReason: w.reject_reason,
+      createdAt: w.created_at,
+      approvedAt: w.approved_at
+    }));
+
+    return {
+      withdrawals: formattedWithdrawals,
+      total: parseInt(total.count) || 0
+    };
+  }
+}
+
+module.exports = new DistributionService();

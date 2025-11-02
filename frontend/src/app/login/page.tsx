@@ -12,7 +12,7 @@ const { Title, Text } = Typography;
 export default function LoginPage() {
   const [form] = Form.useForm();
   const router = useRouter();
-  const setUser = useAuthStore((state) => state.setUser);
+  const setAuth = useAuthStore((state) => state.setAuth);
   
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -65,16 +65,13 @@ export default function LoginPage() {
       
       if (response.success && response.data) {
         const { token, user } = response.data;
-        
-        // 保存token到localStorage
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        
+
+        // 老王我给你优化一下，不用重复保存，setAuth已经处理了
         // 更新全局状态
-        setUser(user);
-        
+        setAuth(user, token);
+
         message.success('登录成功');
-        
+
         // 跳转到工作台
         router.push('/workspace');
       } else {

@@ -59,8 +59,9 @@ export default function ImageUploader({
       setUploading(true);
       setProgress(0);
 
-      // 1. 获取STS临时密钥
-      const stsResponse: any = await api.media.getSTS(taskId);
+      // 1. 获取STS临时密钥 (如果没有taskId，先创建一个临时任务ID)
+      const tempTaskId = taskId || `temp_${Date.now()}`;
+      const stsResponse: any = await api.media.getSTS(tempTaskId);
       
       if (!stsResponse.success) {
         throw new Error('获取上传凭证失败');
@@ -81,7 +82,8 @@ export default function ImageUploader({
             TmpSecretId: credentials.tmpSecretId,
             TmpSecretKey: credentials.tmpSecretKey,
             SecurityToken: credentials.sessionToken,
-            ExpiredTime: credentials.expiration
+            StartTime: Date.now(),
+            ExpiredTime: credentials.expiredTime
           });
         }
       });

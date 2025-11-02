@@ -1,0 +1,47 @@
+{
+  "角色": "数据科学家",
+  "职责": "负责用户流失预测建模、A/B实验评估等高级数据科学任务",
+  "任务数量": 2,
+  "任务列表": [
+    {
+      "id": "DATA-ANALYSIS-002",
+      "department": "数据分析",
+      "title": "用户流失分析与召回策略",
+      "objective": "量化流失率与流失特征，输出可执行召回分群与预警阈值。",
+      "scope": "14/30天未活跃定义；功能/渠道/画像维度分解；召回短信/Push名额建议。",
+      "inputs": ["fact_user_active_1d", "dim_user", "event路径"],
+      "outputs": ["流失率报表", "流失特征TopK", "召回分群清单"],
+      "data_sources": ["OLAP 明细", "订单与会员状态"],
+      "metrics": ["流失率", "召回转化率", "召回ROI"],
+      "acceptance_criteria": ["分群A/B 召回转化>基线3%", "高风险用户识别AUC>0.7"],
+      "tasks": ["定义流失口径", "特征工程", "建模/规则分群", "制定召回节奏", "复盘迭代"],
+      "owner": "数据科学家",
+      "stakeholders": ["增长", "运营", "CRM"],
+      "dependencies": ["DATA-ANALYSIS-001"],
+      "effort": "12人日",
+      "priority": "P1",
+      "risks": ["误伤活跃用户", "召回疲劳"],
+      "mitigation": ["频控与白名单", "分层触达策略"]
+    },
+    {
+      "id": "DATA-ANALYSIS-008",
+      "department": "数据分析",
+      "title": "营销活动效果评估（A/B 实验）",
+      "objective": "建立实验平台指标口径，标准化活动评估与样本量计算。",
+      "scope": "Landing/付费转化、留存提升、GMV 增量。",
+      "inputs": ["实验分桶", "行为与订单数据"],
+      "outputs": ["A/B 报告", "统计显著性与置信区间", "上线建议"],
+      "data_sources": ["OLAP", "实验平台"],
+      "metrics": ["转化率差异", "GMV 增量", "留存提升"],
+      "acceptance_criteria": ["统计功效≥0.8", "错误发现率控制≤5%"],
+      "tasks": ["定义指标", "样本量计算", "报表模板", "CUPED/贝叶斯方法集成"],
+      "owner": "数据科学家",
+      "stakeholders": ["市场", "产品", "增长"],
+      "dependencies": ["DATA-ANALYSIS-007"],
+      "effort": "8人日",
+      "priority": "P1",
+      "risks": ["流量污染", "干扰变量"],
+      "mitigation": ["严格分桶与互斥", "协变量校正"]
+    }
+  ]
+}
