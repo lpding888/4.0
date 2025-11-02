@@ -30,6 +30,7 @@ const swaggerService = require('./services/swagger.service');
 const paymentService = require('./services/payment.service');
 const wechatLoginService = require('./services/wechat-login.service');
 const unifiedLoginService = require('./services/unified-login.service');
+const i18nService = require('./services/i18n.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -168,6 +169,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize unified login service:', error);
   }
+
+  // 初始化国际化服务
+  try {
+    await i18nService.initialize();
+    logger.info('🌐 Internationalization service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize internationalization service:', error);
+  }
 });
 
 // 优雅关闭
@@ -260,6 +269,14 @@ process.on('SIGTERM', async () => {
     logger.info('Unified login service closed');
   } catch (error) {
     logger.error('Error closing unified login service:', error);
+  }
+
+  // 关闭国际化服务
+  try {
+    await i18nService.close();
+    logger.info('Internationalization service closed');
+  } catch (error) {
+    logger.error('Error closing internationalization service:', error);
   }
 
   server.close(() => {
@@ -357,6 +374,14 @@ process.on('SIGINT', async () => {
     logger.info('Unified login service closed');
   } catch (error) {
     logger.error('Error closing unified login service:', error);
+  }
+
+  // 关闭国际化服务
+  try {
+    await i18nService.close();
+    logger.info('Internationalization service closed');
+  } catch (error) {
+    logger.error('Error closing internationalization service:', error);
   }
 
   server.close(() => {

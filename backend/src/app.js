@@ -6,9 +6,17 @@ const mongoSanitize = require('express-mongo-sanitize');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler.middleware');
 const cacheMiddleware = require('./middlewares/cache.middleware');
+const requestIdMiddleware = require('./middlewares/request-id.middleware');
+const i18nService = require('./services/i18n.service');
 
 // 创建Express应用
 const app = express();
+
+// 请求ID中间件（必须最先执行）
+app.use(requestIdMiddleware);
+
+// 国际化中间件
+app.use(i18nService.middleware());
 
 // 生产环境HTTPS强制跳转
 if (process.env.NODE_ENV === 'production') {
@@ -38,7 +46,7 @@ app.use(mongoSanitize());
 
 // CORS配置
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
+  origin: process.env.NODE_ENV === 'production'
     ? ['https://aizhao.icu', 'https://www.aizhao.icu']
     : '*',
   credentials: true
@@ -48,8 +56,12 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 日志中间件
-app.use(morgan('combined', { stream: logger.stream }));
+// 日志中间件（添加请求ID）
+app.use(morgan('combined', {
+  stream: logger.stream,
+  // 添加请求ID到日志
+  skip: (req, res) => false
+}));
 
 // 缓存控制中间件
 app.use(cacheMiddleware.cacheControl());
@@ -145,6 +157,7 @@ app.use('/api/circuit-breaker', require('./routes/circuitBreaker.routes')); // �
 app.use('/api/payment', require('./routes/payment.routes')); // 支付相关路由
 app.use('/api/auth/wechat', require('./routes/wechat-login.routes')); // 微信登录路由
 app.use('/api/auth', require('./routes/unified-login.routes')); // 统一登录路由
+app.use('/api/admin/errors', require('./routes/error-management.routes')); // 错误管理路由
 app.use('/api/docs', require('./routes/docs.routes')); // API文档路由
 
 // 404处理
