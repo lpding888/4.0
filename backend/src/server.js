@@ -32,6 +32,7 @@ const wechatLoginService = require('./services/wechat-login.service');
 const unifiedLoginService = require('./services/unified-login.service');
 const i18nService = require('./services/i18n.service');
 const featureCatalogService = require('./services/feature-catalog.service');
+const buildingAIAdaptorService = require('./services/buildingai-adaptor.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -186,6 +187,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize feature catalog service:', error);
   }
+
+  // 初始化BuildingAI适配层服务
+  try {
+    await buildingAIAdaptorService.initialize();
+    logger.info('🤖 BuildingAI adaptor service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize BuildingAI adaptor service:', error);
+  }
 });
 
 // 优雅关闭
@@ -294,6 +303,14 @@ process.on('SIGTERM', async () => {
     logger.info('Feature catalog service closed');
   } catch (error) {
     logger.error('Error closing feature catalog service:', error);
+  }
+
+  // 关闭BuildingAI适配层服务
+  try {
+    await buildingAIAdaptorService.close();
+    logger.info('BuildingAI adaptor service closed');
+  } catch (error) {
+    logger.error('Error closing BuildingAI adaptor service:', error);
   }
 
   server.close(() => {
@@ -407,6 +424,14 @@ process.on('SIGINT', async () => {
     logger.info('Feature catalog service closed');
   } catch (error) {
     logger.error('Error closing feature catalog service:', error);
+  }
+
+  // 关闭BuildingAI适配层服务
+  try {
+    await buildingAIAdaptorService.close();
+    logger.info('BuildingAI adaptor service closed');
+  } catch (error) {
+    logger.error('Error closing BuildingAI adaptor service:', error);
   }
 
   server.close(() => {

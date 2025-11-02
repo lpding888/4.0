@@ -175,7 +175,24 @@ const zh_CN = {
   'feature.not_found': '功能不存在',
   'feature.already_exists': '功能已存在',
   'feature.configuration.invalid': '功能配置无效',
-  'feature.permission.insufficient': '功能权限不足'
+  'feature.permission.insufficient': '功能权限不足',
+
+  // AI服务消息
+  'ai.image_enhanced': '图片增强成功',
+  'ai.image_generated': '图片生成成功',
+  'ai.image_edited': '图片编辑成功',
+  'ai.text_generated': '文本生成成功',
+  'ai.text_translated': '文本翻译成功',
+  'ai.text_summarized': '文本摘要成功',
+  'ai.audio_transcribed': '音频转录成功',
+  'ai.video_analyzed': '视频分析成功',
+  'ai.data_analyzed': '数据分析成功',
+  'ai.stats_reset': 'AI服务统计已重置',
+  'ai.service_unavailable': 'AI服务暂时不可用',
+  'ai.quota_exceeded': 'AI配额已用完',
+  'ai.content_violation': '内容违反政策',
+  'ai.processing_timeout': 'AI处理超时',
+  'ai.invalid_input': 'AI输入格式无效'
 };
 
 // 英文消息
@@ -347,7 +364,24 @@ const en_US = {
   'feature.not_found': 'Feature not found',
   'feature.already_exists': 'Feature already exists',
   'feature.configuration.invalid': 'Invalid feature configuration',
-  'feature.permission.insufficient': 'Insufficient feature permissions'
+  'feature.permission.insufficient': 'Insufficient feature permissions',
+
+  // AI服务消息
+  'ai.image_enhanced': 'Image enhanced successfully',
+  'ai.image_generated': 'Image generated successfully',
+  'ai.image_edited': 'Image edited successfully',
+  'ai.text_generated': 'Text generated successfully',
+  'ai.text_translated': 'Text translated successfully',
+  'ai.text_summarized': 'Text summarized successfully',
+  'ai.audio_transcribed': 'Audio transcribed successfully',
+  'ai.video_analyzed': 'Video analyzed successfully',
+  'ai.data_analyzed': 'Data analyzed successfully',
+  'ai.stats_reset': 'AI service statistics reset successfully',
+  'ai.service_unavailable': 'AI service temporarily unavailable',
+  'ai.quota_exceeded': 'AI quota exceeded',
+  'ai.content_violation': 'Content policy violation',
+  'ai.processing_timeout': 'AI processing timeout',
+  'ai.invalid_input': 'Invalid AI input format'
 };
 
 // 日文消息
