@@ -1,7 +1,16 @@
 /**
  * 创建tasks表
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'tasks'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('tasks', function(table) {
     table.string('id', 32).primary().comment('任务ID');
     table.string('userId', 32).notNullable().comment('用户ID');

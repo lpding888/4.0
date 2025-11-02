@@ -4,42 +4,68 @@ import { User } from '@/types';
 
 interface AuthState {
   user: User | null;
-  token: string | null;
-  setAuth: (user: User, token: string) => void;
-  setUser: (user: User) => void; // 老王我给你加上这个，免得你们到处乱用
-  clearAuth: () => void;
+  accessToken: string | null;
+  refreshToken: string | null;
+  setAuth: (user: User | null, accessToken: string | null, refreshToken?: string | null) => void;
+  setUser: (user: User | null) => void;
   updateUser: (user: Partial<User>) => void;
+  logout: () => void;
+  clearAuth: () => void;
 }
+
+const syncLocalStorage = (user: User | null, accessToken: string | null, refreshToken: string | null) => {
+  if (typeof window === 'undefined') return;
+
+  if (accessToken) {
+    localStorage.setItem('token', accessToken);
+  } else {
+    localStorage.removeItem('token');
+  }
+
+  if (refreshToken) {
+    localStorage.setItem('refresh_token', refreshToken);
+  } else {
+    localStorage.removeItem('refresh_token');
+  }
+
+  if (user) {
+    localStorage.setItem('user', JSON.stringify(user));
+    document.cookie = `auth-storage=${encodeURIComponent(JSON.stringify({ state: { user } }))}; path=/; sameSite=Lax`;
+  } else {
+    localStorage.removeItem('user');
+    document.cookie = 'auth-storage=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
-      token: null,
-      setAuth: (user, token) => {
-        set({ user, token });
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('token', token);
-          localStorage.setItem('user', JSON.stringify(user));
-        }
+      accessToken: null,
+      refreshToken: null,
+      setAuth: (user, accessToken, refreshToken = null) => {
+        set({ user, accessToken, refreshToken });
+        syncLocalStorage(user, accessToken, refreshToken);
       },
       setUser: (user) => {
         set({ user });
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('user', JSON.stringify(user));
-        }
-      },
-      clearAuth: () => {
-        set({ user: null, token: null });
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-        }
+        syncLocalStorage(user, get().accessToken, get().refreshToken);
       },
       updateUser: (userData) => {
-        set((state) => ({
-          user: state.user ? { ...state.user, ...userData } : null
-        }));
+        set((state) => {
+          if (!state.user) return state;
+          const nextUser = { ...state.user, ...userData };
+          syncLocalStorage(nextUser, state.accessToken, state.refreshToken);
+          return { user: nextUser };
+        });
+      },
+      logout: () => {
+        set({ user: null, accessToken: null, refreshToken: null });
+        syncLocalStorage(null, null, null);
+      },
+      clearAuth: () => {
+        set({ user: null, accessToken: null, refreshToken: null });
+        syncLocalStorage(null, null, null);
       }
     }),
     {

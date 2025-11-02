@@ -1,0 +1,198 @@
+# ================================
+# AI照项目 - 生产环境部署
+# ================================
+# 艹！Nginx + Let's Encrypt SSL + 前后端服务
+#
+# 使用方法:
+# 1. 先配置域名DNS A记录指向服务器IP
+# 2. 修改下面的环境变量（域名、邮箱等）
+# 3. docker-compose -f docker-compose.prod.yml up -d
+
+services:
+  # ========== Nginx反向代理 ==========
+  nginx:
+    image: nginx:alpine
+    container_name: ai-photo-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - certbot-webroot:/var/www/certbot:ro  # 艹！Let's Encrypt验证目录
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========== Certbot SSL证书自动化 ==========
+  certbot:
+    image: certbot/certbot:latest
+    container_name: ai-photo-certbot
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    # 艹！自动申请和续期证书
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - ai-photo-network
+
+  # ========== 后端服务 ==========
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ai-photo-backend:latest
+    container_name: ai-photo-backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # ========== 数据库配置 ==========
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-prod_user}
+      DB_PASSWORD: ${DB_PASSWORD}  # 艹！必须在.env文件中设置
+      DB_NAME: ${DB_NAME:-ai_photo}
+      # ========== Redis配置 ==========
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}  # 艹！必须设置Redis密码
+      # ========== JWT密钥 ==========
+      JWT_SECRET: ${JWT_SECRET}  # 艹！生产环境必须用强密钥
+      JWT_EXPIRES_IN: 7d
+      # ========== 腾讯云COS配置 ==========
+      COS_SECRET_ID: ${COS_SECRET_ID}
+      COS_SECRET_KEY: ${COS_SECRET_KEY}
+      COS_BUCKET: ${COS_BUCKET}
+      COS_REGION: ${COS_REGION:-ap-guangzhou}
+      # ========== 微信支付配置 ==========
+      WECHAT_APPID: ${WECHAT_APPID}
+      WECHAT_MCHID: ${WECHAT_MCHID}
+      WECHAT_API_V3_KEY: ${WECHAT_API_V3_KEY}
+      WECHAT_SERIAL_NO: ${WECHAT_SERIAL_NO}
+      # ========== AI服务配置 ==========
+      RUNNING_HUB_API_KEY: ${RUNNING_HUB_API_KEY}
+      # ========== 日志配置 ==========
+      LOG_LEVEL: info
+    volumes:
+      - backend-logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # 艹！资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ========== 前端服务 ==========
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ai-photo-frontend:latest
+    container_name: ai-photo-frontend
+    restart: always
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE: https://api.aizhao.icu/api  # 艹！修改为你的API域名
+      NEXT_PUBLIC_API_URL: https://api.aizhao.icu/api
+      NEXT_PUBLIC_WS_URL: https://api.aizhao.icu
+    networks:
+      - ai-photo-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ========== MySQL 8.0 数据库 ==========
+  mysql:
+    image: mysql:8.0
+    container_name: ai-photo-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}  # 艹！必须设置强密码
+      MYSQL_DATABASE: ${DB_NAME:-ai_photo}
+      MYSQL_USER: ${DB_USER:-prod_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3306:3306"  # 艹！只允许本地访问
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max_connections=500
+      - --innodb_buffer_pool_size=1G
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${DB_USER:-prod_user}", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== Redis 7.0 缓存 ==========
+  redis:
+    image: redis:7-alpine
+    container_name: ai-photo-redis
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"  # 艹！只允许本地访问
+    volumes:
+      - redis-data:/data
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ========== 网络配置 ==========
+networks:
+  ai-photo-network:
+    driver: bridge
+
+# ========== 数据卷 ==========
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+  backend-logs:
+    driver: local
+  certbot-webroot:
+    driver: local

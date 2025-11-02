@@ -32,6 +32,13 @@ router.post('/wechat-login', authController.wechatLogin);
 router.post('/password-login', authController.passwordLogin);
 
 /**
+ * @route POST /api/auth/refresh
+ * @desc 刷新访问令牌
+ * @access Public
+ */
+router.post('/refresh', authController.refreshToken);
+
+/**
  * @route POST /api/auth/set-password
  * @desc 设置/修改密码
  * @access Private
@@ -44,5 +51,12 @@ router.post('/set-password', authenticate, authController.setPassword);
  * @access Private
  */
 router.get('/me', authenticate, authController.getMe);
+
+/**
+ * @route POST /api/auth/logout
+ * @desc 注销登录/吊销刷新令牌
+ * @access Private
+ */
+router.post('/logout', authenticate, authController.logout);
 
 module.exports = router;

@@ -1,0 +1,188 @@
+# ================================
+# AI照 - Docker Compose 生产环境配置
+# ================================
+# 艹！一键启动所有服务：MySQL + Redis + Backend + Nginx
+#
+# 使用方法:
+# 1. 配置 backend/.env 文件
+# 2. docker-compose up -d          # 后台启动所有服务
+# 3. docker-compose logs -f        # 查看日志
+# 4. docker-compose down           # 停止所有服务
+#
+# 服务访问:
+# - API: http://localhost (Nginx反向代理)
+# - API直连: http://localhost:3001
+# - MySQL: localhost:3306
+# - Redis: localhost:6379
+# - Swagger文档: http://localhost/api-docs
+# - Prometheus指标: http://localhost/metrics
+
+version: '3.8'
+
+services:
+  # ========== MySQL 数据库 ==========
+  mysql:
+    image: mysql:8.0
+    container_name: ai-photo-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-your_mysql_root_password}
+      MYSQL_DATABASE: ai_photo
+      MYSQL_USER: ${DB_USER:-aiuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-your_mysql_password}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      # 艹！数据持久化，删容器不删数据
+      - mysql_data:/var/lib/mysql
+      # 艹！MySQL配置优化（针对4核4G服务器）
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+      - --max-connections=200
+      - --innodb-buffer-pool-size=512M
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-your_mysql_root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== Redis 缓存 ==========
+  redis:
+    image: redis:7-alpine
+    container_name: ai-photo-redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-your_redis_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      # 艹！Redis持久化（AOF模式）
+      - redis_data:/data
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== 后端API服务 ==========
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ai-photo-backend:latest
+    container_name: ai-photo-backend
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      # 艹！数据库连接（使用Docker内部网络）
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-aiuser}
+      DB_PASSWORD: ${DB_PASSWORD:-your_mysql_password}
+      DB_NAME: ai_photo
+
+      # 艹！Redis连接
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-your_redis_password}
+
+      # 艹！生产环境配置
+      NODE_ENV: production
+      PORT: 3001
+
+      # 艹！从宿主机.env文件加载其他配置
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE: ${JWT_EXPIRE:-7d}
+
+      # 腾讯云COS
+      TENCENT_SECRET_ID: ${TENCENT_SECRET_ID}
+      TENCENT_SECRET_KEY: ${TENCENT_SECRET_KEY}
+      COS_BUCKET: ${COS_BUCKET}
+      COS_REGION: ${COS_REGION:-ap-guangzhou}
+      COS_IMAGE_DOMAIN: ${COS_IMAGE_DOMAIN}
+
+      # API域名
+      API_BASE_URL: ${API_BASE_URL:-http://localhost}
+
+      # 支付配置
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
+      WECHAT_PAY_MCHID: ${WECHAT_PAY_MCHID}
+      WECHAT_PAY_SERIAL_NO: ${WECHAT_PAY_SERIAL_NO}
+      WECHAT_PAY_PRIVATE_KEY: ${WECHAT_PAY_PRIVATE_KEY}
+      WECHAT_PAY_APIV3_KEY: ${WECHAT_PAY_APIV3_KEY}
+      ALIPAY_APP_ID: ${ALIPAY_APP_ID}
+      ALIPAY_PRIVATE_KEY: ${ALIPAY_PRIVATE_KEY}
+      ALIPAY_PUBLIC_KEY: ${ALIPAY_PUBLIC_KEY}
+
+      # 加密密钥
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY}
+      INTERNAL_CALLBACK_SECRET: ${INTERNAL_CALLBACK_SECRET}
+
+      # AI服务密钥
+      RUNNINGHUB_API_KEY: ${RUNNINGHUB_API_KEY}
+      HUNYUAN_API_KEY: ${HUNYUAN_API_KEY}
+      KUAI_API_KEY: ${KUAI_API_KEY}
+    volumes:
+      # 艹！日志持久化
+      - ./backend/logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); })"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  # ========== Nginx 反向代理 ==========
+  nginx:
+    image: nginx:alpine
+    container_name: ai-photo-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # 艹！Nginx配置文件
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      # 艹！SSL证书目录（需要你手动放证书）
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      # 艹！日志持久化
+      - ./docker/nginx/logs:/var/log/nginx
+    depends_on:
+      - backend
+    networks:
+      - ai-photo-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ========== 数据卷 ==========
+# 艹！持久化存储，删容器不删数据
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ========== 网络 ==========
+# 艹！所有服务在同一个网络，互相通信
+networks:
+  ai-photo-network:
+    driver: bridge

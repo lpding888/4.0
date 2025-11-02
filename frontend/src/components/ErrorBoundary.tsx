@@ -2,6 +2,7 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Button, Result } from 'antd';
+import * as Sentry from '@sentry/nextjs';
 
 interface Props {
   children: ReactNode;
@@ -35,8 +36,7 @@ class ErrorBoundary extends Component<Props, State> {
     // 记录错误信息到控制台（生产环境这里应该上报到监控服务）
     console.error('ErrorBoundary捕获到错误:', error, errorInfo);
 
-    // TODO: 集成错误监控服务（如Sentry）
-    // Sentry.captureException(error, { extra: errorInfo });
+    Sentry.captureException(error, { extra: { componentStack: errorInfo.componentStack } });
 
     this.setState({
       error,

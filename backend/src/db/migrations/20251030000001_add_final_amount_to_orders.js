@@ -2,7 +2,16 @@
  * 添加final_amount字段到orders表
  * 用于支持优惠券等功能后,区分原价和实付金额
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = '20251030000001_add_final_amount_to_orders'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.table('orders', function(table) {
     // 添加实付金额字段(分)
     table.decimal('final_amount', 10, 2).nullable().comment('实付金额(分)');

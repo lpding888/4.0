@@ -2,7 +2,16 @@
  * 创建task_steps表 - 任务步骤执行记录表
  * 记录Pipeline中每个步骤的执行状态/输入输出/错误信息等
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'task_steps'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('task_steps', function(table) {
     table.increments('id').primary().comment('自增ID');
     table.string('task_id', 100).notNullable().comment('任务ID(外键)');

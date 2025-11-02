@@ -22,7 +22,7 @@ export function middleware(request: NextRequest) {
 
     try {
       // 解析存储的认证信息
-      const authData = JSON.parse(authStorage.value);
+      const authData = JSON.parse(decodeURIComponent(authStorage.value));
       const user = authData?.state?.user;
 
       // 检查用户是否存在且角色为admin
@@ -51,6 +51,7 @@ export const config = {
     '/workspace',
     '/task/:path*',
     '/library',
-    '/membership'
+    '/membership',
+    '/distribution/:path*'
   ]
 };

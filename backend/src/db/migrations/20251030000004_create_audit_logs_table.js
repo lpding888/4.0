@@ -1,7 +1,16 @@
 /**
  * 创建审计日志表，记录敏感操作
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'audit_logs'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('audit_logs', function(table) {
     table.string('id', 32).primary().comment('日志ID');
     table.string('admin_id', 32).notNullable().comment('管理员ID');

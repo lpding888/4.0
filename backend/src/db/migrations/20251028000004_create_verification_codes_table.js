@@ -1,7 +1,16 @@
 /**
  * 创建verification_codes表(验证码记录)
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'verification_codes'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('verification_codes', function(table) {
     table.increments('id').primary();
     table.string('phone', 11).notNullable().comment('手机号');

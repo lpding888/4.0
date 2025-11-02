@@ -2,7 +2,13 @@
  * 创建feature_definitions表 - 功能卡片定义表
  * 用于配置化管理所有功能卡片(基础修图/AI模特/视频生成等)
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const exists = await knex.schema.hasTable('feature_definitions');
+  if (exists) {
+    console.log('⚠ feature_definitions表已存在,跳过创建');
+    return;
+  }
+
   return knex.schema.createTable('feature_definitions', function(table) {
     table.string('feature_id', 100).primary().comment('功能ID(唯一标识)');
     table.string('display_name', 200).notNullable().comment('显示名称');

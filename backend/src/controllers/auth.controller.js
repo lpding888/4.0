@@ -196,6 +196,44 @@ class AuthController {
       next(error);
     }
   }
+
+  /**
+   * 刷新访问令牌
+   * POST /api/auth/refresh
+   */
+  async refreshToken(req, res, next) {
+    try {
+      const { refreshToken } = req.body || {};
+      const result = await authService.refreshToken(refreshToken);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * 注销登录 / 吊销刷新令牌
+   * POST /api/auth/logout
+   */
+  async logout(req, res, next) {
+    try {
+      const userId = req.userId;
+      const { refreshToken } = req.body || {};
+
+      await authService.logout(userId, refreshToken);
+
+      res.json({
+        success: true,
+        message: '退出成功'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new AuthController();

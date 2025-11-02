@@ -1,7 +1,16 @@
 /**
  * 创建users表
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'users'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('users', function(table) {
     table.string('id', 32).primary().comment('用户ID');
     table.string('phone', 11).unique().notNullable().comment('手机号');

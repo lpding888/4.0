@@ -2,7 +2,16 @@
  * 扩展tasks表 - 添加新字段以支持Pipeline架构
  * 新增feature_id/input_data/artifacts/eligible_for_refund/refunded/error_message等字段
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'tasks'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.table('tasks', function(table) {
     // 功能卡片ID
     table.string('feature_id', 100).nullable().comment('功能ID(引用feature_definitions)');

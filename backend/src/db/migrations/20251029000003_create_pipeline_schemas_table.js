@@ -2,7 +2,16 @@
  * 创建pipeline_schemas表 - Pipeline Schema配置表
  * 存储每个功能的执行流程配置(步骤顺序/供应商选择/超时重试等)
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'pipeline_schemas'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('pipeline_schemas', function(table) {
     table.string('pipeline_id', 100).primary().comment('Pipeline ID(唯一标识)');
     table.json('steps').notNullable().comment('执行步骤配置(JSON数组)');

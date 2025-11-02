@@ -2,7 +2,16 @@
  * 创建provider_health表 - 供应商健康状态表
  * 存储供应商的健康状态/平均延迟/成功率等监控指标
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'provider_health'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('provider_health', function(table) {
     table.string('provider_ref', 100).primary().comment('供应商引用ID(外键)');
     table.string('status', 20).notNullable().comment('健康状态(up/down/degraded)');

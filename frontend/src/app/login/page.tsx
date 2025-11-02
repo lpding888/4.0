@@ -1,206 +1,393 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Tabs, Form, Input, Button, message, Modal, Typography, Card } from 'antd';
+import { MobileOutlined, SafetyOutlined, LockOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-import { Form, Input, Button, message, Card, Typography } from 'antd';
-import { MobileOutlined, SafetyOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 
-const { Title, Text } = Typography;
+const { Text, Title } = Typography;
+
+type CodeLoginForm = {
+  phone: string;
+  code: string;
+};
+
+type PasswordLoginForm = {
+  phone: string;
+  password: string;
+};
+
+type SetPasswordForm = {
+  password: string;
+};
 
 export default function LoginPage() {
-  const [form] = Form.useForm();
+  const [codeForm] = Form.useForm<CodeLoginForm>();
+  const [passwordForm] = Form.useForm<PasswordLoginForm>();
+  const [setPasswordForm] = Form.useForm<SetPasswordForm>();
+
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
-  
-  const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [sendingCode, setSendingCode] = useState(false);
 
-  // 发送验证码
+  const [mode, setMode] = useState<'code' | 'password'>('code');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [codeCountdown, setCodeCountdown] = useState(0);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
+  const [settingPassword, setSettingPassword] = useState(false);
+
+  useEffect(() => {
+    if (codeCountdown <= 0) return;
+    const timer = window.setTimeout(() => setCodeCountdown((prev) => prev - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [codeCountdown]);
+
   const handleSendCode = async () => {
     try {
-      const phone = form.getFieldValue('phone');
-      
-      // 验证手机号
+      const phone = codeForm.getFieldValue('phone');
       if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
         message.error('请输入正确的手机号');
         return;
       }
-
       setSendingCode(true);
-      
       const response: any = await api.auth.sendCode(phone);
-      
-      if (response.success) {
+      if (response?.success) {
         message.success('验证码已发送');
-        // 开始60秒倒计时
-        setCountdown(60);
-        const timer = setInterval(() => {
-          setCountdown((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+        setCodeCountdown(60);
       } else {
-        message.error(response.error?.message || '发送失败');
+        message.error(response?.error?.message || '验证码发送失败');
       }
-    } catch (error: any) {
-      message.error(error.message || '发送验证码失败');
+    } catch (err: any) {
+      message.error(err?.message || '验证码发送失败');
     } finally {
       setSendingCode(false);
     }
   };
 
-  // 登录
-  const handleLogin = async (values: { phone: string; code: string }) => {
+  const onCodeLogin = async (values: CodeLoginForm) => {
     try {
-      setLoading(true);
-      
-      const response: any = await api.auth.login(values.phone, values.code);
-      
-      if (response.success && response.data) {
-        const { token, user } = response.data;
-
-        // 老王我给你优化一下，不用重复保存，setAuth已经处理了
-        // 更新全局状态
-        setAuth(user, token);
-
-        message.success('登录成功');
-
-        // 跳转到工作台
-        router.push('/workspace');
-      } else {
-        message.error(response.error?.message || '登录失败');
+      setCodeLoading(true);
+      const response: any = await api.auth.loginWithCode(values.phone, values.code);
+      if (!response?.success) {
+        throw new Error(response?.error?.message || '登录失败，请重试');
       }
-    } catch (error: any) {
-      message.error(error.message || '登录失败,请重试');
+      handleLoginSuccess(response.data ?? response);
+    } catch (err: any) {
+      message.error(err?.message || '登录失败，请重试');
     } finally {
-      setLoading(false);
+      setCodeLoading(false);
+    }
+  };
+
+  const onPasswordLogin = async (values: PasswordLoginForm) => {
+    try {
+      setPasswordLoading(true);
+      const response: any = await api.auth.loginWithPassword(values.phone, values.password);
+      if (!response?.success) {
+        throw new Error(response?.error?.message || '登录失败，请检查账号密码');
+      }
+      handleLoginSuccess(response.data ?? response);
+    } catch (err: any) {
+      message.error(err?.message || '登录失败，请重试');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = (payload: any) => {
+    if (!payload) {
+      message.error('登录失败，未获取到登录信息');
+      return;
+    }
+
+    const accessToken =
+      payload.accessToken ||
+      payload.token ||
+      payload.access_token ||
+      null;
+    const refreshToken =
+      payload.refreshToken ||
+      payload.refresh_token ||
+      null;
+    const user = payload.user || null;
+
+    if (!accessToken) {
+      message.error('登录失败，缺少访问凭证');
+      return;
+    }
+
+    setAuth(user, accessToken, refreshToken);
+
+    if (payload.needSetPassword || user?.hasPassword === false) {
+      message.success('登录成功，请设置密码');
+      setPwdModalOpen(true);
+    } else {
+      message.success('登录成功');
+      router.push('/workspace');
+    }
+  };
+
+  const onSetPassword = async (values: SetPasswordForm) => {
+    try {
+      setSettingPassword(true);
+      const response: any = await api.auth.setPassword(values.password);
+      if (response?.success === false) {
+        throw new Error(response?.error?.message || '密码设置失败');
+      }
+      message.success(response?.message || '密码设置成功');
+      setPasswordForm.resetFields();
+      setPwdModalOpen(false);
+      router.push('/workspace');
+    } catch (err: any) {
+      message.error(err?.message || '密码设置失败，请重试');
+    } finally {
+      setSettingPassword(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '20px',
+      }}
+    >
       <Card
         style={{
           width: '100%',
-          maxWidth: '400px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          borderRadius: '12px'
+          maxWidth: 460,
+          borderRadius: 16,
+          boxShadow: '0 12px 36px rgba(0,0,0,0.2)',
         }}
+        bodyStyle={{ padding: 32 }}
       >
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <Title level={2} style={{ marginBottom: '8px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <Title level={2} style={{ marginBottom: 8 }}>
             AI服装处理平台
           </Title>
-          <Text type="secondary">
-            手机号验证码登录/注册
-          </Text>
+          <Text type="secondary">验证码 / 密码任你选，首次登录可立即设置密码</Text>
         </div>
 
-        <Form
-          form={form}
-          name="login"
-          onFinish={handleLogin}
-          autoComplete="off"
-          size="large"
+        <Tabs
+          activeKey={mode}
+          onChange={(key) => setMode(key as 'code' | 'password')}
+          items={[
+            {
+              key: 'code',
+              label: '验证码登录',
+              children: (
+                <Form
+                  layout="vertical"
+                  form={codeForm}
+                  onFinish={onCodeLogin}
+                  autoComplete="off"
+                >
+                  <Form.Item
+                    name="phone"
+                    label="手机号"
+                    rules={[
+                      { required: true, message: '请输入手机号' },
+                      {
+                        pattern: /^1[3-9]\d{9}$/,
+                        message: '请输入正确的手机号',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<MobileOutlined />}
+                      placeholder="请输入手机号"
+                      maxLength={11}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="code"
+                    label="验证码"
+                    rules={[
+                      { required: true, message: '请输入验证码' },
+                      {
+                        pattern: /^\d{6}$/,
+                        message: '验证码为6位数字',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<SafetyOutlined />}
+                      placeholder="请输入6位验证码"
+                      maxLength={6}
+                    />
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      block
+                      onClick={handleSendCode}
+                      disabled={codeCountdown > 0}
+                      loading={sendingCode}
+                    >
+                      {codeCountdown > 0
+                        ? `${codeCountdown}秒后重试`
+                        : '获取验证码'}
+                    </Button>
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      loading={codeLoading}
+                      block
+                    >
+                      登录
+                    </Button>
+                  </Form.Item>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <Button
+                      type="link"
+                      onClick={() => setMode('password')}
+                      style={{ padding: 0 }}
+                    >
+                      使用密码登录
+                    </Button>
+                  </div>
+                </Form>
+              ),
+            },
+            {
+              key: 'password',
+              label: '密码登录',
+              children: (
+                <Form
+                  layout="vertical"
+                  form={passwordForm}
+                  onFinish={onPasswordLogin}
+                  autoComplete="off"
+                >
+                  <Form.Item
+                    name="phone"
+                    label="手机号"
+                    rules={[
+                      { required: true, message: '请输入手机号' },
+                      {
+                        pattern: /^1[3-9]\d{9}$/,
+                        message: '请输入正确的手机号',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<MobileOutlined />}
+                      placeholder="请输入手机号"
+                      maxLength={11}
+                    />
+                  </Form.Item>
+
+                  <Form.Item
+                    name="password"
+                    label="密码"
+                    rules={[
+                      { required: true, message: '请输入密码' },
+                      { min: 6, message: '密码不少于6位' },
+                    ]}
+                  >
+                    <Input.Password
+                      prefix={<LockOutlined />}
+                      placeholder="请输入密码"
+                    />
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      loading={passwordLoading}
+                      block
+                    >
+                      登录
+                    </Button>
+                  </Form.Item>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Button
+                      type="link"
+                      onClick={() => setMode('code')}
+                      style={{ padding: 0 }}
+                    >
+                      使用验证码登录
+                    </Button>
+                    <Button type="link" href="/reset-password" style={{ padding: 0 }}>
+                      忘记密码？
+                    </Button>
+                  </div>
+                </Form>
+              ),
+            },
+          ]}
+        />
+
+        <div
+          style={{
+            marginTop: 24,
+            padding: 16,
+            background: '#f5f5f5',
+            borderRadius: 12,
+          }}
         >
-          <Form.Item
-            name="phone"
-            rules={[
-              { required: true, message: '请输入手机号' },
-              { 
-                pattern: /^1[3-9]\d{9}$/, 
-                message: '请输入正确的手机号' 
-              }
-            ]}
-          >
-            <Input
-              prefix={<MobileOutlined />}
-              placeholder="请输入手机号"
-              maxLength={11}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="code"
-            rules={[
-              { required: true, message: '请输入验证码' },
-              { 
-                pattern: /^\d{6}$/, 
-                message: '验证码为6位数字' 
-              }
-            ]}
-          >
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Input
-                prefix={<SafetyOutlined />}
-                placeholder="请输入6位验证码"
-                maxLength={6}
-                style={{ flex: 1 }}
-              />
-              <Button
-                onClick={handleSendCode}
-                disabled={countdown > 0}
-                loading={sendingCode}
-                style={{ width: '120px' }}
-              >
-                {countdown > 0 ? `${countdown}秒后重试` : '获取验证码'}
-              </Button>
-            </div>
-          </Form.Item>
-
-          <Form.Item style={{ marginBottom: '16px' }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={loading}
-              block
-              style={{ height: '44px' }}
-            >
-              登录 / 注册
-            </Button>
-          </Form.Item>
-
-          <div style={{ textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              登录即代表同意
-              <a href="#" style={{ color: '#667eea' }}> 用户协议 </a>
-              和
-              <a href="#" style={{ color: '#667eea' }}> 隐私政策</a>
-            </Text>
-          </div>
-        </Form>
-
-        <div style={{ 
-          marginTop: '24px', 
-          padding: '16px', 
-          background: '#f5f5f5', 
-          borderRadius: '8px' 
-        }}>
-          <Text type="secondary" style={{ fontSize: '13px' }}>
-            <strong>提示:</strong>
-            <br />
-            • 验证码1分钟内最多发送5次
-            <br />
-            • 首次登录将自动注册账号
-            <br />
-            • 新用户赠送3次免费体验
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            <strong>提示：</strong>
+            <br />• 验证码1分钟内最多发送5次
+            <br />• 首次登录将自动注册账号
+            <br />• 首次登录建议设置密码，之后可直接密码登录
           </Text>
         </div>
       </Card>
+
+      <Modal
+        title="设置密码"
+        open={pwdModalOpen}
+        onCancel={() => setPwdModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Text type="secondary">
+          首次登录建议设置密码，之后可直接使用密码快捷登录。
+        </Text>
+        <Form
+          layout="vertical"
+          form={setPasswordForm}
+          onFinish={onSetPassword}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="password"
+            label="设置新密码"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码不少于6位' },
+            ]}
+          >
+            <Input.Password
+              prefix={<LockOutlined />}
+              placeholder="请输入至少6位的密码"
+            />
+          </Form.Item>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={settingPassword}
+            block
+          >
+            保存
+          </Button>
+        </Form>
+      </Modal>
     </div>
   );
 }

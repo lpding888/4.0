@@ -32,7 +32,7 @@ const { Title, Text, Paragraph } = Typography;
 export default function WorkspacePage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const setUser = useAuthStore((state) => state.setUser);
+  const updateUser = useAuthStore((state) => state.updateUser);
 
   const [loading, setLoading] = useState(true);
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
@@ -48,14 +48,11 @@ export default function WorkspacePage() {
       if (response.success && response.data) {
         setMembershipStatus(response.data);
         // 同步更新用户信息
-        if (user) {
-          setUser({
-            ...user,
-            isMember: response.data.isMember,
-            quota_remaining: response.data.quotaRemaining || response.data.quota_remaining,
-            quota_expireAt: response.data.quotaExpireAt || response.data.quota_expireAt
-          });
-        }
+        updateUser({
+          isMember: response.data.isMember,
+          quota_remaining: response.data.quotaRemaining || response.data.quota_remaining,
+          quota_expireAt: response.data.quotaExpireAt || response.data.quota_expireAt
+        });
       }
     } catch (error: any) {
       message.error('获取会员状态失败');
@@ -70,8 +67,9 @@ export default function WorkspacePage() {
       setFeaturesLoading(true);
       const response: any = await api.features.getAll({ enabled: true });
 
-      if (response.success && response.features) {
-        setFeatures(response.features);
+      const featureList = response?.data || response?.features;
+      if (response.success && Array.isArray(featureList)) {
+        setFeatures(featureList);
       }
     } catch (error: any) {
       message.error('获取功能列表失败');
@@ -83,14 +81,15 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     // 检查登录状态
-    if (!user) {
-      router.push('/login');
+    if (!user?.id) {
+      router.replace('/login');
       return;
     }
 
     fetchMembershipStatus();
     fetchFeatures(); // 艹，同时获取功能列表
-  }, [user, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // 计算剩余天数
   const getRemainingDays = () => {

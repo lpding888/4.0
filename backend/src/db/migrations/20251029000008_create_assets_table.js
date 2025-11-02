@@ -2,7 +2,16 @@
  * 创建assets表 - 素材库表
  * 存储用户生成的所有作品素材(图片/视频/文案等)
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'assets'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('assets', function(table) {
     table.string('asset_id', 100).primary().comment('素材ID(唯一标识)');
     table.string('user_id', 32).notNullable().comment('用户ID(外键)');

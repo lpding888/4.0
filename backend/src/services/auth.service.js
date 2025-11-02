@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { generateCode, generateId } = require('../utils/generator');
 const logger = require('../utils/logger');
 const axios = require('axios');
@@ -10,6 +11,95 @@ const { AppError, ErrorCode } = require('../utils/errors');
  * 认证服务
  */
 class AuthService {
+  /**
+   * 计算刷新令牌过期时间
+   * @returns {Date}
+   */
+  getRefreshTokenExpiryDate() {
+    const raw =
+      process.env.REFRESH_TOKEN_TTL_DAYS ||
+      process.env.JWT_REFRESH_EXPIRE_DAYS ||
+      process.env.JWT_REFRESH_EXPIRE ||
+      '7';
+    const days = Number.isNaN(parseInt(raw, 10)) ? 7 : parseInt(raw, 10);
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  /**
+   * 刷新令牌哈希
+   * @param {string} token
+   * @returns {string}
+   */
+  hashRefreshToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  /**
+   * 统一构建用户返回数据
+   * @param {object} user
+   */
+  buildUserResponse(user) {
+    return {
+      id: user.id,
+      phone: user.phone,
+      role: user.role || 'user',
+      isMember: user.isMember,
+      quota_remaining: user.quota_remaining,
+      quota_expireAt: user.quota_expireAt,
+      hasPassword: Boolean(user.password)
+    };
+  }
+
+  /**
+   * 生成访问令牌
+   * @param {object} user
+   * @returns {string}
+   */
+  generateAccessToken(user) {
+    return jwt.sign(
+      {
+        userId: user.id,
+        phone: user.phone,
+        role: user.role || 'user'
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: process.env.JWT_EXPIRE || '7d'
+      }
+    );
+  }
+
+  /**
+   * 创建刷新令牌
+   * @param {string} userId
+   * @param {object} trx
+   * @returns {Promise<{refreshToken: string}>}
+   */
+  async createRefreshToken(userId, trx = db) {
+    const refreshToken = crypto.randomBytes(48).toString('hex');
+    const hashedToken = this.hashRefreshToken(refreshToken);
+    const expiresAt = this.getRefreshTokenExpiryDate();
+    await trx('refresh_tokens').insert({
+      user_id: userId,
+      token: hashedToken,
+      expires_at: expiresAt,
+      created_at: new Date(),
+      updated_at: new Date()
+    });
+    return { refreshToken, expiresAt };
+  }
+
+  /**
+   * 统一签发双 token
+   * @param {object} user
+   * @returns {Promise<{accessToken: string, refreshToken: string}>}
+   */
+  async issueTokens(user, trx = db) {
+    const accessToken = this.generateAccessToken(user);
+    const { refreshToken } = await this.createRefreshToken(user.id, trx);
+    return { accessToken, refreshToken };
+  }
+
   /**
    * 发送验证码
    * @param {string} phone - 手机号
@@ -104,7 +194,7 @@ class AuthService {
    * @param {string} phone - 手机号
    * @param {string} code - 验证码
    * @param {string} referrerId - 推荐人用户ID(可选)
-   * @returns {Promise<{token: string, user: object}>}
+   * @returns {Promise<{accessToken: string, refreshToken: string, user: object, needSetPassword: boolean}>}
    */
   async login(phone, code, referrerId = null) {
     // 1. 验证码校验
@@ -156,31 +246,16 @@ class AuthService {
       .where('code', code)
       .update({ used: true });
 
-    // 4. 生成JWT token (包含role字段 - P0-009)
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        phone: user.phone,
-        role: user.role || 'user'
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: process.env.JWT_EXPIRE || '7d'
-      }
-    );
+    // 4. 生成访问令牌与刷新令牌
+    const { accessToken, refreshToken } = await this.issueTokens(user);
 
     logger.info(`用户登录成功: userId=${user.id}, phone=${phone}`);
 
     return {
-      token,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        role: user.role || 'user',
-        isMember: user.isMember,
-        quota_remaining: user.quota_remaining,
-        quota_expireAt: user.quota_expireAt
-      }
+      accessToken,
+      refreshToken,
+      needSetPassword: !user.password,
+      user: this.buildUserResponse(user)
     };
   }
 
@@ -206,7 +281,7 @@ class AuthService {
   /**
    * 微信登录 (P0-006)
    * @param {string} code - 微信登录code
-   * @returns {Promise<{token: string, user: object}>}
+   * @returns {Promise<{accessToken: string, refreshToken: string, user: object}>}
    */
   async wechatLogin(code) {
     try {
@@ -261,32 +336,16 @@ class AuthService {
         user = await db('users').where('wechat_openid', openid).first();
       }
 
-      // 3. 生成JWT token (包含role字段 - P0-009)
-      const token = jwt.sign(
-        {
-          userId: user.id,
-          phone: user.phone,
-          openid: user.wechat_openid,
-          role: user.role || 'user'
-        },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: process.env.JWT_EXPIRE || '7d'
-        }
-      );
+      // 3. 生成访问令牌与刷新令牌
+      const { accessToken, refreshToken } = await this.issueTokens(user);
 
       logger.info(`微信登录成功: userId=${user.id}, openid=${openid}`);
 
       return {
-        token,
-        user: {
-          id: user.id,
-          phone: user.phone,
-          role: user.role || 'user',
-          isMember: user.isMember,
-          quota_remaining: user.quota_remaining,
-          quota_expireAt: user.quota_expireAt
-        }
+        accessToken,
+        refreshToken,
+        needSetPassword: !user.password,
+        user: this.buildUserResponse(user)
       };
     } catch (error) {
       if (error.statusCode) {
@@ -301,7 +360,7 @@ class AuthService {
    * 密码登录 (P0-007)
    * @param {string} phone - 手机号
    * @param {string} password - 密码
-   * @returns {Promise<{token: string, user: object}>}
+   * @returns {Promise<{accessToken: string, refreshToken: string, user: object, needSetPassword: boolean}>}
    */
   async passwordLogin(phone, password) {
     // 1. 查询用户
@@ -321,32 +380,96 @@ class AuthService {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS);
     }
 
-    // 3. 生成JWT token (包含role字段 - P0-009)
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        phone: user.phone,
-        role: user.role || 'user'
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: process.env.JWT_EXPIRE || '7d'
-      }
-    );
+    // 3. 生成访问令牌与刷新令牌
+    const { accessToken, refreshToken } = await this.issueTokens(user);
 
     logger.info(`密码登录成功: userId=${user.id}, phone=${phone}`);
 
     return {
-      token,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        role: user.role || 'user',
-        isMember: user.isMember,
-        quota_remaining: user.quota_remaining,
-        quota_expireAt: user.quota_expireAt
-      }
+      accessToken,
+      refreshToken,
+      user: this.buildUserResponse(user)
     };
+  }
+
+  /**
+   * 刷新访问令牌
+   * @param {string} refreshTokenValue
+   * @returns {Promise<{accessToken: string, refreshToken: string, user: object}>}
+   */
+  async refreshToken(refreshTokenValue) {
+    if (!refreshTokenValue) {
+      throw new AppError(ErrorCode.REFRESH_TOKEN_REQUIRED);
+    }
+
+    const hashedToken = this.hashRefreshToken(refreshTokenValue);
+    const record = await db('refresh_tokens')
+      .where({ token: hashedToken })
+      .first();
+
+    if (!record || record.revoked_at) {
+      throw new AppError(ErrorCode.REFRESH_TOKEN_INVALID);
+    }
+
+    if (new Date(record.expires_at) <= new Date()) {
+      await db('refresh_tokens')
+        .where({ id: record.id })
+        .update({ revoked_at: new Date(), updated_at: new Date() });
+      throw new AppError(ErrorCode.REFRESH_TOKEN_EXPIRED);
+    }
+
+    const user = await db('users').where('id', record.user_id).first();
+
+    if (!user) {
+      await db('refresh_tokens')
+        .where({ id: record.id })
+        .update({ revoked_at: new Date(), updated_at: new Date() });
+      throw new AppError(ErrorCode.USER_NOT_FOUND);
+    }
+
+    return db.transaction(async (trx) => {
+      const updateCount = await trx('refresh_tokens')
+        .where({ id: record.id, revoked_at: null })
+        .update({ revoked_at: new Date(), updated_at: new Date() });
+
+      if (!updateCount) {
+        throw new AppError(ErrorCode.REFRESH_TOKEN_INVALID);
+      }
+
+      const { accessToken, refreshToken } = await this.issueTokens(user, trx);
+
+      return {
+        accessToken,
+        refreshToken,
+        user: this.buildUserResponse(user)
+      };
+    });
+  }
+
+  /**
+   * 注销登录 / 吊销刷新令牌
+   * @param {string} userId
+   * @param {string|null} refreshTokenValue
+   */
+  async logout(userId, refreshTokenValue = null) {
+    if (refreshTokenValue) {
+      const hashedToken = this.hashRefreshToken(refreshTokenValue);
+      const affectedRows = await db('refresh_tokens')
+        .where({ user_id: userId, token: hashedToken, revoked_at: null })
+        .update({ revoked_at: new Date(), updated_at: new Date() });
+
+      if (!affectedRows) {
+        throw new AppError(ErrorCode.REFRESH_TOKEN_INVALID);
+      }
+
+      return { success: true };
+    }
+
+    await db('refresh_tokens')
+      .where({ user_id: userId, revoked_at: null })
+      .update({ revoked_at: new Date(), updated_at: new Date() });
+
+    return { success: true };
   }
 
   /**
@@ -429,13 +552,9 @@ class AuthService {
       throw new AppError(ErrorCode.USER_NOT_FOUND);
     }
 
+    const result = this.buildUserResponse(user);
     return {
-      id: user.id,
-      phone: user.phone,
-      role: user.role || 'user', // 艹，补上role字段！
-      isMember: user.isMember,
-      quota_remaining: user.quota_remaining,
-      quota_expireAt: user.quota_expireAt,
+      ...result,
       createdAt: user.created_at
     };
   }

@@ -29,6 +29,7 @@ project.private.config.json
 # 系统临时
 .DS_Store
 Thumbs.db
+nul
 
 # IDE配置
 .vscode/
@@ -38,3 +39,18 @@ Thumbs.db
 
 # 可能的临时输出
 tmp/
+
+# ========== Docker相关 ==========
+# 艹！Docker数据卷和日志，别tm提交到Git
+docker/nginx/logs/
+docker/mysql/logs/
+backend/logs/
+
+# 艹！SSL证书，绝对不能提交！
+docker/nginx/ssl/*.pem
+docker/nginx/ssl/*.key
+docker/nginx/ssl/*.crt
+
+# 艹！Docker数据持久化目录（如果有）
+mysql_data/
+redis_data/

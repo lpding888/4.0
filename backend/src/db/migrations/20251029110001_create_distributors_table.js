@@ -1,7 +1,16 @@
 /**
  * 分销员表迁移
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'distributors'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('distributors', function(table) {
     table.string('id', 32).primary().comment('分销员ID');
     table.string('user_id', 32).notNullable().unique().comment('关联用户ID');

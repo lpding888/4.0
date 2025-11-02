@@ -1,7 +1,16 @@
 /**
  * 佣金记录表迁移
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'commissions'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('commissions', function(table) {
     table.string('id', 32).primary().comment('佣金记录ID');
     table.string('distributor_id', 32).notNullable().comment('分销员ID');

@@ -1,7 +1,16 @@
 /**
  * 创建orders表
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'orders'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('orders', function(table) {
     table.string('id', 32).primary().comment('订单ID');
     table.string('userId', 32).notNullable().comment('用户ID');

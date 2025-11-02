@@ -1,7 +1,16 @@
 /**
  * 分销系统配置表迁移
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'distribution_settings'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('distribution_settings', function(table) {
     table.increments('id').primary().comment('配置ID');
     table.decimal('commission_rate', 5, 2).defaultTo(15).comment('默认佣金比例(%)');

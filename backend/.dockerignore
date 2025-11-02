@@ -1,0 +1,64 @@
+# ================================
+# Docker构建忽略文件
+# ================================
+# 艹！减少镜像体积，加快构建速度
+
+# ========== Node.js相关 ==========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn
+
+# ========== 环境变量和敏感文件 ==========
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# ========== 日志文件 ==========
+logs/
+*.log
+
+# ========== 开发工具 ==========
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ========== 测试文件 ==========
+tests/
+test/
+*.test.js
+*.spec.js
+coverage/
+.nyc_output/
+
+# ========== 文档 ==========
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+
+# ========== 临时文件 ==========
+tmp/
+temp/
+.DS_Store
+Thumbs.db
+
+# ========== Docker相关 ==========
+Dockerfile
+.dockerignore
+docker-compose*.yml
+ecosystem.config.js
+
+# ========== 上传文件（应该用COS）==========
+uploads/
+public/uploads/

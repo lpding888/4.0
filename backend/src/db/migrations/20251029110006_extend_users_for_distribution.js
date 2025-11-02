@@ -1,7 +1,16 @@
 /**
  * 用户表扩展 - 添加推荐人字段
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'users'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.table('users', function(table) {
     table.string('referrer_id', 32).nullable().comment('推荐人用户ID');
     table.index('referrer_id', 'idx_users_referrer');

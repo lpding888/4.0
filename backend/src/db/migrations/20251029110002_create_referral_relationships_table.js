@@ -1,7 +1,16 @@
 /**
  * 推荐关系表迁移
  */
-exports.up = function(knex) {
+exports.up = async function(knex) {
+  const tableName = 'referral_relationships'; // Extract table name
+  if (tableName) {
+    const exists = await knex.schema.hasTable(tableName);
+    if (exists) {
+      console.log();
+      return;
+    }
+  }
+
   return knex.schema.createTable('referral_relationships', function(table) {
     table.string('id', 32).primary().comment('关系ID');
     table.string('referrer_user_id', 32).notNullable().comment('推荐人用户ID');

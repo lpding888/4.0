@@ -29,6 +29,9 @@ const ErrorCode = {
   PASSWORD_TOO_SHORT: { code: 2011, message: '密码长度至少6位', httpStatus: 400 },
   REFERRER_NOT_FOUND: { code: 2012, message: '推荐人不存在', httpStatus: 400 },
   REFERRER_DELETED: { code: 2013, message: '推荐人账号已被删除', httpStatus: 400 },
+  REFRESH_TOKEN_INVALID: { code: 2014, message: '刷新令牌无效', httpStatus: 401 },
+  REFRESH_TOKEN_EXPIRED: { code: 2015, message: '刷新令牌已过期', httpStatus: 401 },
+  REFRESH_TOKEN_REQUIRED: { code: 2016, message: '缺少刷新令牌', httpStatus: 400 },
 
   // ========== 3xxx - 支付错误 ==========
   ORDER_CREATE_FAILED: { code: 3000, message: '创建订单失败', httpStatus: 500 },

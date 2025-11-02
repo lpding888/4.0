@@ -1,0 +1,33 @@
+# ================================
+# AI照前端 - 开发环境Dockerfile
+# ================================
+# 艹！Next.js 14开发环境，支持热重载和Fast Refresh
+#
+# 使用方法:
+# docker-compose -f docker-compose.dev.yml up frontend
+
+FROM node:18-alpine
+
+# 艹！设置工作目录
+WORKDIR /app
+
+# 艹！安装开发工具
+RUN apk add --no-cache \
+    curl \
+    git
+
+# 艹！复制package文件（利用缓存层）
+COPY package*.json ./
+
+# 艹！安装所有依赖
+RUN npm install && \
+    npm cache clean --force
+
+# 艹！复制源代码（实际会被volume覆盖）
+COPY . .
+
+# 艹！暴露Next.js开发端口
+EXPOSE 3001
+
+# 艹！开发模式启动（Fast Refresh自动刷新） - 指定端口3001
+CMD ["npm", "run", "dev", "--", "-p", "3001"]

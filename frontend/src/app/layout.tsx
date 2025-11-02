@@ -3,7 +3,9 @@ import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Navigation from '@/components/Navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import TokenSyncProvider from '@/components/TokenSyncProvider';
 import './globals.css';
+import '../../sentry.client.config';
 
 export const metadata: Metadata = {
   title: 'AI照 - 服装AI处理平台',
@@ -24,6 +26,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950 min-h-screen">
         <ErrorBoundary>
+          <TokenSyncProvider />
           <ConfigProvider locale={zhCN}>
             <Navigation />
             {children}
