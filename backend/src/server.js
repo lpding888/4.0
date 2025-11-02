@@ -35,6 +35,7 @@ const featureCatalogService = require('./services/feature-catalog.service');
 const buildingAIAdaptorService = require('./services/buildingai-adaptor.service');
 const inviteCodeService = require('./services/invite-code.service');
 const userProfileService = require('./services/user-profile.service');
+const referralValidationService = require('./services/referral-validation.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -213,6 +214,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize user profile service:', error);
   }
+
+  // 初始化推荐验证服务
+  try {
+    await referralValidationService.initialize();
+    logger.info('🔍 Referral validation service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize referral validation service:', error);
+  }
 });
 
 // 优雅关闭
@@ -345,6 +354,14 @@ process.on('SIGTERM', async () => {
     logger.info('User profile service closed');
   } catch (error) {
     logger.error('Error closing user profile service:', error);
+  }
+
+  // 关闭推荐验证服务
+  try {
+    await referralValidationService.close();
+    logger.info('Referral validation service closed');
+  } catch (error) {
+    logger.error('Error closing referral validation service:', error);
   }
 
   server.close(() => {
@@ -482,6 +499,14 @@ process.on('SIGINT', async () => {
     logger.info('User profile service closed');
   } catch (error) {
     logger.error('Error closing user profile service:', error);
+  }
+
+  // 关闭推荐验证服务
+  try {
+    await referralValidationService.close();
+    logger.info('Referral validation service closed');
+  } catch (error) {
+    logger.error('Error closing referral validation service:', error);
   }
 
   server.close(() => {
