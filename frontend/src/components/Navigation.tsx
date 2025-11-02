@@ -104,9 +104,12 @@ export default function Navigation() {
                     px-4 py-2 rounded-lg
                     flex items-center gap-2
                     transition-all duration-300
-                    ${item.exact ? pathname === item.key : (pathname === item.key || pathname.startsWith("${item.key}/"))
-                      ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    ${
+                      (item.exact
+                        ? pathname === item.key
+                        : pathname === item.key || pathname.startsWith(`${item.key}/`))
+                        ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
                     }
                   `}
                 >

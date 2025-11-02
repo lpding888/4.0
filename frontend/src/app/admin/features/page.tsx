@@ -41,8 +41,9 @@ export default function AdminFeaturesPage() {
       setLoading(true);
       const response: any = await api.admin.getFeatures();
 
-      if (response.success && response.features) {
-        setFeatures(response.features);
+      if (response.success) {
+        const featureList = response.data || response.features || [];
+        setFeatures(featureList);
       }
     } catch (error: any) {
       message.error('获取功能列表失败');

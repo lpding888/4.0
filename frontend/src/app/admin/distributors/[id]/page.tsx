@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { DistributorDetail, Referral, Commission } from '@/types';
 import StatusBadge from '@/components/distribution/StatusBadge';
 import StatCard from '@/components/distribution/StatCard';
+import { formatCurrency } from '@/utils/number';
 
 /**
  * 管理端 - 分销员详情页
@@ -116,7 +117,7 @@ export default function AdminDistributorDetailPage({
       render: (amount: number) =>
         amount ? (
           <span className="text-green-600 font-semibold">
-            ¥{amount.toFixed(2)}
+            ¥{formatCurrency(amount)}
           </span>
         ) : (
           '-'
@@ -135,7 +136,7 @@ export default function AdminDistributorDetailPage({
       title: '订单金额',
       dataIndex: 'orderAmount',
       key: 'orderAmount',
-      render: (amount: number) => `¥${amount.toFixed(2)}`
+      render: (amount: number) => `¥${formatCurrency(amount)}`
     },
     {
       title: '佣金金额',
@@ -143,7 +144,7 @@ export default function AdminDistributorDetailPage({
       key: 'commissionAmount',
       render: (amount: number) => (
         <span className="text-green-600 font-semibold">
-          ¥{amount.toFixed(2)}
+          ¥{formatCurrency(amount)}
         </span>
       )
     },
@@ -218,21 +219,21 @@ export default function AdminDistributorDetailPage({
         <Card>
           <StatCard
             label="累计佣金"
-            value={`¥${distributor.totalCommission.toFixed(2)}`}
+            value={`¥${formatCurrency(distributor.totalCommission)}`}
             color="green"
           />
         </Card>
         <Card>
           <StatCard
             label="可提现"
-            value={`¥${distributor.availableCommission.toFixed(2)}`}
+            value={`¥${formatCurrency(distributor.availableCommission)}`}
             color="cyan"
           />
         </Card>
         <Card>
           <StatCard
             label="已提现"
-            value={`¥${distributor.withdrawnCommission.toFixed(2)}`}
+            value={`¥${formatCurrency(distributor.withdrawnCommission)}`}
             color="purple"
           />
         </Card>

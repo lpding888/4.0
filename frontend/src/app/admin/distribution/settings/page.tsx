@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Form, InputNumber, Switch, Button, Card, message, Spin } from 'antd';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { formatCurrency, formatNumber } from '@/utils/number';
 
 /**
  * 分销设置类型定义
@@ -142,7 +143,7 @@ export default function DistributionSettingsPage() {
               addonAfter={
                 settings && (
                   <span style={{ color: '#10b981', fontWeight: '500' }}>
-                    {(settings.commissionRate * 100).toFixed(0)}%
+                    {formatNumber((settings?.commissionRate ?? 0) * 100, 0)}%
                   </span>
                 )
               }
@@ -257,13 +258,13 @@ export default function DistributionSettingsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ color: '#64748b' }}>佣金比例：</span>
                 <span style={{ fontWeight: '600', color: '#10b981' }}>
-                  {(settings.commissionRate * 100).toFixed(1)}%
+                  {formatNumber((settings?.commissionRate ?? 0) * 100, 1)}%
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ color: '#64748b' }}>最低提现：</span>
                 <span style={{ fontWeight: '600', color: '#0f172a' }}>
-                  ¥{settings.minWithdrawal.toFixed(2)}
+                  ¥{formatCurrency(settings?.minWithdrawal)}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>

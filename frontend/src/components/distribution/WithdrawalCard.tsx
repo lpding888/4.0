@@ -3,6 +3,7 @@
 import { Withdrawal } from '@/types';
 import StatusBadge from './StatusBadge';
 import { WalletOutlined, AlipayCircleOutlined } from '@ant-design/icons';
+import { formatCurrency } from '@/utils/number';
 
 interface WithdrawalCardProps {
   withdrawal: Withdrawal;
@@ -57,7 +58,7 @@ export default function WithdrawalCard({ withdrawal }: WithdrawalCardProps) {
         {/* 提现信息 */}
         <div className="flex-1">
           <div className="text-3xl font-bold text-white mb-3">
-            ¥{withdrawal.amount.toFixed(2)}
+            ¥{formatCurrency(withdrawal.amount)}
           </div>
 
           <div className="flex items-center gap-2 text-sm text-white/60 mb-1">

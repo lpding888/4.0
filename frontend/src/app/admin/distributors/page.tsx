@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { DistributorsResponse, DistributorListItem } from '@/types';
 import StatusBadge from '@/components/distribution/StatusBadge';
+import { formatCurrency } from '@/utils/number';
 
 const { Search } = Input;
 
@@ -129,7 +130,7 @@ export default function AdminDistributorsPage() {
       key: 'totalCommission',
       render: (amount: number) => (
         <span className="text-green-600 font-semibold">
-          ¥{amount.toFixed(2)}
+          ¥{formatCurrency(amount)}
         </span>
       )
     },

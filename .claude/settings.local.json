@@ -10,7 +10,8 @@
       "Bash(tasklist:*)",
       "Bash(taskkill /F /PID 22456)",
       "Bash(taskkill //F //PID 22456)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

@@ -28,26 +28,11 @@ const syncLocalStorage = (user: User | null, accessToken: string | null, refresh
     localStorage.removeItem('refresh_token');
   }
 
-  const persistPayload = JSON.stringify({
-    state: {
-      user,
-      accessToken,
-      refreshToken
-    },
-    version: 0
-  });
-
   if (user) {
     localStorage.setItem('user', JSON.stringify(user));
+    document.cookie = `auth-storage=${encodeURIComponent(JSON.stringify({ state: { user } }))}; path=/; sameSite=Lax`;
   } else {
     localStorage.removeItem('user');
-  }
-
-  if (user || accessToken || refreshToken) {
-    localStorage.setItem('auth-storage', persistPayload);
-    document.cookie = `auth-storage=${encodeURIComponent(persistPayload)}; path=/; sameSite=Lax`;
-  } else {
-    localStorage.removeItem('auth-storage');
     document.cookie = 'auth-storage=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   }
 };

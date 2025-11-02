@@ -1,6 +1,7 @@
 'use client';
 
 import { Commission } from '@/types';
+import { formatCurrency } from '@/utils/number';
 import StatusBadge from './StatusBadge';
 
 interface CommissionCardProps {
@@ -46,14 +47,14 @@ export default function CommissionCard({ commission }: CommissionCardProps) {
             </div>
           )}
           <div className="text-sm text-white/60">
-            订单金额 ¥{commission.orderAmount.toFixed(2)}
+            订单金额 ¥{formatCurrency(commission.orderAmount)}
           </div>
         </div>
 
         {/* 佣金金额和状态 */}
         <div className="text-right">
           <div className="text-2xl font-bold text-green-400 mb-2">
-            +¥{commission.commissionAmount.toFixed(2)}
+            +¥{formatCurrency(commission.commissionAmount)}
           </div>
           <StatusBadge status={commission.status} type="commission" />
         </div>

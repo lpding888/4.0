@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { WithdrawalsResponse, Withdrawal, WithdrawalStatus } from '@/types';
 import StatusBadge from '@/components/distribution/StatusBadge';
+import { formatCurrency } from '@/utils/number';
 
 const { TextArea } = Input;
 
@@ -138,7 +139,7 @@ export default function AdminWithdrawalsPage() {
       key: 'amount',
       render: (amount: number) => (
         <span className="text-green-600 font-semibold text-base">
-          ¥{amount.toFixed(2)}
+          ¥{formatCurrency(amount)}
         </span>
       )
     },

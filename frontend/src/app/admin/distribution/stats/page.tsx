@@ -10,6 +10,7 @@ import {
   RiseOutlined
 } from '@ant-design/icons';
 import { api } from '@/lib/api';
+import { formatCurrency } from '@/utils/number';
 import { useAuthStore } from '@/store/authStore';
 
 /**
@@ -133,7 +134,7 @@ export default function DistributionStatsPage() {
       key: 'totalCommission',
       render: (amount: number) => (
         <span className="text-green-600 font-semibold">
-          ¥{amount.toFixed(2)}
+          ¥{formatCurrency(amount)}
         </span>
       ),
       sorter: (a: any, b: any) => a.totalCommission - b.totalCommission
@@ -234,10 +235,10 @@ export default function DistributionStatsPage() {
                   累计佣金支出
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a' }}>
-                  ¥{stats.totalCommission.toFixed(2)}
+                  ¥{formatCurrency(stats.totalCommission)}
                 </div>
                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                  已提现 ¥{stats.totalWithdrawn.toFixed(2)}
+                  已提现 ¥{formatCurrency(stats.totalWithdrawn)}
                 </div>
               </div>
             </div>
@@ -321,7 +322,7 @@ export default function DistributionStatsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '12px', color: '#475569' }}>新增佣金</span>
                   <span style={{ fontSize: '14px', fontWeight: '600', color: '#10b981' }}>
-                    ¥{trend.newCommission.toFixed(2)}
+                    ¥{formatCurrency(trend.newCommission)}
                   </span>
                 </div>
               </div>
