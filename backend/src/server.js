@@ -31,6 +31,7 @@ const paymentService = require('./services/payment.service');
 const wechatLoginService = require('./services/wechat-login.service');
 const unifiedLoginService = require('./services/unified-login.service');
 const i18nService = require('./services/i18n.service');
+const featureCatalogService = require('./services/feature-catalog.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -177,6 +178,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize internationalization service:', error);
   }
+
+  // 初始化功能目录服务
+  try {
+    await featureCatalogService.initialize();
+    logger.info('📚 Feature catalog service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize feature catalog service:', error);
+  }
 });
 
 // 优雅关闭
@@ -277,6 +286,14 @@ process.on('SIGTERM', async () => {
     logger.info('Internationalization service closed');
   } catch (error) {
     logger.error('Error closing internationalization service:', error);
+  }
+
+  // 关闭功能目录服务
+  try {
+    await featureCatalogService.close();
+    logger.info('Feature catalog service closed');
+  } catch (error) {
+    logger.error('Error closing feature catalog service:', error);
   }
 
   server.close(() => {
@@ -382,6 +399,14 @@ process.on('SIGINT', async () => {
     logger.info('Internationalization service closed');
   } catch (error) {
     logger.error('Error closing internationalization service:', error);
+  }
+
+  // 关闭功能目录服务
+  try {
+    await featureCatalogService.close();
+    logger.info('Feature catalog service closed');
+  } catch (error) {
+    logger.error('Error closing feature catalog service:', error);
   }
 
   server.close(() => {

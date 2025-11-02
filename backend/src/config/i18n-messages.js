@@ -162,7 +162,20 @@ const zh_CN = {
   // 系统消息
   'error.stats_reset': '错误统计数据已重置',
   'error.test_success': '测试错误处理成功',
-  'error.export_success': '错误数据导出成功'
+  'error.export_success': '错误数据导出成功',
+
+  // 功能目录消息
+  'features.retrieved_success': '功能列表获取成功',
+  'feature.created_success': '功能创建成功',
+  'feature.updated_success': '功能更新成功',
+  'feature.deleted_success': '功能删除成功',
+  'feature.configurations_set_success': '功能配置设置成功',
+  'feature.usage_recorded': '功能使用记录成功',
+  'feature.access_denied': '功能访问被拒绝',
+  'feature.not_found': '功能不存在',
+  'feature.already_exists': '功能已存在',
+  'feature.configuration.invalid': '功能配置无效',
+  'feature.permission.insufficient': '功能权限不足'
 };
 
 // 英文消息
@@ -321,7 +334,20 @@ const en_US = {
   // 系统消息
   'error.stats_reset': 'Error statistics reset successfully',
   'error.test_success': 'Test error handling successful',
-  'error.export_success': 'Error data exported successfully'
+  'error.export_success': 'Error data exported successfully',
+
+  // 功能目录消息
+  'features.retrieved_success': 'Features retrieved successfully',
+  'feature.created_success': 'Feature created successfully',
+  'feature.updated_success': 'Feature updated successfully',
+  'feature.deleted_success': 'Feature deleted successfully',
+  'feature.configurations_set_success': 'Feature configurations set successfully',
+  'feature.usage_recorded': 'Feature usage recorded successfully',
+  'feature.access_denied': 'Feature access denied',
+  'feature.not_found': 'Feature not found',
+  'feature.already_exists': 'Feature already exists',
+  'feature.configuration.invalid': 'Invalid feature configuration',
+  'feature.permission.insufficient': 'Insufficient feature permissions'
 };
 
 // 日文消息

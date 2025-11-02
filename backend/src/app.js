@@ -131,10 +131,10 @@ app.use('/api/membership', require('./routes/membership.routes'));
 app.use('/api/media', require('./routes/media.routes'));
 app.use('/api/task', require('./routes/task.routes'));
 
-// 功能配置路由 - 添加缓存
+// 功能目录路由 - 添加缓存
 app.use('/api/features',
-  cacheMiddleware.featureCache({ ttl: 3600 }), // 1小时缓存
-  require('./routes/feature.routes')
+  cacheMiddleware.featureCache({ ttl: 1800 }), // 30分钟缓存
+  require('./routes/feature-catalog.routes')
 );
 
 // 素材库路由 - 添加用户缓存
