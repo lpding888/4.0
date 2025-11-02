@@ -1,0 +1,54 @@
+{
+  "taskId": "BACKEND-P0-002",
+  "title": "双Token JWT系统 - Access Token + Refresh Token",
+  "department": "Backend",
+  "priority": "P0",
+  "estimatedHours": 8,
+  "dependencies": [],
+  "description": "实现双Token JWT认证系统：Access Token(15分钟) + Refresh Token(7天)。Refresh Token存储在Redis中支持主动吊销，实现Refresh Token Rotation机制提升安全性，提供/auth/refresh接口用于刷新Token。",
+  "technicalRequirements": [
+    "创建统一的TokenPayload接口，包含userId、phone、role三个字段",
+    "实现signAccess()方法生成Access Token，有效期15分钟",
+    "实现signRefresh()方法生成Refresh Token，有效期7天，包含唯一jti标识",
+    "Refresh Token的jti存储在Redis（key: refresh:{userId}, value: jti, ttl: 7天）",
+    "实现/auth/refresh接口，支持Refresh Token Rotation（每次刷新都生成新的Refresh Token）",
+    "实现/auth/logout接口，删除Redis中的Refresh Token实现强制登出",
+    "所有Token必须包含role字段，解决管理员权限验证需要查询数据库的问题"
+  ],
+  "acceptanceCriteria": [
+    "TokenPayload接口包含userId、phone、role三个字段",
+    "Access Token有效期15分钟，Refresh Token有效期7天",
+    "Refresh Token的jti正确存储在Redis中",
+    "/auth/refresh接口正常工作，能生成新的Access Token和Refresh Token",
+    "每次刷新都会生成新的Refresh Token（Refresh Token Rotation）",
+    "/auth/logout接口能正确删除Redis中的Refresh Token",
+    "单元测试覆盖率 ≥ 80%，包含Token生成、刷新、吊销测试"
+  ],
+  "deliverables": [
+    "backend/src/utils/jwt.ts（Token生成工具）",
+    "backend/src/controllers/auth.controller.ts（新增refresh和logout接口）",
+    "backend/src/routes/auth.routes.ts（新增路由）",
+    "backend/tests/utils/jwt.spec.ts（JWT工具测试）",
+    "backend/tests/controllers/auth.controller.spec.ts（接口测试）"
+  ],
+  "needsCoordination": [
+    "需要通知Frontend团队：新增/auth/refresh接口，需要在401错误时调用刷新Token",
+    "需要通知Frontend团队：登录接口返回值新增refreshToken字段",
+    "需要通知QA团队：测试Token刷新和登出场景"
+  ],
+  "aiPromptSuggestion": {
+    "system": "你是一名资深的Backend开发工程师，精通Node.js + TypeScript + JWT认证。你擅长设计安全的认证系统，了解Refresh Token Rotation、Token吊销等最佳实践。你遵循SOLID原则，代码必须包含完整的类型定义、错误处理和单元测试。",
+    "user": "## 任务目标\n实现双Token JWT认证系统，解决JWT无刷新机制、泄露后无法撤销的问题。\n\n## 具体要求\n\n### 1. TokenPayload接口定义\n创建`backend/src/utils/jwt.ts`：\n```typescript\nimport jwt from 'jsonwebtoken';\nimport { randomUUID } from 'crypto';\n\nconst JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';\nconst ACCESS_EXPIRES_SEC = 15 * 60; // 15分钟\nconst REFRESH_EXPIRES_SEC = 7 * 24 * 60 * 60; // 7天\n\nexport interface TokenPayload {\n  userId: string;\n  phone: string;\n  role: string; // 'user' | 'admin'\n}\n\nexport function signAccess(payload: TokenPayload): string {\n  return jwt.sign(payload, JWT_SECRET, {\n    expiresIn: ACCESS_EXPIRES_SEC,\n  });\n}\n\nexport function signRefresh(payload: Omit<TokenPayload, 'jti'>): {\n  token: string;\n  jti: string;\n  ttl: number;\n} {\n  const jti = randomUUID();\n  const token = jwt.sign(\n    { ...payload, jti },\n    JWT_SECRET,\n    { expiresIn: REFRESH_EXPIRES_SEC }\n  );\n  return { token, jti, ttl: REFRESH_EXPIRES_SEC };\n}\n\nexport function verifyToken(token: string): TokenPayload & { jti?: string } {\n  return jwt.verify(token, JWT_SECRET) as TokenPayload & { jti?: string };\n}\n```\n\n### 2. 修改登录接口返回双Token\n修改`backend/src/controllers/auth.controller.ts`的login方法：\n```typescript\nimport { signAccess, signRefresh } from '../utils/jwt';\nimport redis from '../config/redis';\n\nasync login(req, res, next) {\n  try {\n    const { phone, password } = req.body;\n    \n    // 验证用户密码（略）\n    const user = await db('users').where({ phone }).first();\n    \n    // 生成双Token\n    const accessToken = signAccess({\n      userId: user.id,\n      phone: user.phone,\n      role: user.role,\n    });\n    \n    const refreshData = signRefresh({\n      userId: user.id,\n      phone: user.phone,\n      role: user.role,\n    });\n    \n    // 将Refresh Token的jti存储到Redis\n    await redis.setex(\n      `refresh:${user.id}`,\n      refreshData.ttl,\n      refreshData.jti\n    );\n    \n    res.json({\n      success: true,\n      data: {\n        user: { id: user.id, phone: user.phone, role: user.role },\n        accessToken,\n        refreshToken: refreshData.token,\n      },\n    });\n  } catch (error) {\n    next(error);\n  }\n}\n```\n\n### 3. 实现Token刷新接口\n在`backend/src/controllers/auth.controller.ts`新增refresh方法：\n```typescript\nasync refresh(req, res, next) {\n  try {\n    const { refreshToken } = req.body;\n    \n    if (!refreshToken) {\n      throw new AppError(ErrorCode.TOKEN_MISSING, '缺少Refresh Token', 401);\n    }\n    \n    // 验证Refresh Token\n    const decoded = verifyToken(refreshToken);\n    \n    // 检查Redis中的jti是否匹配（防止已吊销的Token被使用）\n    const storedJti = await redis.get(`refresh:${decoded.userId}`);\n    if (storedJti !== decoded.jti) {\n      throw new AppError(ErrorCode.TOKEN_REVOKED, 'Refresh Token已吊销', 401);\n    }\n    \n    // 生成新的Access Token和Refresh Token（Refresh Token Rotation）\n    const newAccess = signAccess({\n      userId: decoded.userId,\n      phone: decoded.phone,\n      role: decoded.role,\n    });\n    \n    const newRefresh = signRefresh({\n      userId: decoded.userId,\n      phone: decoded.phone,\n      role: decoded.role,\n    });\n    \n    // 更新Redis中的jti\n    await redis.setex(\n      `refresh:${decoded.userId}`,\n      newRefresh.ttl,\n      newRefresh.jti\n    );\n    \n    res.json({\n      success: true,\n      data: {\n        accessToken: newAccess,\n        refreshToken: newRefresh.token,\n      },\n    });\n  } catch (error) {\n    if (error.name === 'TokenExpiredError') {\n      next(new AppError(ErrorCode.TOKEN_EXPIRED, 'Refresh Token已过期', 401));\n    } else {\n      next(error);\n    }\n  }\n}\n```\n\n### 4. 实现登出接口\n在`backend/src/controllers/auth.controller.ts`新增logout方法：\n```typescript\nasync logout(req, res, next) {\n  try {\n    const userId = req.userId; // 从middleware获取\n    \n    // 删除Redis中的Refresh Token\n    await redis.del(`refresh:${userId}`);\n    \n    res.json({\n      success: true,\n      data: { message: '登出成功' },\n    });\n  } catch (error) {\n    next(error);\n  }\n}\n```\n\n### 5. 新增路由\n修改`backend/src/routes/auth.routes.ts`：\n```typescript\nrouter.post('/auth/refresh', authController.refresh);\nrouter.post('/auth/logout', authenticate, authController.logout);\n```\n\n### 6. 单元测试\n创建`backend/tests/utils/jwt.spec.ts`：\n- 测试signAccess生成有效的Access Token\n- 测试signRefresh生成有效的Refresh Token\n- 测试verifyToken能正确解析Token\n- 测试过期Token验证失败\n\n创建`backend/tests/controllers/auth.controller.spec.ts`：\n- 测试登录返回双Token\n- 测试refresh接口正常刷新\n- 测试refresh接口拒绝已吊销的Token\n- 测试logout接口删除Refresh Token\n\n## 交付验收标准\n1. 所有代码使用TypeScript编写，类型定义完整\n2. Refresh Token存储在Redis中，支持主动吊销\n3. 实现Refresh Token Rotation机制\n4. 单元测试覆盖率 ≥ 80%\n5. 代码符合ESLint规范\n\n## 注意事项\n- ⚠️ Refresh Token必须包含唯一jti标识\n- ⚠️ 每次刷新都要生成新的Refresh Token（Rotation）\n- ⚠️ JWT_SECRET必须从环境变量读取，不能硬编码\n- ⚠️ Token过期时间要合理（Access 15分钟，Refresh 7天）"
+  },
+  "reviewPolicy": {
+    "requiresReview": true,
+    "reviewers": ["Reviewer"],
+    "reviewFocus": ["安全性", "Token存储", "Refresh Token Rotation", "错误处理"]
+  },
+  "qaPolicy": {
+    "requiresQA": true,
+    "testingScope": ["Unit", "API", "Security"],
+    "testingDepth": "Thorough"
+  },
+  "status": "Ready"
+}
