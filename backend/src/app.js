@@ -7,6 +7,8 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler.middleware');
+const metricsMiddleware = require('./middlewares/metrics.middleware'); // P1-014: Prometheus指标中间件
+const metricsService = require('./services/metrics.service'); // P1-014: Prometheus指标服务
 
 // 创建Express应用
 const app = express();
@@ -52,6 +54,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 日志中间件
 app.use(morgan('combined', { stream: logger.stream }));
+
+// P1-014: Prometheus指标收集中间件
+app.use(metricsMiddleware);
 
 // 根路径 - API文档
 app.get('/', (req, res) => {
@@ -106,6 +111,19 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV
   });
+});
+
+// P1-014: Prometheus指标暴露端点
+// 艹！Prometheus从这个接口抓取指标
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', metricsService.getContentType());
+    const metrics = await metricsService.getMetrics();
+    res.end(metrics);
+  } catch (error) {
+    logger.error('[Metrics] 获取指标失败:', error);
+    res.status(500).end('Error collecting metrics');
+  }
 });
 
 // Swagger API文档 (P1-013)
