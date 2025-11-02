@@ -3,6 +3,7 @@ const router = express.Router();
 const adminController = require('../controllers/admin.controller');
 const assetController = require('../controllers/asset.controller');
 const { authenticate, requireAdmin } = require('../middlewares/auth.middleware'); // P0-009: 统一认证中间件
+const websocketService = require('../services/websocket.service'); // P1-011: WebSocket服务
 
 /**
  * 管理后台路由
@@ -80,5 +81,76 @@ router.get('/distribution/settings', authenticate, requireAdmin, adminController
 
 // 更新佣金设置
 router.put('/distribution/settings', authenticate, requireAdmin, adminController.updateDistributionSettings);
+
+// ========== WebSocket状态监控 (P1-011) ==========
+
+// 获取WebSocket服务状态
+router.get('/websocket/status', authenticate, requireAdmin, (req, res) => {
+  try {
+    const status = websocketService.getStatus();
+    res.json({
+      success: true,
+      data: status
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: '获取WebSocket状态失败',
+      error: error.message
+    });
+  }
+});
+
+// 检查用户在线状态
+router.get('/websocket/user/:userId/online', authenticate, requireAdmin, (req, res) => {
+  try {
+    const { userId } = req.params;
+    const isOnline = websocketService.isUserOnline(parseInt(userId));
+    res.json({
+      success: true,
+      data: {
+        userId: parseInt(userId),
+        isOnline
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: '检查用户在线状态失败',
+      error: error.message
+    });
+  }
+});
+
+// 发送系统广播消息
+router.post('/websocket/broadcast', authenticate, requireAdmin, (req, res) => {
+  try {
+    const { title, content, type = 'info' } = req.body;
+
+    if (!content) {
+      return res.status(400).json({
+        success: false,
+        message: '消息内容不能为空'
+      });
+    }
+
+    websocketService.broadcastSystemMessage({
+      title: title || '系统通知',
+      content,
+      type
+    });
+
+    res.json({
+      success: true,
+      message: '系统消息已广播'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: '广播系统消息失败',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

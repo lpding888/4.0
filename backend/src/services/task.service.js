@@ -6,6 +6,7 @@ const featureService = require('./feature.service');
 const pipelineEngine = require('./pipelineEngine.service');
 const { checkFeatureRateLimit } = require('../middlewares/rateLimiter.middleware');
 const logger = require('../utils/logger');
+const websocketService = require('./websocket.service'); // P1-011: WebSocket服务
 
 /**
  * 任务服务 - 处理AI处理任务的创建、查询和状态管理
@@ -267,16 +268,47 @@ class TaskService {
 
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
 
-      // 如果任务失败,返还配额（艹！必须检查eligible_for_refund）
-      if (status === 'failed') {
-        const task = await db('tasks').where('id', taskId).first();
-        if (task) {
-          const refundAmount = this.getQuotaCost(task.type);
-          // 🔥 修复参数顺序：taskId在前，userId在后
-          const result = await quotaService.refund(taskId, task.userId, refundAmount, `任务失败返还:${taskId}`);
-          if (result.refunded) {
-            logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
+      // P1-011: 获取任务详情用于WebSocket推送
+      const task = await db('tasks').where('id', taskId).first();
+      if (task) {
+        // P1-011: 推送任务状态变更
+        try {
+          const taskData = {
+            id: task.id,
+            type: task.type,
+            status: task.status,
+            inputUrl: task.inputUrl,
+            resultUrls: task.resultUrls ? JSON.parse(task.resultUrls) : null,
+            errorMessage: task.errorMessage,
+            createdAt: task.created_at,
+            updatedAt: task.updated_at,
+            completedAt: task.completed_at
+          };
+
+          // 根据状态推送不同的事件
+          if (status === 'success') {
+            websocketService.pushTaskCompleted(task.userId, taskId, taskData);
+          } else if (status === 'failed') {
+            websocketService.pushTaskError(task.userId, taskId, {
+              message: data.errorMessage || '任务处理失败',
+              code: 'TASK_FAILED'
+            });
+          } else {
+            websocketService.pushTaskStatus(task.userId, taskId, taskData);
           }
+        } catch (wsError) {
+          // WebSocket推送失败不影响主流程
+          logger.warn(`[TaskService] WebSocket推送失败: ${wsError.message}`, { taskId });
+        }
+      }
+
+      // 如果任务失败,返还配额（艹！必须检查eligible_for_refund）
+      if (status === 'failed' && task) {
+        const refundAmount = this.getQuotaCost(task.type);
+        // 🔥 修复参数顺序：taskId在前，userId在后
+        const result = await quotaService.refund(taskId, task.userId, refundAmount, `任务失败返还:${taskId}`);
+        if (result.refunded) {
+          logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
         }
       }
 

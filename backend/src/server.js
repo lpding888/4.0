@@ -18,6 +18,7 @@ const logger = require('./utils/logger');
 const videoPollingService = require('./services/videoPolling.service');
 const cronJobsService = require('./services/cronJobs.service');
 const { startUnfreezeCommissionsJob, stopUnfreezeCommissionsJob } = require('../cron/unfreeze-commissions');
+const websocketService = require('./services/websocket.service'); // P1-011: WebSocket服务
 
 const PORT = process.env.PORT || 3000;
 
@@ -26,6 +27,14 @@ const server = app.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`🔗 API URL: ${process.env.API_DOMAIN || `http://localhost:${PORT}`}`);
+
+  // P1-011: 初始化WebSocket服务
+  try {
+    websocketService.initialize(server);
+    logger.info('🔌 WebSocket service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize WebSocket service:', error);
+  }
 
   // 启动视频任务轮询服务
   try {
