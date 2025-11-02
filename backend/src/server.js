@@ -33,6 +33,7 @@ const unifiedLoginService = require('./services/unified-login.service');
 const i18nService = require('./services/i18n.service');
 const featureCatalogService = require('./services/feature-catalog.service');
 const buildingAIAdaptorService = require('./services/buildingai-adaptor.service');
+const inviteCodeService = require('./services/invite-code.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -195,6 +196,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize BuildingAI adaptor service:', error);
   }
+
+  // 初始化邀请码服务
+  try {
+    await inviteCodeService.initialize();
+    logger.info('🎫 Invite code service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize invite code service:', error);
+  }
 });
 
 // 优雅关闭
@@ -311,6 +320,14 @@ process.on('SIGTERM', async () => {
     logger.info('BuildingAI adaptor service closed');
   } catch (error) {
     logger.error('Error closing BuildingAI adaptor service:', error);
+  }
+
+  // 关闭邀请码服务
+  try {
+    await inviteCodeService.close();
+    logger.info('Invite code service closed');
+  } catch (error) {
+    logger.error('Error closing invite code service:', error);
   }
 
   server.close(() => {
@@ -432,6 +449,14 @@ process.on('SIGINT', async () => {
     logger.info('BuildingAI adaptor service closed');
   } catch (error) {
     logger.error('Error closing BuildingAI adaptor service:', error);
+  }
+
+  // 关闭邀请码服务
+  try {
+    await inviteCodeService.close();
+    logger.info('Invite code service closed');
+  } catch (error) {
+    logger.error('Error closing invite code service:', error);
   }
 
   server.close(() => {
