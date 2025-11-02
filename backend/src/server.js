@@ -34,6 +34,7 @@ const i18nService = require('./services/i18n.service');
 const featureCatalogService = require('./services/feature-catalog.service');
 const buildingAIAdaptorService = require('./services/buildingai-adaptor.service');
 const inviteCodeService = require('./services/invite-code.service');
+const userProfileService = require('./services/user-profile.service');
 
 const PORT = process.env.PORT || 3000;
 
@@ -204,6 +205,14 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('Failed to initialize invite code service:', error);
   }
+
+  // 初始化用户资料服务
+  try {
+    await userProfileService.initialize();
+    logger.info('👤 User profile service initialized');
+  } catch (error) {
+    logger.error('Failed to initialize user profile service:', error);
+  }
 });
 
 // 优雅关闭
@@ -328,6 +337,14 @@ process.on('SIGTERM', async () => {
     logger.info('Invite code service closed');
   } catch (error) {
     logger.error('Error closing invite code service:', error);
+  }
+
+  // 关闭用户资料服务
+  try {
+    await userProfileService.close();
+    logger.info('User profile service closed');
+  } catch (error) {
+    logger.error('Error closing user profile service:', error);
   }
 
   server.close(() => {
@@ -457,6 +474,14 @@ process.on('SIGINT', async () => {
     logger.info('Invite code service closed');
   } catch (error) {
     logger.error('Error closing invite code service:', error);
+  }
+
+  // 关闭用户资料服务
+  try {
+    await userProfileService.close();
+    logger.info('User profile service closed');
+  } catch (error) {
+    logger.error('Error closing user profile service:', error);
   }
 
   server.close(() => {

@@ -159,6 +159,7 @@ app.use('/api/auth/wechat', require('./routes/wechat-login.routes')); // 微信�
 app.use('/api/auth', require('./routes/unified-login.routes')); // 统一登录路由
 app.use('/api/ai', require('./routes/buildingai-adaptor.routes')); // BuildingAI适配层路由
 app.use('/api/invite-codes', require('./routes/invite-code.routes')); // 邀请码管理路由
+app.use('/api/user-profile', require('./routes/user-profile.routes')); // 用户资料管理路由
 app.use('/api/admin/errors', require('./routes/error-management.routes')); // 错误管理路由
 app.use('/api/docs', require('./routes/docs.routes')); // API文档路由
 
