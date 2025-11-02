@@ -1,0 +1,590 @@
+const db = require('../config/database');
+const logger = require('../utils/logger');
+const quotaService = require('./quota.service');
+
+/**
+ * PipelineEngine - 核心编排引擎
+ * 负责按照Pipeline Schema执行多步骤任务流程
+ */
+class PipelineEngine {
+  /**
+   * 执行Pipeline (CMS-206: 重构支持FORK/JOIN并行执行)
+   * 艹！改造为图遍历，支持并行分支！
+   *
+   * @param {string} taskId - 任务ID
+   * @param {string} featureId - 功能ID
+   * @param {Object} inputData - 用户输入数据
+   */
+  async executePipeline(taskId, featureId, inputData) {
+    try {
+      logger.info(`[PipelineEngine] 开始执行Pipeline (并行引擎) taskId=${taskId} featureId=${featureId}`);
+
+      // 1. 获取功能定义和Pipeline Schema
+      const feature = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .first();
+
+      if (!feature || !feature.pipeline_schema_ref) {
+        throw new Error('功能配置错误:缺少pipeline_schema_ref');
+      }
+
+      const pipelineSchema = await db('pipeline_schemas')
+        .where('pipeline_id', feature.pipeline_schema_ref)
+        .first();
+
+      if (!pipelineSchema) {
+        throw new Error(`Pipeline Schema不存在: ${feature.pipeline_schema_ref}`);
+      }
+
+      // 🔥 新格式：支持nodes和edges（React Flow格式）
+      let pipelineData;
+      try {
+        pipelineData = JSON.parse(pipelineSchema.steps);
+      } catch (e) {
+        throw new Error('Pipeline Schema解析失败');
+      }
+
+      // 兼容旧格式（steps数组）和新格式（nodes+edges）
+      if (Array.isArray(pipelineData)) {
+        // 旧格式：顺序执行
+        logger.info(`[PipelineEngine] 使用旧格式（顺序执行） taskId=${taskId}`);
+        return await this.executePipelineSequential(taskId, featureId, inputData, pipelineData);
+      }
+
+      // 新格式：图遍历 + 并行执行
+      const { nodes, edges } = pipelineData;
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        throw new Error('Pipeline Schema nodes配置错误');
+      }
+
+      logger.info(`[PipelineEngine] 使用新格式（并行执行） nodes=${nodes.length} edges=${edges?.length || 0}`);
+
+      // 2. 更新任务状态为processing
+      await db('tasks')
+        .where('id', taskId)
+        .update({
+          status: 'processing',
+          updated_at: new Date()
+        });
+
+      // 3. 执行图遍历（支持FORK/JOIN）
+      const finalOutput = await this.executeGraph(taskId, nodes, edges || [], inputData);
+
+      // 4. 所有节点执行成功
+      await this.handlePipelineSuccess(taskId, finalOutput);
+
+      logger.info(`[PipelineEngine] Pipeline执行成功 (并行引擎) taskId=${taskId}`);
+
+    } catch (error) {
+      logger.error(
+        `[PipelineEngine] Pipeline执行异常 taskId=${taskId} error=${error.message}`,
+        { taskId, featureId, error }
+      );
+
+      // 处理异常
+      await this.handlePipelineFailure(taskId, featureId, -1, error.message);
+    }
+  }
+
+  /**
+   * 执行Pipeline（旧格式兼容）- 顺序执行
+   * 艹！保留旧逻辑，支持旧的steps数组格式！
+   */
+  async executePipelineSequential(taskId, featureId, inputData, steps) {
+    // 创建task_steps记录
+    const taskSteps = steps.map((step, index) => ({
+      task_id: taskId,
+      step_index: index,
+      type: step.type,
+      provider_ref: step.provider_ref,
+      status: 'pending',
+      input: JSON.stringify(index === 0 ? inputData : {}),
+      created_at: new Date()
+    }));
+
+    await db('task_steps').insert(taskSteps);
+    logger.info(`[PipelineEngine] 创建${steps.length}个步骤记录 taskId=${taskId}`);
+
+    // 按顺序执行各个步骤
+    let previousOutput = inputData;
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const stepConfig = {
+        taskId,
+        stepIndex: i,
+        type: step.type,
+        providerRef: step.provider_ref,
+        timeout: step.timeout || 30000,
+        retryPolicy: step.retry_policy || {}
+      };
+
+      logger.info(
+        `[PipelineEngine] 执行步骤${i + 1}/${steps.length} ` +
+        `taskId=${taskId} type=${step.type} provider=${step.provider_ref}`
+      );
+
+      const stepResult = await this.executeStep(stepConfig, previousOutput);
+
+      if (!stepResult.success) {
+        await this.handlePipelineFailure(taskId, featureId, i, stepResult.error);
+        throw new Error(stepResult.error);
+      }
+
+      previousOutput = stepResult.output;
+    }
+
+    return previousOutput;
+  }
+
+  /**
+   * 执行图遍历（支持FORK/JOIN并行执行）(CMS-206)
+   * 艹！这是核心方法，实现并行分支和汇合！
+   *
+   * @param {string} taskId - 任务ID
+   * @param {Array} nodes - 节点数组
+   * @param {Array} edges - 边数组
+   * @param {Object} inputData - 初始输入数据
+   * @returns {Promise<Object>} 最终输出
+   */
+  async executeGraph(taskId, nodes, edges, inputData) {
+    // 构建邻接表
+    const adjacencyMap = new Map(); // nodeId => [targetIds]
+    const reverseAdjacencyMap = new Map(); // nodeId => [sourceIds]
+
+    nodes.forEach(node => {
+      adjacencyMap.set(node.id, []);
+      reverseAdjacencyMap.set(node.id, []);
+    });
+
+    edges.forEach(edge => {
+      if (adjacencyMap.has(edge.source)) {
+        adjacencyMap.get(edge.source).push(edge.target);
+      }
+      if (reverseAdjacencyMap.has(edge.target)) {
+        reverseAdjacencyMap.get(edge.target).push(edge.source);
+      }
+    });
+
+    // 节点输出映射
+    const nodeOutputs = new Map();
+    nodeOutputs.set('system', {
+      userId: null, // TODO: 从task获取
+      timestamp: new Date().toISOString(),
+    });
+    nodeOutputs.set('form', inputData);
+
+    // 找到start节点
+    const startNode = nodes.find(n => n.type === 'start');
+    if (!startNode) {
+      throw new Error('Pipeline必须包含start节点');
+    }
+
+    logger.info(`[PipelineEngine] 开始图遍历 startNode=${startNode.id} taskId=${taskId}`);
+
+    // 从start节点开始遍历
+    await this.executeNode(taskId, startNode, nodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+
+    // 查找end节点获取最终输出
+    const endNode = nodes.find(n => n.type === 'end');
+    if (endNode && nodeOutputs.has(endNode.id)) {
+      return nodeOutputs.get(endNode.id);
+    }
+
+    // 如果没有end节点，返回最后执行的节点输出
+    const lastNodeId = Array.from(nodeOutputs.keys()).pop();
+    return nodeOutputs.get(lastNodeId) || {};
+  }
+
+  /**
+   * 执行单个节点（递归遍历）(CMS-206)
+   * 艹！支持FORK并行启动，JOIN等待汇合！
+   *
+   * @param {string} taskId - 任务ID
+   * @param {Object} node - 当前节点
+   * @param {Array} allNodes - 所有节点
+   * @param {Map} adjacencyMap - 邻接表
+   * @param {Map} reverseAdjacencyMap - 反向邻接表
+   * @param {Map} nodeOutputs - 节点输出映射
+   * @returns {Promise<Object>} 节点输出
+   */
+  async executeNode(taskId, node, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs) {
+    // 如果已经执行过，直接返回缓存结果
+    if (nodeOutputs.has(node.id)) {
+      return nodeOutputs.get(node.id);
+    }
+
+    logger.info(`[PipelineEngine] 执行节点 nodeId=${node.id} type=${node.type}`);
+
+    // 特殊节点类型处理
+    if (node.type === 'start') {
+      // start节点不执行，直接标记为已完成
+      nodeOutputs.set(node.id, {});
+
+      // 递归执行下游节点
+      const nextNodeIds = adjacencyMap.get(node.id) || [];
+      for (const nextNodeId of nextNodeIds) {
+        const nextNode = allNodes.find(n => n.id === nextNodeId);
+        if (nextNode) {
+          await this.executeNode(taskId, nextNode, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+        }
+      }
+
+      return {};
+    }
+
+    if (node.type === 'end') {
+      // end节点：汇总所有上游输出
+      const upstreamNodeIds = reverseAdjacencyMap.get(node.id) || [];
+      const upstreamOutputs = {};
+
+      upstreamNodeIds.forEach(upstreamId => {
+        if (nodeOutputs.has(upstreamId)) {
+          upstreamOutputs[upstreamId] = nodeOutputs.get(upstreamId);
+        }
+      });
+
+      nodeOutputs.set(node.id, upstreamOutputs);
+      return upstreamOutputs;
+    }
+
+    // 🔥 FORK节点：并行启动所有下游分支
+    if (node.type === 'fork') {
+      const branches = node.data?.branches || 2;
+      const nextNodeIds = adjacencyMap.get(node.id) || [];
+
+      logger.info(`[PipelineEngine] FORK节点 ${node.id} 启动${nextNodeIds.length}个并行分支`);
+
+      // 并行执行所有分支
+      const branchPromises = nextNodeIds.map(async (nextNodeId) => {
+        const nextNode = allNodes.find(n => n.id === nextNodeId);
+        if (nextNode) {
+          return await this.executeNode(taskId, nextNode, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+        }
+        return null;
+      });
+
+      const branchResults = await Promise.all(branchPromises);
+
+      // FORK节点输出所有分支结果
+      const forkOutput = {
+        branches: branchResults.filter(r => r !== null),
+      };
+
+      nodeOutputs.set(node.id, forkOutput);
+      return forkOutput;
+    }
+
+    // 🔥 JOIN节点：根据策略等待分支汇合
+    if (node.type === 'join') {
+      const strategy = node.data?.strategy || 'ALL';
+      const upstreamNodeIds = reverseAdjacencyMap.get(node.id) || [];
+
+      logger.info(`[PipelineEngine] JOIN节点 ${node.id} 策略=${strategy} 等待${upstreamNodeIds.length}个分支`);
+
+      // 确保所有上游节点已执行
+      const upstreamPromises = upstreamNodeIds.map(async (upstreamId) => {
+        const upstreamNode = allNodes.find(n => n.id === upstreamId);
+        if (upstreamNode && !nodeOutputs.has(upstreamId)) {
+          return await this.executeNode(taskId, upstreamNode, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+        }
+        return nodeOutputs.get(upstreamId);
+      });
+
+      let joinResult;
+
+      if (strategy === 'ALL') {
+        // 等待所有分支完成
+        const allResults = await Promise.all(upstreamPromises);
+        joinResult = { all: allResults };
+      } else if (strategy === 'ANY' || strategy === 'FIRST') {
+        // 任一分支完成即可
+        const firstResult = await Promise.race(upstreamPromises);
+        joinResult = { first: firstResult };
+      } else {
+        throw new Error(`未知的JOIN策略: ${strategy}`);
+      }
+
+      nodeOutputs.set(node.id, joinResult);
+
+      // 继续执行下游节点
+      const nextNodeIds = adjacencyMap.get(node.id) || [];
+      for (const nextNodeId of nextNodeIds) {
+        const nextNode = allNodes.find(n => n.id === nextNodeId);
+        if (nextNode) {
+          await this.executeNode(taskId, nextNode, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+        }
+      }
+
+      return joinResult;
+    }
+
+    // 普通节点（provider/condition/postProcess等）
+    // 获取上游节点输出作为输入
+    const upstreamNodeIds = reverseAdjacencyMap.get(node.id) || [];
+    const inputData = {};
+
+    upstreamNodeIds.forEach(upstreamId => {
+      if (nodeOutputs.has(upstreamId)) {
+        Object.assign(inputData, nodeOutputs.get(upstreamId));
+      }
+    });
+
+    // 添加系统变量和表单数据
+    Object.assign(inputData, {
+      system: nodeOutputs.get('system'),
+      form: nodeOutputs.get('form'),
+    });
+
+    // 执行节点（调用Provider）
+    const stepConfig = {
+      taskId,
+      stepIndex: nodes.indexOf(node),
+      type: node.type,
+      providerRef: node.data?.providerRef || '',
+      timeout: node.data?.timeout || 30000,
+      retryPolicy: node.data?.retry_policy || {},
+    };
+
+    const stepResult = await this.executeStep(stepConfig, inputData);
+
+    if (!stepResult.success) {
+      throw new Error(`节点${node.id}执行失败: ${stepResult.error}`);
+    }
+
+    // 保存节点输出
+    nodeOutputs.set(node.id, stepResult.output);
+
+    // 继续执行下游节点
+    const nextNodeIds = adjacencyMap.get(node.id) || [];
+    for (const nextNodeId of nextNodeIds) {
+      const nextNode = allNodes.find(n => n.id === nextNodeId);
+      if (nextNode && !nodeOutputs.has(nextNodeId)) {
+        await this.executeNode(taskId, nextNode, allNodes, adjacencyMap, reverseAdjacencyMap, nodeOutputs);
+      }
+    }
+
+    return stepResult.output;
+  }
+
+  /**
+   * 执行单个步骤
+   * @param {Object} stepConfig - 步骤配置
+   * @param {Object} input - 输入数据
+   * @returns {Promise<Object>} {success, output, error}
+   */
+  async executeStep(stepConfig, input) {
+    const { taskId, stepIndex, type, providerRef, timeout, retryPolicy } = stepConfig;
+
+    try {
+      // 更新步骤状态为processing
+      await db('task_steps')
+        .where({ task_id: taskId, step_index: stepIndex })
+        .update({
+          status: 'processing',
+          input: JSON.stringify(input),
+          started_at: new Date()
+        });
+
+      // 根据type调用对应的provider（艹，现在是async了！）
+      let provider;
+      try {
+        provider = await this.getProvider(type, providerRef);
+      } catch (error) {
+        logger.error(`[PipelineEngine] Provider加载失败 type=${type} ref=${providerRef}`);
+        throw error;
+      }
+
+      // 🔥 使用新的Provider接口（ExecContext）
+      // 艹，BaseProvider已经内置了重试机制，所以这里不需要手动重试了！
+
+      // 构建执行上下文
+      const context = {
+        taskId,
+        input,
+        timeout,
+        metadata: {
+          stepIndex,
+          type,
+          providerRef,
+        },
+      };
+
+      // 执行Provider（BaseProvider内部会处理重试、超时、日志）
+      const result = await provider.execute(context);
+
+      // 检查执行结果
+      if (!result.success) {
+        // 执行失败，抛出错误
+        const errorMessage = result.error?.message || '执行失败';
+        const error = new Error(errorMessage);
+        error.code = result.error?.code;
+        error.details = result.error?.details;
+        throw error;
+      }
+
+      // 成功，更新步骤状态
+      await db('task_steps')
+        .where({ task_id: taskId, step_index: stepIndex })
+        .update({
+          status: 'completed',
+          output: JSON.stringify(result.data),
+          completed_at: new Date()
+        });
+
+      return { success: true, output: result.data };
+
+    } catch (error) {
+      // 更新步骤状态为failed
+      await db('task_steps')
+        .where({ task_id: taskId, step_index: stepIndex })
+        .update({
+          status: 'failed',
+          error_message: error.message,
+          completed_at: new Date()
+        });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 获取Provider实例（使用新的ProviderLoader）
+   * @param {string} type - Provider类型
+   * @param {string} providerRef - Provider引用（预留，暂未使用）
+   * @returns {Promise<Object>} Provider实例
+   *
+   * 艹，这个方法已经重构为使用ProviderLoader白名单机制！
+   * 不再硬编码Provider映射，符合开闭原则（SOLID-O）
+   */
+  async getProvider(type, providerRef) {
+    try {
+      // 🔥 使用ProviderLoader动态加载Provider（白名单+缓存）
+      const { providerLoader } = require('../providers/provider-loader');
+      const provider = await providerLoader.loadProvider(type);
+
+      logger.info(`[PipelineEngine] Provider加载成功 type=${type} name=${provider.name}`);
+      return provider;
+
+    } catch (error) {
+      logger.error(
+        `[PipelineEngine] Provider加载失败 type=${type} error=${error.message}`,
+        { type, providerRef, errorCode: error.code }
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 处理Pipeline成功
+   * @param {string} taskId - 任务ID
+   * @param {Object} finalOutput - 最终输出结果
+   */
+  async handlePipelineSuccess(taskId, finalOutput) {
+    try {
+      const updateData = {
+        status: 'success',
+        artifacts: JSON.stringify(finalOutput),
+        completed_at: new Date(),
+        updated_at: new Date()
+      };
+
+      // 如果final output包含resultUrls,保存到旧字段兼容
+      if (finalOutput.resultUrls) {
+        updateData.resultUrls = JSON.stringify(finalOutput.resultUrls);
+      }
+
+      await db('tasks')
+        .where('id', taskId)
+        .update(updateData);
+
+      logger.info(`[PipelineEngine] 任务成功完成 taskId=${taskId}`);
+
+    } catch (error) {
+      logger.error(`[PipelineEngine] 更新任务成功状态失败 taskId=${taskId}`, error);
+    }
+  }
+
+  /**
+   * 处理Pipeline失败
+   * @param {string} taskId - 任务ID
+   * @param {string} featureId - 功能ID
+   * @param {number} failedStepIndex - 失败的步骤索引
+   * @param {string} errorMessage - 错误信息
+   */
+  async handlePipelineFailure(taskId, featureId, failedStepIndex, errorMessage) {
+    try {
+      // 1. 更新任务状态为failed
+      await db('tasks')
+        .where('id', taskId)
+        .update({
+          status: 'failed',
+          error_message: errorMessage,
+          errorReason: `步骤${failedStepIndex + 1}执行失败`,
+          completed_at: new Date(),
+          updated_at: new Date()
+        });
+
+      // 2. 获取任务信息用于返还配额
+      const task = await db('tasks').where('id', taskId).first();
+      if (!task) {
+        logger.error(`[PipelineEngine] 任务不存在 taskId=${taskId}`);
+        return;
+      }
+
+      // 3. 获取功能定义,返还配额
+      const feature = await db('feature_definitions')
+        .where('feature_id', featureId)
+        .first();
+
+      if (feature && task.userId) {
+        // 🔥 修复参数顺序：taskId在前，userId在后
+        const result = await quotaService.refund(
+          taskId,
+          task.userId,
+          feature.quota_cost,
+          `Pipeline失败返还:${taskId}`
+        );
+
+        if (result.refunded) {
+          logger.info(
+            `[PipelineEngine] 配额已返还 taskId=${taskId} ` +
+            `userId=${task.userId} amount=${feature.quota_cost}`
+          );
+        }
+      }
+
+      logger.error(
+        `[PipelineEngine] Pipeline执行失败 taskId=${taskId} ` +
+        `failedStep=${failedStepIndex} error=${errorMessage}`
+      );
+
+    } catch (error) {
+      logger.error(`[PipelineEngine] 处理Pipeline失败异常 taskId=${taskId}`, error);
+    }
+  }
+
+  /**
+   * 超时Promise辅助函数
+   * @param {number} ms - 超时毫秒数
+   * @param {string} message - 超时错误信息
+   */
+  timeout(ms, message) {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    });
+  }
+
+  /**
+   * 延迟函数
+   * @param {number} ms - 延迟毫秒数
+   */
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+module.exports = new PipelineEngine();

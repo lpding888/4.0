@@ -5,6 +5,8 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    // "exactOptionalPropertyTypes": true, // 艹，太严格了，暂时关闭！
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",

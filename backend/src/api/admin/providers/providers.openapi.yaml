@@ -1,0 +1,403 @@
+openapi: 3.0.3
+info:
+  title: Provider管理API
+  description: |
+    艹，这个tm是Provider配置管理的后台API！
+    支持CRUD操作、凭证加密存储、连接测试和审计日志。
+  version: 1.0.0
+
+paths:
+  /admin/providers:
+    get:
+      summary: 列出所有Provider端点
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: auth_type
+          in: query
+          description: 按认证类型过滤
+          schema:
+            type: string
+            enum: [api_key, bearer, basic, oauth2]
+      responses:
+        '200':
+          description: 成功返回Provider列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProviderEndpoint'
+                      total:
+                        type: integer
+                        example: 10
+                      limit:
+                        type: integer
+                        example: 100
+                      offset:
+                        type: integer
+                        example: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: 创建Provider端点
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderInput'
+      responses:
+        '201':
+          description: Provider创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ProviderEndpoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Provider引用ID已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/providers/{provider_ref}:
+    get:
+      summary: 获取单个Provider端点
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRef'
+      responses:
+        '200':
+          description: 成功返回Provider详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ProviderEndpoint'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: 更新Provider端点
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRef'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderInput'
+      responses:
+        '200':
+          description: Provider更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ProviderEndpoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 删除Provider端点
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRef'
+      responses:
+        '200':
+          description: Provider删除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Provider端点已删除
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/providers/{provider_ref}/test-connection:
+    post:
+      summary: 测试Provider连接
+      description: |
+        艹，这个tm用来验证Provider配置是否正确！
+        会调用Provider的healthCheck方法。
+      tags: [Provider管理]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRef'
+      responses:
+        '200':
+          description: 连接测试结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      healthy:
+                        type: boolean
+                        example: true
+                      message:
+                        type: string
+                        example: Provider连接正常
+                      tested_at:
+                        type: string
+                        format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProviderRef:
+      name: provider_ref
+      in: path
+      required: true
+      description: Provider引用ID
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]+$'
+        minLength: 1
+        maxLength: 100
+
+  schemas:
+    ProviderEndpoint:
+      type: object
+      properties:
+        provider_ref:
+          type: string
+          example: webhook-prod-001
+          description: Provider引用ID（唯一标识）
+        provider_name:
+          type: string
+          example: 生产环境Webhook
+          description: Provider名称
+        endpoint_url:
+          type: string
+          format: uri
+          example: https://api.example.com/webhook
+          description: 端点URL
+        credentials_encrypted:
+          type: object
+          description: 凭证（已解密，敏感信息！）
+          example:
+            apiKey: sk-xxxxxxxxxxxxx
+            apiSecret: secret-xxxxxxxxxxxxx
+        auth_type:
+          type: string
+          enum: [api_key, bearer, basic, oauth2]
+          example: api_key
+          description: 认证类型
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - provider_ref
+        - provider_name
+        - endpoint_url
+        - credentials_encrypted
+        - auth_type
+
+    CreateProviderInput:
+      type: object
+      properties:
+        provider_ref:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 1
+          maxLength: 100
+          example: webhook-prod-001
+          description: Provider引用ID（唯一标识）
+        provider_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: 生产环境Webhook
+          description: Provider名称
+        endpoint_url:
+          type: string
+          format: uri
+          maxLength: 500
+          example: https://api.example.com/webhook
+          description: 端点URL
+        credentials:
+          type: object
+          description: 凭证（明文，会被自动加密存储）
+          example:
+            apiKey: sk-xxxxxxxxxxxxx
+            apiSecret: secret-xxxxxxxxxxxxx
+        auth_type:
+          type: string
+          enum: [api_key, bearer, basic, oauth2]
+          example: api_key
+          description: 认证类型
+      required:
+        - provider_ref
+        - provider_name
+        - endpoint_url
+        - credentials
+        - auth_type
+
+    UpdateProviderInput:
+      type: object
+      properties:
+        provider_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Provider名称
+        endpoint_url:
+          type: string
+          format: uri
+          maxLength: 500
+          description: 端点URL
+        credentials:
+          type: object
+          description: 凭证（明文，会被自动加密存储）
+        auth_type:
+          type: string
+          enum: [api_key, bearer, basic, oauth2]
+          description: 认证类型
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: 输入数据验证失败
+            details:
+              type: object
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: 未授权（未登录或token无效）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: 禁止访问（权限不足）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

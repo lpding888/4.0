@@ -1,0 +1,67 @@
+{
+  "角色": "QA Acceptance",
+  "职责": "负责E2E测试、性能测试与质量验收",
+  "对应Skills手册": "skills/qa_acceptance_skill/",
+  "任务数量": 2,
+  "任务列表": [
+    {
+      "taskId": "CMS-504",
+      "module": "测试与优化",
+      "title": "关键路径 E2E（创建Feature→试跑→发布→前台可见）",
+      "phase": "Week 3",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-106",
+        "CMS-208",
+        "CMS-306",
+        "CMS-405"
+      ],
+      "description": "使用 Playwright 编写端到端测试：从新建Feature到试跑、发布、前台展示的全流程。",
+      "technicalRequirements": [
+        "Mock 外部Provider与真实模式切换",
+        "CI可运行"
+      ],
+      "acceptanceCriteria": [
+        "E2E 通过率100%（稳定环境）",
+        "失败截图/视频产出"
+      ],
+      "codeLocations": [
+        "tests/e2e/feature-create.spec.ts"
+      ],
+      "testStrategy": [
+        "E2E：多数据集"
+      ],
+      "aiPromptSuggestion": "编写 Playwright E2E：自动化从创建Feature到发布与前台展示的流程，支持截图录像。"
+    },
+    {
+      "taskId": "CMS-505",
+      "module": "测试与优化",
+      "title": "性能基线与回归（缓存命中率/拓扑验证耗时）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-501",
+        "CMS-204"
+      ],
+      "description": "采集并输出两项核心指标：配置读取缓存命中率与拓扑验证耗时，作为性能基线。",
+      "technicalRequirements": [
+        "metrics.ts 输出到控制台与日志",
+        "简单图表（前端页面可选）"
+      ],
+      "acceptanceCriteria": [
+        "提供基线数值与建议阈值",
+        "后续优化可对比"
+      ],
+      "codeLocations": [
+        "backend/src/utils/metrics.ts",
+        "frontend/app/admin/metrics/page.tsx"
+      ],
+      "testStrategy": [
+        "手测 + 单测"
+      ],
+      "aiPromptSuggestion": "采集并展示缓存命中率与拓扑验证耗时，输出基线与阈值，并在页面展示。"
+    }
+  ]
+}

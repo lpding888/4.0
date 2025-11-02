@@ -1,0 +1,1976 @@
+下面给出**方案A（完全自研）**的**技术实施规划**与**AI任务卡清单**。内容围绕你当前栈（Next.js 14 / React 18 / TypeScript / AntD + Express + Knex + MySQL + Redis + COS + PM2）展开，强调在**4C/4G 单机**上保持**高可用、可扩展、可回退**。你可以把“任务卡（Task Cards）”直接交给 Claude Code / Cursor / GPT-5 Pro 执行。
+
+---
+
+## 目录
+
+1. 技术架构设计
+
+* 1.1 总览架构（读写分离、配置快照、缓存与失效）
+* 1.2 表单设计器方案（Form.io 前端库 vs 完全自研）与推荐
+* 1.3 Pipeline 流程编辑器（React Flow 集成、节点/连线、数据结构与校验）
+* 1.4 Provider 动态加载机制（安全白名单、泛化 Provider、库存化）
+* 1.5 Prompt 变量引擎与 Monaco 集成（变量/预览/补全/安全）
+* 1.6 前端动态表单渲染与性能（react-hook-form、分步、虚拟化、双端校验）
+
+2. 数据库设计评审与改进
+
+* 2.1 新增/优化表结构与索引建议
+* 2.2 迁移与初始化数据策略
+
+3. 工作量拆解与时间表
+
+* 3.1 任务颗粒度（每项 4–12 小时）与依赖
+* 3.2 按周实施计划（Week 1–3/4）
+* 3.3 MVP 范围与分级迭代（P0/P1/P2）
+* 3.4 降级策略（快照/只读缓存/默认值）
+
+4. 技术风险与应对
+
+* 4.1 开源库与许可、性能与安全
+* 4.2 1 人研发的组织性风险与缓解
+* 4.3 业务连续性（故障影响、回滚）
+
+5. AI 开发任务卡（**≥ 36 张**，含依赖 / 验收标准 / Prompt）
+
+* Provider 管理（8 张）
+* 表单设计器（10 张）
+* 流程编辑器（10 张）
+* Prompt 管理（6 张）
+* 内容管理（8 张）
+* 缓存与实时更新 & 测试（5 张）
+
+---
+
+## 1) 技术架构设计
+
+### 1.1 总览架构
+
+**目标**：把 CMS（写路径）与运行期（读路径）强隔离；把“动态性”集中到“**配置数据**”而不是“**动态代码**”。
+
+* **写路径（/admin 管理）**
+  Next.js Admin UI → Express API（/admin/\*）→ MySQL（主存）
+
+  * 写入成功后：
+
+    1. 写**审计表**与**版本号**；
+    2. 生成**配置快照 JSON**（同库 `config_snapshots` 或落盘 `/data/snapshots`）
+    3. 通过 **Redis Pub/Sub** 发布“cfg\:invalidate”消息（含 keys & versions）。
+
+* **读路径（运行期）**
+  Pipeline 引擎（Express 服务内模块） → 优先读 **Local LRU Cache** → Miss → **Redis** → Miss → **快照 JSON** → Miss → **DB** → **内置默认值**。
+
+  * 收到 Pub/Sub 后**精准失效**，主动刷新 Redis 与本地 LRU。
+  * **只读化**运行期：即使 DB 或 Admin 崩溃，运行期仍可用（快照兜底）。
+
+* **模块边界**
+
+  * **Feature 管理**：组合 `form_schema + pipeline_schema + 权限/配额`。
+  * **Provider 管理**：以“**泛化 Provider**（Generic HTTP/GraphQL/gRPC/SCF）+ 专用 Provider（TencentCI/RunningHub）”为主，**白名单注册**，避免 DB 注入执行。
+  * **Prompt 管理**：模板 + 变量 + 版本 + 预览/测试。
+  * **内容管理**：公告、轮播、套餐、文案等通用 CRUD。
+
+> **关键点**
+>
+> * 所有“动态行为”均由**配置驱动**（JSON），而非从 DB 载入可执行代码。
+> * **快照优先** + **Redis 一致性** + **版本号**确保可回滚、可追溯、无“热更新风暴”。
+
+---
+
+### 1.2 表单设计器技术方案
+
+**方案A：Form.io 前端库（react-formio / formio.js）只用“前端构建器 + 渲染器”**
+
+* **优点**：开箱拖拽、组件丰富、导出 JSON、你可编写“FormioSchema → 统一表单 Schema（UFS）”的**适配器**，继续沿用现有动态渲染逻辑。
+* **风险/坑**：
+
+  * SSR 环境下需 `next/dynamic` + `ssr: false`；
+  * 避免使用其“Premium”组件（保持 MIT 路径）；
+  * Formio JSON 较冗长，需**适配层**抽取你所需字段。
+* **适用**：最快成型、最短学习曲线。
+
+**方案B：完全自研拖拽表单**（react-beautiful-dnd / dnd-kit + AntD + react-hook-form）
+
+* **优点**：一致性最佳、深度可控；
+* **缺点**：工作量大（拖拽、网格、组件库、验证器、Schema 定义/导入导出）；
+* **适用**：中长期可考虑，但不建议用于本次 2–4 周周期的 MVP。
+
+**推荐**：**方案A + UFS 适配层**。
+
+* 原因：你已有动态渲染与 JSON Schema 存储，注重灵活与速度；Form.io 前端库只作为**可视化建模器**。
+
+\*\*统一表单 Schema（UFS）\*\*示例（覆盖 10 类字段）：
+
+```json
+{
+  "version": 1,
+  "title": "AI抠图配置表单",
+  "layout": { "columns": 1, "steps": ["基础", "高级"] },
+  "fields": [
+    { "type": "image", "key": "input_image", "label": "输入图片", "required": true, "help": "上传JPG/PNG", "accept": ["image/jpeg","image/png"], "maxSizeMB": 10, "step": "基础" },
+    { "type": "text", "key": "title", "label": "标题", "placeholder": "给这次任务起个名字", "required": true, "minLength": 2, "maxLength": 50, "step": "基础" },
+    { "type": "number", "key": "width", "label": "输出宽度", "default": 1024, "min": 64, "max": 4096, "step": "高级" },
+    { "type": "number", "key": "height", "label": "输出高度", "default": 1024, "min": 64, "max": 4096, "step": "高级" },
+    { "type": "select", "key": "format", "label": "输出格式", "options": [{"label":"PNG","value":"png"},{"label":"JPG","value":"jpg"}], "default": "png", "step": "高级" },
+    { "type": "radio", "key": "bg", "label": "背景", "options": [{"label":"透明","value":"transparent"},{"label":"白色","value":"white"}], "default": "transparent", "step": "基础" },
+    { "type": "checkbox", "key": "enhance", "label": "开启增强", "default": true, "step": "高级" },
+    { "type": "slider", "key": "denoise", "label": "去噪强度", "min": 0, "max": 100, "default": 30, "step": "高级" },
+    { "type": "color", "key": "bg_color", "label": "背景色(当选择白色时)", "default": "#ffffff", "visibleWhen": { "bg": "white" }, "step": "高级" },
+    { "type": "date", "key": "expire_date", "label": "过期日期", "step": "高级" },
+    { "type": "textarea", "key": "notes", "label": "备注", "maxLength": 200, "step": "基础" }
+  ],
+  "validation": {
+    "crossRules": [
+      { "when": { "format": "jpg" }, "then": [{ "field": "bg", "allowed": ["white"] }] }
+    ]
+  }
+}
+```
+
+> 注：Form.io 的 `components[]` 通过**适配器**映射到 `fields[]`。存库仍以 **UFS** 为准，避免对第三方 JSON 结构的硬依赖。
+
+**Form.io → UFS 适配器**要点
+
+* 仅支持你白名单中的 10 类组件；
+* 把高级属性（校验/可视化）落为统一键；
+* 生成 `version` 与 `steps`（分步渲染）。
+
+---
+
+### 1.3 Pipeline 流程编辑器（React Flow）
+
+**节点类型（可扩展）**
+
+* `API_CALL`（泛化 HTTP/GraphQL/gRPC）
+* `PROVIDER`（TencentCI / RunningHub / GenericHTTP / SCF）
+* `CONDITION`（分支）
+* `PARALLEL`（并行开始/并行汇合 `FORK`/`JOIN`）
+* `POST_PROCESS`（图像二次处理、SCF）
+* `END`（流程出口）
+
+**数据结构**（Pipeline Schema v1）：
+
+```json
+{
+  "version": 1,
+  "name": "ai-remove-bg",
+  "vars": {
+    "global": { "userId":"{{user.id}}", "requestId":"{{request.id}}" }
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "PROVIDER",
+      "label": "上传到COS",
+      "providerRefId": 101,            // provider_endpoints.id
+      "handlerKey": "TENCENT_CI",      // 白名单
+      "timeoutMs": 20000,
+      "retry": { "max": 2, "backoff": "exponential", "initialDelayMs": 500 },
+      "in": { "image": "{{form.input_image}}" },
+      "out": { "cosKey": "{{result.key}}", "url": "{{result.url}}" }
+    },
+    {
+      "id": "n2",
+      "type": "CONDITION",
+      "label": "是否增强",
+      "expr": "{{form.enhance}} === true"
+    },
+    {
+      "id": "n3",
+      "type": "PROVIDER",
+      "label": "AI去噪",
+      "providerRefId": 202,
+      "handlerKey": "RUNNINGHUB",
+      "timeoutMs": 30000,
+      "retry": { "max": 1 },
+      "in": { "url": "{{n1.url}}", "denoise": "{{form.denoise}}" },
+      "out": { "enhancedUrl": "{{result.url}}" }
+    },
+    {
+      "id": "n4",
+      "type": "POST_PROCESS",
+      "label": "SCF 后处理",
+      "providerRefId": 303,
+      "handlerKey": "SCF",
+      "in": { "input": "{{n3.enhancedUrl || n1.url}}", "format":"{{form.format}}" },
+      "out": { "finalUrl": "{{result.url}}" }
+    },
+    { "id": "end", "type": "END", "label":"结束" }
+  ],
+  "edges": [
+    { "id": "e12t", "from": "n1", "to": "n2" },
+    { "id": "e2t3", "from": "n2", "to": "n3", "when": "true" },
+    { "id": "e2f4", "from": "n2", "to": "n4", "when": "false" },
+    { "id": "e34", "from": "n3", "to": "n4" },
+    { "id": "e4e", "from": "n4", "to": "end" }
+  ],
+  "onError": { "policy": "FAIL_FAST", "compensate": false }
+}
+```
+
+**前端交互**
+
+* 右侧**抽屉式侧边栏**（推荐）作为**节点配置面板**，支持：Provider 选择、超时/重试、入参绑定（变量选择器）、出参映射（命名建议）。
+* React Flow 的 **minimap** + **对齐线** + **吸附** + **右键菜单**。
+* 预览/校验按钮：显示**拓扑合法性、未绑定变量、未命名输出**等。
+
+**合法性验证算法**
+
+* **循环依赖检测**：对 `edges` 做 **Kahn 拓扑排序**，若剩余 `nodes > 0` 则存在环；
+* **入度约束**：`END` ≥ 1 入度；`FORK`/`JOIN`按类型校验；
+* **条件边检查**：`CONDITION` 节点**必须**存在 `true|false` 两条边（或显式策略）；
+* **变量可达性**：对每个节点 `in` 的 `{{ref}}` 做**数据血缘分析**，确认来源于 `form` 或前序节点 `out`；
+* **Provider 可用性**：`providerRefId` 必须处于 `enabled` 且健康（或提示风险）。
+* **输出覆盖**：同名输出变量**不可被后续节点重复定义**（或定义为允许覆盖的 Key 集）。
+
+**测试运行器（Admin 内）**
+
+* 输入 **UFS 表单数据样例** → 一键试跑：
+
+  * 路由：`POST /admin/pipelines/:id/test`
+  * 隔离的“**模拟执行上下文**”（不计配额），支持真实外部调用或**Mock 模式**。
+  * 收集 Step 级日志与耗时，回显到 UI。
+
+---
+
+### 1.4 Provider 动态加载机制（**安全版**）
+
+**核心原则**
+
+* **不从 DB 加载可执行代码**；
+* DB 仅决定“**使用哪个白名单 Handler + 参数**”（如 `GENERIC_HTTP`, `RUNNINGHUB`, `TENCENT_CI`, `SCF` 等）；
+* 新增供应商 **无需改 Pipeline 引擎**：
+
+  * 若是 REST/GraphQL/gRPC，可用 **Generic Handler** 通过**请求模板**配置；
+  * 若需定制逻辑，走 **SCF**（云函数）作为“扩展点”（动态变更在云端，平台安全边界清晰）。
+
+**IProvider（TypeScript）**
+
+```ts
+export type RetryPolicy = { max: number; backoff?: 'none'|'exponential'; initialDelayMs?: number; };
+export type ExecResult = { ok: boolean; result?: any; error?: { code: string; message: string; details?: any } };
+
+export interface ExecContext {
+  requestId: string;
+  attempt: number;
+  signal: AbortSignal;
+  logger: { debug: Function; info: Function; warn: Function; error: Function; };
+  kv: { get: (k:string)=>Promise<string|null>; set: (k:string,v:string,ttl?:number)=>Promise<void> };
+  secrets: { get: (k:string)=>Promise<string|null> };
+}
+
+export interface IProvider {
+  key: string;                                   // 'GENERIC_HTTP' | 'RUNNINGHUB' | ...
+  validate(params: unknown): { valid: true } | { valid: false; issues: string[] };
+  execute(params: Record<string, any>, ctx: ExecContext): Promise<ExecResult>;
+  healthcheck?(endpoint: any): Promise<{ ok: boolean; latencyMs?: number; message?: string }>;
+}
+```
+
+**ProviderLoader（伪代码）**
+
+```ts
+// provider-loader.ts
+const ALLOW_LIST: Record<string, () => Promise<IProvider>> = {
+  GENERIC_HTTP: async () => (await import('./handlers/generic-http')).provider,
+  GENERIC_GRAPHQL: async () => (await import('./handlers/generic-graphql')).provider,
+  GENERIC_GRPC: async () => (await import('./handlers/generic-grpc')).provider,
+  TENCENT_CI: async () => (await import('./handlers/tencent-ci')).provider,
+  RUNNINGHUB: async () => (await import('./handlers/runninghub')).provider,
+  SCF: async () => (await import('./handlers/scf')).provider
+};
+
+const cache = new Map<string, IProvider>();
+
+export async function loadProvider(handlerKey: string): Promise<IProvider> {
+  if (!ALLOW_LIST[handlerKey]) throw new Error(`Handler not allowed: ${handlerKey}`);
+  if (cache.has(handlerKey)) return cache.get(handlerKey)!;
+  const prov = await ALLOW_LIST[handlerKey]();
+  cache.set(handlerKey, prov);
+  return prov;
+}
+```
+
+**`provider_endpoints` 表（建议）**
+
+```sql
+ALTER TABLE provider_endpoints
+  ADD COLUMN provider_key VARCHAR(64) NOT NULL,             -- e.g. 'GENERIC_HTTP','TENCENT_CI'
+  ADD COLUMN handler_version VARCHAR(32) DEFAULT '1',
+  ADD COLUMN auth JSON NULL,                                -- { method:'api_key'|'oauth2'|'hmac', ... }
+  ADD COLUMN req_template JSON NULL,                        -- For GENERIC_*: { method,url,headers,body,extractPath }
+  ADD COLUMN timeout_ms INT DEFAULT 20000,
+  ADD COLUMN retry_policy JSON DEFAULT JSON_OBJECT('max',1),
+  ADD COLUMN status ENUM('enabled','disabled') DEFAULT 'enabled',
+  ADD COLUMN last_health_at DATETIME NULL,
+  ADD COLUMN deleted TINYINT(1) DEFAULT 0,
+  ADD INDEX idx_provider_key_status (provider_key, status),
+  ADD UNIQUE KEY uniq_provider_name (name);
+```
+
+**安全性**
+
+* **密钥加密**：`auth` 中敏感字段使用 **AES-256-GCM** 应用层加密（主密钥放 env），新增 `encrypted_credentials` 字段可保留，统一在 Provider 读取时解密。
+* **模板渲染**：`req_template` 的变量由 Pipeline 引擎在**沙箱变量表**中替换（不执行表达式）。
+* **健康检查**：后台定期调用 `healthcheck()`，写 `last_health_at`，供 UI 告警。
+* **审计**：所有变更写 `provider_audit_logs`。
+
+---
+
+### 1.5 Prompt 变量引擎与 Monaco 集成
+
+**选型**：**Handlebars.js（受限模式）**
+
+* 理由：支持 `#if/#each` 等结构，语义清晰；通过**白名单 helpers**与**默认转义**避免注入。
+* 备选：Mustache（更轻、更“无逻辑”），但复杂场景需更多拼接。
+
+**变量提示**
+
+* 在 Monaco 注册 `CompletionItemProvider`：扫描当前内容的 `{{var}}` 模式；
+* 变量来源：`form.*`、`pipeline.*`、`system.*`、`user.*`、`node.*`（测试运行器提供样例上下文）。
+* 侧边栏显示“**已解析变量表**”，标红“未提供值”的变量。
+
+**实时预览**
+
+* 前端：输入变量 JSON → 调`POST /admin/prompts/preview`；
+* 后端：在受限环境渲染（禁止自定义 `eval` / `Function`），返回渲染结果与“缺失变量列表”。
+
+**数据结构**
+
+* `system_configs` 扩展：`category='prompt' | 'copy' | ...`、`variables`（JSON）、`description`、`version`。
+* 可选表 `prompt_versions(prompt_id, version, diff, created_by, created_at, content)`。
+
+---
+
+### 1.6 前端动态表单渲染与性能
+
+**react-hook-form（RHF） vs Formik**
+
+* **RHF 推荐**：少渲染、原生注册、性能更优；与 AntD 控件搭配成熟。
+* **Formik**：API 直观，但在大表单下重渲染明显。
+
+**性能策略**
+
+* **分步渲染**（Step Wizard）：同屏字段 ≤ 12；
+* **虚拟滚动**：大列表/选项用 `react-window`；
+* **惰性注册**：切步才注册字段；
+* **受控/非受控混用**：图片/颜色选择器可保留内部状态；
+* **规则复用**：把 UFS 的规则映射为 RHF 的 `register` + 后端 Zod 校验（同源定义）。
+
+**双端校验**
+
+* `validation` 使用 **Zod**（或自定义规则）在**后端共享**一份定义（通过 `@yourorg/shared/validation`）。
+* 提交 → 后端再校验（防穿透），报错结构保持一致（field-level 错误）。
+
+---
+
+## 2) 数据库设计评审与改进
+
+### 2.1 新表/改表建议
+
+**1) `announcements`**
+
+* 建议新增：`tenant_id`（预留多租户）、`updated_at`、`updated_by`、`is_deleted`（软删）、`priority`（同屏冲突时取高优先级）、`audience_filter`（JSON，灵活表达目标人群）。
+* 索引：`status,publish_at,expire_at`；`tenant_id`；`created_at`。
+
+**2) `banners`**
+
+* 新增：`tenant_id`、`updated_at`、`updated_by`、`is_deleted`、`device`（pc/mobile/both）、`locale`。
+* 索引：`status, publish_at, expire_at, sort_order`。
+
+**3) `membership_plans` / `membership_benefits`**
+
+* 新增：`tenant_id`、`updated_at`、`updated_by`、`is_deleted`、`billing_cycle`（month/quarter/year/custom）、`features_json`（可缓存清单）。
+* 索引：`status, sort_order`；`plan_id, feature_id` 复合唯一。
+
+**4) `system_configs` 扩展**
+
+* 加：`category`、`page`、`locale`、`description`、`version`、`updated_by`、`updated_at`、`is_deleted`。
+* 索引：`category, page, locale`；`key` 唯一；`version` 辅助。
+
+**5) `config_snapshots`（新建）**
+
+```sql
+CREATE TABLE config_snapshots (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  scope ENUM('feature','form','pipeline','provider','system') NOT NULL,
+  ref_id BIGINT NULL,              -- 指向对应资源ID（非必须）
+  key_name VARCHAR(255) NULL,      -- 如 feature.key 或 system_configs.key
+  version INT NOT NULL,
+  json LONGTEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_by VARCHAR(64) NULL
+);
+CREATE INDEX idx_scope_ref ON config_snapshots(scope, ref_id, version);
+CREATE INDEX idx_scope_key ON config_snapshots(scope, key_name, version);
+```
+
+### 2.2 数据迁移策略
+
+1. 用 Knex **增量迁移**：先建表/改表，填充基础数据（从硬编码导出 JSON 导入）。
+2. 为 `feature_definitions` 赋予**稳定 key**（slug），增设 `form_schema_id` / `pipeline_schema_id` 的**显式版本**。
+3. 对已有硬编码 Provider：写入 `provider_endpoints`，设置 `provider_key` 与 `req_template/auth`。
+4. 创建首次 **config\_snapshots**（version = 1），以便立即具备回滚能力。
+
+---
+
+## 3) 工作量拆解与时间表
+
+### 3.1 颗粒度与依赖
+
+* 单任务 4–12 小时，**先内核后界面**，先**安全/缓存/回滚**，再堆 UI。
+* 关键路径：**Provider 动态化 → Pipeline 编辑/执行 → 表单设计器 → Feature 向导 → Prompt 中心 → 内容 CRUD**。
+* 可并行：**内容 CRUD** 与 **Prompt 编辑器**（在 Week 2 下半）可与 Pipeline 验收并行。
+
+### 3.2 按周计划（参考 3 周 + 1 周缓冲）
+
+**Week 1（内核与底座）**
+
+* 数据库迁移（provider 增强、snapshots、新字段）
+* ProviderLoader + 泛化 Provider（GenericHTTP/SCF）
+* Redis 缓存与 Pub/Sub、配置快照读写
+* React Flow / Form.io 前端接入 POC
+* Admin 基础框架（/admin 布局、RBAC 钩子）
+
+**Week 2（核心编辑器与 Feature 向导）**
+
+* Pipeline 编辑器（节点库、侧边栏配置、校验器）
+* 表单设计器（Form.io → UFS 适配器 + 实时预览）
+* Feature 向导（Step1–4）+ 测试运行器（模拟/真实开关）
+* Provider 管理 UI（CRUD、测试连接）
+
+**Week 3（Prompt/内容管理与稳定性）**
+
+* Prompt 中心（Monaco、变量、预览、版本）
+* 内容管理 4 模块 CRUD + COS 上传 + 排序
+* 回归与 E2E（关键路径）
+* 监控与告警（简单日志面板）
+* 压测与缓存命中率观测
+* 预留 2–3 天修整/打磨
+
+**Week 4（可选缓冲）**
+
+* 健康监控面板、更多统计、国际化、多租户预留字段落地
+* 代码整理、文档、演示脚本
+
+### 3.3 MVP 范围（2 周可交付）
+
+* Provider 动态加载（GenericHTTP+SCF+已接入三方）
+* Pipeline 编辑器（基本节点/连线/校验/保存/预览/试跑）
+* 表单设计器（10 类字段 + 适配器 + 预览 + 保存）
+* Feature 向导（Step1–4 发布）
+* Prompt 编辑器（基本渲染与预览）
+* 内容管理（公告/轮播/套餐/文案的基础 CRUD，无复杂审稿流）
+* 缓存/快照/降级策略（只读链路打通）
+
+**P1（优先后续）**：Provider 健康看板、Prompt 版本、内容的拖拽排序与定时、并行/Join 节点、图形化回放。
+**P2**：多租户、i18n、细粒度审计、复杂审批流。
+
+### 3.4 降级策略
+
+* **写失败/DB 挂**：运行期读 **Redis → 快照 → 默认**；Admin 显示“只读模式”。
+* **外部 Provider 不健康**：在测试连接与健康检查中标红，Pipeline 执行走**重试/熔断**策略。
+* **配置误改**：从 `config_snapshots` 一键回滚版本，再次发布并广播失效。
+
+---
+
+## 4) 技术风险与应对
+
+**开源库**
+
+* Form.io 前端库：限制使用**MIT 组件**；SSR 关闭；适配层隔离结构波动。
+* React Flow：注意**重渲染**（`useMemo`/`nodeTypes`稳定引用/局部状态），大图启用**虚拟化/缩略图**。
+* Monaco：`next/dynamic`、仅浏览器加载、避免 SSR 水合警告。
+
+**安全**
+
+* Provider 不执行 DB 注入代码；仅白名单 Handler + 请求模板。
+* `AES-256-GCM` 加密密钥轮换；读写审计；Admin RBAC。
+* Prompt 渲染禁用任意 JS 执行，Handlebars 仅内置 helpers。
+
+**性能**
+
+* 高频配置读：Redis + 本地 LRU，命中率统计；
+* Provider 重试指数退避；
+* 表单/流程编辑懒加载与分步渲染。
+
+**单兵开发风险**
+
+* 严格“**任务卡 → PR → 自动化测试**”；先把**最难的 20%**（Provider 动态化 / Pipeline 校验 / 缓存失效）优先做；
+* 每天固定时间**生成 AI Prompt**，形成推进节奏；
+* 卡住 > 2 小时：最小复现 + 提问 AI（粘贴任务卡上下文与报错）。
+
+**业务连续性**
+
+* 快照与默认值兜底；
+* 一键回滚脚本；
+* 发布前“预生产/影子配置”冷启动验证。
+
+---
+
+## 5) AI 开发任务卡（Task Cards）
+
+> 说明：以下任务卡满足你给定格式。共 **45 张**，分 6 组（Provider 8、表单 10、流程 10、Prompt 6、内容 8、缓存与测试 3），全部标注依赖与优先级。**MVP 只需完成所有 P0**。
+
+### 组一：Provider 管理（8 张）
+
+```json
+{
+  "taskId": "CMS-001",
+  "module": "Provider管理",
+  "title": "实现Provider动态加载机制（白名单+缓存）",
+  "phase": "Week 1",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "重构 pipelineEngine.service.js，将硬编码映射改为白名单 ProviderLoader，支持按 handlerKey 动态加载并缓存实例。",
+  "technicalRequirements": [
+    "创建 provider-loader.ts，包含 ALLOW_LIST（handlerKey -> import）与 Map 缓存",
+    "禁止从数据库加载任意动态代码，仅允许白名单 handlerKey",
+    "提供 loadProvider(handlerKey) 异步方法；增加健康check可选接口",
+    "对现有引擎提供 getProvider(handlerKey) 兼容层"
+  ],
+  "acceptanceCriteria": [
+    "能在不修改引擎核心的情况下加载 GENERIC_HTTP/TENCENT_CI/RUNNINGHUB/SCF",
+    "重复加载同一 handlerKey 不重复实例化（命中缓存）",
+    "异常 handlerKey 抛出清晰错误码 ERR_PROVIDER_NOT_ALLOWED",
+    "单元测试通过，覆盖率≥80%"
+  ],
+  "codeLocations": [
+    "backend/src/services/pipelineEngine.service.js",
+    "backend/src/providers/provider-loader.ts",
+    "backend/src/providers/handlers/*"
+  ],
+  "testStrategy": [
+    "UT：loadProvider 首次/二次加载",
+    "UT：非法 handlerKey",
+    "IT：引擎执行时获取 Provider"
+  ],
+  "aiPromptSuggestion": "请实现 provider-loader.ts：1) 定义 ALLOW_LIST 映射（GENERIC_HTTP/RUNNINGHUB/TENCENT_CI/SCF）；2) loadProvider(handlerKey) 返回 IProvider；3) 带内存缓存；4) 为非法 key 抛 ERR_PROVIDER_NOT_ALLOWED；5) 写3个UT。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-002",
+  "module": "Provider管理",
+  "title": "定义IProvider接口与BaseProvider基类",
+  "phase": "Week 1",
+  "estimatedHours": 4,
+  "priority": "P0",
+  "dependencies": ["CMS-001"],
+  "description": "用TypeScript定义IProvider接口、ExecContext、ExecResult等类型，并实现BaseProvider提供常用校验/重试模板方法。",
+  "technicalRequirements": [
+    "IProvider: key/validate/execute/healthcheck",
+    "RetryPolicy定义与封装重试逻辑（指数退避）",
+    "BaseProvider 内置超时控制（AbortController）与日志接口"
+  ],
+  "acceptanceCriteria": [
+    "可被任何 handler 继承复用",
+    "单元测试覆盖 BaseProvider 重试与超时"
+  ],
+  "codeLocations": [
+    "backend/src/providers/types.ts",
+    "backend/src/providers/base/base-provider.ts"
+  ],
+  "testStrategy": [
+    "UT：重试策略、超时中断、AbortSignal传播"
+  ],
+  "aiPromptSuggestion": "用 TypeScript 编写 providers/types.ts 与 base-provider.ts：定义 IProvider/RetryPolicy/ExecContext/ExecResult，并在 BaseProvider 实现带指数退避的 executeWithRetry(fn) 与超时控制。编写UT覆盖3个分支。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-003",
+  "module": "Provider管理",
+  "title": "实现 GenericHTTP Provider（请求模板+变量替换）",
+  "phase": "Week 1",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-002"],
+  "description": "实现通用 HTTP 调用的 Provider，支持 method/url/headers/body 模板与变量替换，安全转义，提取结果路径。",
+  "technicalRequirements": [
+    "req_template: {method,url,headers,body,extractPath}",
+    "变量替换：仅替换 {{var}}，不允许表达式执行",
+    "支持超时、重试、HTTP错误码归一化",
+    "extractPath 支持 JSONPath 或点路径（如 result.url）"
+  ],
+  "acceptanceCriteria": [
+    "可对任意REST接口完成配置化调用并解析返回",
+    "异常时返回统一错误码与详细 message",
+    "UT：模板替换/超时/重试/解析成功与失败"
+  ],
+  "codeLocations": [
+    "backend/src/providers/handlers/generic-http.ts",
+    "backend/src/utils/template.ts"
+  ],
+  "testStrategy": [
+    "UT：变量替换与边界字符",
+    "IT：调用mock server，验证extractPath"
+  ],
+  "aiPromptSuggestion": "实现 generic-http.ts：读取 req_template，进行 {{var}} 占位替换并发起请求，支持超时、重试、extractPath 解析与错误归一化；写 UT/IT 覆盖。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-004",
+  "module": "Provider管理",
+  "title": "实现 SCF Provider（云函数调用扩展点）",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-002"],
+  "description": "实现腾讯云 SCF 的 Provider，支持签名/Region/函数名/异步与同步调用，以满足定制逻辑的扩展。",
+  "technicalRequirements": [
+    "auth: {secretId, secretKey, token, region}",
+    "params: {functionName, payload, invokeType}",
+    "统一错误码与日志"
+  ],
+  "acceptanceCriteria": [
+    "能向SCF提交payload并得到返回",
+    "错误签名/权限不足时有清晰错误",
+    "UT：签名参数校验/异常路径"
+  ],
+  "codeLocations": [
+    "backend/src/providers/handlers/scf.ts"
+  ],
+  "testStrategy": [
+    "UT：参数校验",
+    "IT：mock SCF endpoint（或本地桩）调用"
+  ],
+  "aiPromptSuggestion": "实现 scf.ts：封装 SCF 调用（同步/异步），参数校验、错误归一化、日志。提供UT+可替换的HTTP桩测试。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-005",
+  "module": "Provider管理",
+  "title": "运行时凭证加密与读取（AES-256-GCM）",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-001"],
+  "description": "为 provider_endpoints.auth/encrypted_credentials 实现加解密工具与轮换机制，读取时解密注入 Provider。",
+  "technicalRequirements": [
+    "env: MASTER_KEY，AES-256-GCM",
+    "加密字段白名单，写入前统一加密",
+    "支持密钥版本号与轮换"
+  ],
+  "acceptanceCriteria": [
+    "明文不落库，读取时可解密并缓存到内存（短时）",
+    "UT：加解密/篡改检测/错误key"
+  ],
+  "codeLocations": [
+    "backend/src/utils/crypto.ts",
+    "backend/src/repositories/providerEndpoints.repo.ts"
+  ],
+  "testStrategy": [
+    "UT：GCM随机IV、密钥错误时抛错、轮换"
+  ],
+  "aiPromptSuggestion": "实现 crypto.ts：AES-256-GCM encrypt/decrypt，支持密钥版本；在 providerEndpoints.repo 写入时自动加密敏感字段，读取时解密。编写UT覆盖异常场景。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-006",
+  "module": "Provider管理",
+  "title": "Provider 管理后台 CRUD API",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-005"],
+  "description": "实现 /admin/providers 的列表、创建、编辑、禁用、软删除、测试连接等 API。",
+  "technicalRequirements": [
+    "Knex 编写 CRUD",
+    "POST /admin/providers/test-connection 调用对应 Provider.healthcheck()",
+    "审计日志 provider_audit_logs"
+  ],
+  "acceptanceCriteria": [
+    "REST API 覆盖全部操作，含参数校验与错误码",
+    "UT/IT：新增/编辑/禁用/测试连接"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/providers.route.ts",
+    "backend/src/controllers/admin/providers.controller.ts",
+    "backend/src/repositories/providerEndpoints.repo.ts"
+  ],
+  "testStrategy": [
+    "IT：走真实路由调用",
+    "UT：repo 的入参校验与SQL执行"
+  ],
+  "aiPromptSuggestion": "实现 /admin/providers 路由与控制器：列表/创建/编辑/禁用/测试连接；入参校验、错误码、审计日志。写 IT 测试用 supertest。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-007",
+  "module": "Provider管理",
+  "title": "Provider 管理前端页面（AntD）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-006"],
+  "description": "Next.js /admin/providers：列表（搜索/过滤）、创建/编辑抽屉、测试连接按钮、凭证敏感字段受保护显示。",
+  "technicalRequirements": [
+    "AntD Table/Form/Drawer",
+    "只在客户端解密显示掩码，真实值不回显",
+    "操作完成后触发缓存失效广播（后端负责）"
+  ],
+  "acceptanceCriteria": [
+    "可完成端到端的 CRUD 与测试连接",
+    "UI 校验与错误提示清晰"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/providers/page.tsx",
+    "frontend/app/admin/providers/[id]/edit.tsx",
+    "frontend/lib/api/adminProviders.ts"
+  ],
+  "testStrategy": [
+    "手测 + 关键交互的RTL单测"
+  ],
+  "aiPromptSuggestion": "实现 /admin/providers 前端：列表+筛选+抽屉表单+测试连接按钮。注意敏感字段掩码显示与提交格式。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-008",
+  "module": "Provider管理",
+  "title": "现有 Provider 重构适配 IProvider（Tencent/RunningHub/SCF）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-002","CMS-004"],
+  "description": "将现有硬编码 Provider 改为 IProvider 实现，并通过 ProviderLoader 加载，去除 pipelineEngine.service.js 的 switch-case。",
+  "technicalRequirements": [
+    "三个现有 Provider 均实现 validate/execute",
+    "兼容旧的参数格式（必要时提供适配器）"
+  ],
+  "acceptanceCriteria": [
+    "回归现有流程全部可用",
+    "删除/禁用旧 switch-case 模块",
+    "UT：每个Provider基本路径+异常路径"
+  ],
+  "codeLocations": [
+    "backend/src/providers/handlers/tencent-ci.ts",
+    "backend/src/providers/handlers/runninghub.ts",
+    "backend/src/providers/handlers/scf.ts"
+  ],
+  "testStrategy": [
+    "UT：适配器逻辑",
+    "IT：管道试跑通过"
+  ],
+  "aiPromptSuggestion": "重构现有 Provider 到 IProvider：实现 validate/execute，移除 pipelineEngine.service.js 中的 switch-case，保证回归测试通过。"
+}
+```
+
+---
+
+### 组二：表单设计器（10 张）
+
+```json
+{
+  "taskId": "CMS-101",
+  "module": "表单设计器",
+  "title": "集成 react-formio（仅前端）并关闭SSR",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "Next.js 14 App Router 集成 react-formio 的 FormBuilder 与 Renderer，使用 next/dynamic 关闭SSR，加载必要样式。",
+  "technicalRequirements": [
+    "动态导入 FormBuilder/Renderer",
+    "限定只使用开源组件库，屏蔽 premium 组件",
+    "国际化中文"
+  ],
+  "acceptanceCriteria": [
+    "能拖拽基本字段并导出 Formio JSON",
+    "Renderer 能渲染导出的 JSON"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/forms/builder/page.tsx",
+    "frontend/components/formio/FormBuilder.tsx"
+  ],
+  "testStrategy": [
+    "手测为主，确保构建与渲染无SSR警告"
+  ],
+  "aiPromptSuggestion": "在 Next.js 集成 react-formio：动态导入 FormBuilder + Renderer，展示一个Demo页面，可导出JSON并在Renderer渲染。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-102",
+  "module": "表单设计器",
+  "title": "Formio JSON → UFS 适配器（单向）",
+  "phase": "Week 1",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-101"],
+  "description": "实现把 Formio components[] 映射为 UFS.fields[]，支持10类字段与常见属性（label/required/default/validate/options等）。",
+  "technicalRequirements": [
+    "字段类型映射表与单元测试",
+    "丢弃无关或未支持属性",
+    "校验必要字段"
+  ],
+  "acceptanceCriteria": [
+    "对每类组件至少有1个UT样例通过",
+    "UFS 可被现有动态渲染使用"
+  ],
+  "codeLocations": [
+    "frontend/lib/formio/adapter.ts",
+    "frontend/__tests__/formio-adapter.test.ts"
+  ],
+  "testStrategy": [
+    "UT：10类字段映射+边界校验"
+  ],
+  "aiPromptSuggestion": "实现 adapter.ts：将 Formio JSON 转为 UFS（统一表单Schema），覆盖 10 类组件。编写UT验证映射与校验。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-103",
+  "module": "表单设计器",
+  "title": "UFS 表单实时预览（react-hook-form + AntD）",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-102"],
+  "description": "实现 UFS 渲染器，使用 RHF + AntD 控件，支持 required/默认值/联动visibleWhen。",
+  "technicalRequirements": [
+    "RHF Controller 对接 AntD",
+    "visibleWhen 简单表达式（等值）",
+    "图片/颜色/日期等组件"
+  ],
+  "acceptanceCriteria": [
+    "从适配后的 UFS JSON 即时渲染",
+    "字段联动可用、校验可见"
+  ],
+  "codeLocations": [
+    "frontend/components/ufs/UfsRenderer.tsx"
+  ],
+  "testStrategy": [
+    "RTL：基本渲染与交互"
+  ],
+  "aiPromptSuggestion": "实现 UfsRenderer.tsx：用 RHF+AntD 渲染 UFS，支持10种字段与visibleWhen联动、必填校验。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-104",
+  "module": "表单设计器",
+  "title": "UFS 校验器（Zod）与前后端复用",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-103"],
+  "description": "用 Zod 表达 UFS 的字段与 crossRules，前端提交与后端写入前均走同一校验包。",
+  "technicalRequirements": [
+    "包：@app/shared/validation 导出 zod schema",
+    "后端二次校验并返回统一错误结构"
+  ],
+  "acceptanceCriteria": [
+    "非法表单结构被拦截",
+    "前后端错误信息一致"
+  ],
+  "codeLocations": [
+    "shared/validation/ufs.ts",
+    "backend/src/middleware/validateUfs.ts"
+  ],
+  "testStrategy": [
+    "UT：字段/跨字段规则"
+  ],
+  "aiPromptSuggestion": "实现 shared/validation/ufs.ts 的 Zod 校验，前后端复用，中英文错误消息。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-105",
+  "module": "表单设计器",
+  "title": "表单Schema存储API与版本化/回滚",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-104"],
+  "description": "实现 /admin/forms 的保存、获取历史版本、回滚接口，并在写入时生成配置快照与Redis失效通知。",
+  "technicalRequirements": [
+    "Knex 版本表或在 form_schemas 增 version 字段",
+    "写入 config_snapshots",
+    "发布 cfg:invalidate"
+  ],
+  "acceptanceCriteria": [
+    "能选择历史版本并回滚成功",
+    "回滚后 UFS 可被渲染器使用"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/forms.route.ts",
+    "backend/src/repositories/formSchemas.repo.ts"
+  ],
+  "testStrategy": [
+    "IT：保存/回滚链路",
+    "UT：repo 版本处理"
+  ],
+  "aiPromptSuggestion": "实现表单Schema版本接口：保存即生成新版本并写入快照；提供历史列表与回滚；发布Redis失效消息。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-106",
+  "module": "表单设计器",
+  "title": "表单设计器UI：向导式（Step 2）整合",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-101","CMS-103","CMS-105"],
+  "description": "把 FormBuilder、UFS 预览与版本选择集成到 Feature 创建向导的Step 2。",
+  "technicalRequirements": [
+    "AntD Steps + Drawer",
+    "导出→适配→预览一体化",
+    "保存生成 form_schemas 记录"
+  ],
+  "acceptanceCriteria": [
+    "在向导中自然使用表单设计功能",
+    "完成后生成有效 form_schema_id"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/features/new/Step2Form.tsx"
+  ],
+  "testStrategy": [
+    "手测流程顺畅，无多余刷新"
+  ],
+  "aiPromptSuggestion": "实现 Feature 向导 Step2：内嵌 FormBuilder 与预览，确认后保存为 form_schemas 版本，并返回ID。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-107",
+  "module": "表单设计器",
+  "title": "大表单性能优化（分步+惰性注册+虚拟滚动）",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P1",
+  "dependencies": ["CMS-103"],
+  "description": "为 UFS 渲染增加分步渲染、惰性注册字段与 react-window 虚拟滚动策略。",
+  "technicalRequirements": [
+    "每步≤12字段",
+    "不可见字段不注册",
+    "长列表虚拟化"
+  ],
+  "acceptanceCriteria": [
+    "渲染时间显著下降（>30%）",
+    "交互无卡顿"
+  ],
+  "codeLocations": [
+    "frontend/components/ufs/UfsRenderer.tsx"
+  ],
+  "testStrategy": [
+    "性能对比：前后两版TTI/交互耗时"
+  ],
+  "aiPromptSuggestion": "优化 UfsRenderer：分步渲染+惰性注册+react-window 虚拟化，给出简单性能对比日志。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-108",
+  "module": "表单设计器",
+  "title": "字段可重用片段（Snippet）与模板库",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-103"],
+  "description": "支持把常用字段组合存为片段，快速插入到FormBuilder或直接插入UFS。",
+  "technicalRequirements": [
+    "片段存储于 system_configs(category='form_snippet')",
+    "插入后自动重命名重复key"
+  ],
+  "acceptanceCriteria": [
+    "能创建/插入片段",
+    "重复key自动处理"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/forms/snippets.tsx",
+    "backend/src/routes/admin/form-snippets.route.ts"
+  ],
+  "testStrategy": [
+    "UT：重命名逻辑"
+  ],
+  "aiPromptSuggestion": "实现表单片段库：保存/列表/插入UFS；处理字段key冲突。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-109",
+  "module": "表单设计器",
+  "title": "UFS → 提交数据校验回放（预运行）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-104"],
+  "description": "在 Admin 中提供表单样本数据校验功能，展示字段级错误与 crossRules 触发结果。",
+  "technicalRequirements": [
+    "前端调用后端 Zod 校验",
+    "错误映射到字段提示"
+  ],
+  "acceptanceCriteria": [
+    "能在保存前提前发现数据问题",
+    "错误展示清晰"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/forms/validator.tsx",
+    "backend/src/routes/admin/forms.route.ts"
+  ],
+  "testStrategy": [
+    "RTL：错误提示映射"
+  ],
+  "aiPromptSuggestion": "实现表单数据预校验功能：输入样本数据，后端用 Zod 校验并返回字段错误，前端逐项展示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-110",
+  "module": "表单设计器",
+  "title": "UFS 导入/导出（JSON）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-103","CMS-105"],
+  "description": "支持从本地导入UFS JSON或导出当前UFS，便于备份与迁移。",
+  "technicalRequirements": [
+    "JSON 结构校验",
+    "兼容版本字段"
+  ],
+  "acceptanceCriteria": [
+    "导入非法JSON有友好提示",
+    "导出文件包含version与元信息"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/forms/import-export.tsx"
+  ],
+  "testStrategy": [
+    "UT：结构校验"
+  ],
+  "aiPromptSuggestion": "实现UFS的导入导出功能：选择文件→校验→保存为新版本；支持下载导出现有UFS。"
+}
+```
+
+---
+
+### 组三：流程编辑器（10 张）
+
+```json
+{
+  "taskId": "CMS-201",
+  "module": "流程编辑器",
+  "title": "React Flow 集成与基础节点库",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "集成 React Flow，定义节点样式与基础类型（PROVIDER/CONDITION/POST_PROCESS/END），支持拖拽与连接。",
+  "technicalRequirements": [
+    "nodeTypes/edgeTypes 稳定引用",
+    "minimap/zoom/对齐线"
+  ],
+  "acceptanceCriteria": [
+    "可拖入节点并连线、删除",
+    "保存为 Pipeline JSON（初版）"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/pipelines/editor/page.tsx",
+    "frontend/components/flow/NodeTypes.tsx"
+  ],
+  "testStrategy": [
+    "手测交互"
+  ],
+  "aiPromptSuggestion": "集成 React Flow：提供基础节点库与连线交互，可导出/导入初版JSON。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-202",
+  "module": "流程编辑器",
+  "title": "节点配置侧边栏（Provider/参数/超时/重试）",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-201","CMS-007"],
+  "description": "实现右侧抽屉配置当前选中节点：选择 providerRefId、handlerKey、超时/重试、输入输出映射（变量选择器）。",
+  "technicalRequirements": [
+    "AntD Form + 可选项来自 /admin/providers",
+    "变量选择器支持 form/* 与上游节点 out/*"
+  ],
+  "acceptanceCriteria": [
+    "配置变化实时写回节点 data",
+    "必填项校验完整"
+  ],
+  "codeLocations": [
+    "frontend/components/flow/NodeInspector.tsx"
+  ],
+  "testStrategy": [
+    "RTL：配置表单校验"
+  ],
+  "aiPromptSuggestion": "为流程编辑器实现右侧配置面板：绑定 provider 列表、必填校验、变量选择器。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-203",
+  "module": "流程编辑器",
+  "title": "Pipeline JSON Schema v1 定义与保存/读取 API",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-201"],
+  "description": "定义 Pipeline v1 数据结构与Zod校验，实现 /admin/pipelines 的保存、读取与版本化/快照。",
+  "technicalRequirements": [
+    "Zod 校验 nodes/edges/onError/vars",
+    "保存即生成版本与快照/失效消息"
+  ],
+  "acceptanceCriteria": [
+    "非法结构拦截，有清晰提示",
+    "版本回滚可用"
+  ],
+  "codeLocations": [
+    "shared/validation/pipeline.ts",
+    "backend/src/routes/admin/pipelines.route.ts"
+  ],
+  "testStrategy": [
+    "UT：Schema校验",
+    "IT：保存/回滚"
+  ],
+  "aiPromptSuggestion": "定义 pipeline v1 的 Zod schema，并实现保存/读取/回滚接口，写UT/IT。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-204",
+  "module": "流程编辑器",
+  "title": "拓扑合法性验证（Kahn算法+变量可达性）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-203"],
+  "description": "实现 pipeline 合法性校验：环检测、入度/出度规则、条件边完整性、变量来源可达性与输出重名冲突检查。",
+  "technicalRequirements": [
+    "Kahn 拓扑排序",
+    "数据血缘图：form 与节点 out 映射",
+    "错误附着到节点/边 ID"
+  ],
+  "acceptanceCriteria": [
+    "可列出所有错误并高亮到画布",
+    "阻止保存非法拓扑"
+  ],
+  "codeLocations": [
+    "frontend/lib/pipeline/validator.ts"
+  ],
+  "testStrategy": [
+    "UT：环/缺少true/false/未定义变量/重名输出"
+  ],
+  "aiPromptSuggestion": "编写 validator.ts：用 Kahn 检测环、检查条件边、做变量可达性与输出重名校验，返回结构化错误。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-205",
+  "module": "流程编辑器",
+  "title": "测试运行器（模拟/真实）与可视化日志",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-003","CMS-004","CMS-204"],
+  "description": "提供 /admin/pipelines/:id/test 接口，支持模拟（mock Provider）与真实调用切换，前端展示每步耗时/请求响应。",
+  "technicalRequirements": [
+    "对接现有引擎，隔离配额与业务账单",
+    "日志结构化：stepId、status、latency、error"
+  ],
+  "acceptanceCriteria": [
+    "能跑通示例Pipeline并展示过程日志",
+    "错误时提供上下文与重试建议"
+  ],
+  "codeLocations": [
+    "backend/src/controllers/admin/pipelines-test.controller.ts",
+    "frontend/app/admin/pipelines/[id]/test.tsx"
+  ],
+  "testStrategy": [
+    "IT：mock/真实两种模式",
+    "UT：日志整形"
+  ],
+  "aiPromptSuggestion": "实现测试运行器：后端提供mock/真实执行开关，返回每步日志；前端以时间线展示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-206",
+  "module": "流程编辑器",
+  "title": "并行与Join节点（FORK/JOIN）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P1",
+  "dependencies": ["CMS-204"],
+  "description": "增加并行分支与汇合节点，Join 需等待所有上游完成或根据策略（任一/全部）。",
+  "technicalRequirements": [
+    "JOIN 策略：ALL/ANY",
+    "拓扑校验扩展入度/出度规则"
+  ],
+  "acceptanceCriteria": [
+    "能表达两条并行支线并在 JOIN 合流",
+    "校验能识别JOIN规则错误"
+  ],
+  "codeLocations": [
+    "frontend/components/flow/NodeTypes.tsx",
+    "shared/validation/pipeline.ts"
+  ],
+  "testStrategy": [
+    "UT：JOIN ANY/ALL",
+    "IT：示例流程执行"
+  ],
+  "aiPromptSuggestion": "实现 FORK/JOIN 节点及其校验与执行策略，给出示例。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-207",
+  "module": "流程编辑器",
+  "title": "变量选择器与引用提示（form/node/system）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-202","CMS-203"],
+  "description": "在节点配置面板为输入/输出提供变量树选择器，来源含 form/*、system/*、上游节点 out/*，并校验未定义引用。",
+  "technicalRequirements": [
+    "变量树 UI 与搜索",
+    "未定义引用标红"
+  ],
+  "acceptanceCriteria": [
+    "选中变量会写入 {{path}} 占位",
+    "非法 path 有即时提示"
+  ],
+  "codeLocations": [
+    "frontend/components/flow/VarPicker.tsx"
+  ],
+  "testStrategy": [
+    "RTL：选择与校验交互"
+  ],
+  "aiPromptSuggestion": "实现 VarPicker：可浏览变量树并选择写入占位到输入映射，对未定义path即时标红。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-208",
+  "module": "流程编辑器",
+  "title": "Feature 向导 Step3：流程编排整合",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-201","CMS-204","CMS-205"],
+  "description": "将流程编辑器嵌入向导 Step3，使得管理员在一步内完成节点拖拽、配置、校验与保存。",
+  "technicalRequirements": [
+    "向导中持久化 pipeline_schema_id",
+    "保存后版本+快照"
+  ],
+  "acceptanceCriteria": [
+    "从向导可直接进入试跑并回看日志",
+    "保存成功返回 pipeline_schema_id"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/features/new/Step3Pipeline.tsx"
+  ],
+  "testStrategy": [
+    "手测：从Step2→Step3→试跑→保存"
+  ],
+  "aiPromptSuggestion": "在 Feature 向导 Step3 嵌入流程编辑器，打通保存与试跑全链路。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-209",
+  "module": "流程编辑器",
+  "title": "错误收敛与画布高亮（校验结果可视化）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-204"],
+  "description": "对 validator 返回的结构化错误，在画布与侧栏同步高亮，点击错误定位到节点/边。",
+  "technicalRequirements": [
+    "错误列表与跳转",
+    "多处错误聚合"
+  ],
+  "acceptanceCriteria": [
+    "复杂流程下可快速修复所有错误",
+    "无多次渲染卡顿"
+  ],
+  "codeLocations": [
+    "frontend/components/flow/ValidationPanel.tsx"
+  ],
+  "testStrategy": [
+    "RTL：定位交互"
+  ],
+  "aiPromptSuggestion": "给出 ValidationPanel：渲染错误列表，点击聚焦对应节点/边并高亮。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-210",
+  "module": "流程编辑器",
+  "title": "Pipeline 导入/导出（JSON）与样例库",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-203"],
+  "description": "支持导入/导出 Pipeline JSON，提供三个官方样例（上传→增强→后处理）。",
+  "technicalRequirements": [
+    "JSON 校验并转为最新版本",
+    "样例库在 system_configs 中维护"
+  ],
+  "acceptanceCriteria": [
+    "导入非法结构有提示",
+    "导出包含版本与元信息"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/pipelines/import-export.tsx"
+  ],
+  "testStrategy": [
+    "UT：结构校验"
+  ],
+  "aiPromptSuggestion": "实现 pipeline 的导入导出与样例库，保证版本兼容检查。"
+}
+```
+
+---
+
+### 组四：Prompt 管理（6 张）
+
+```json
+{
+  "taskId": "CMS-301",
+  "module": "Prompt管理",
+  "title": "Monaco 集成与基础编辑器",
+  "phase": "Week 2",
+  "estimatedHours": 4,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "Next.js 动态加载 Monaco，编辑器采用 Handlebars 语法高亮与只读切换。",
+  "technicalRequirements": [
+    "next/dynamic 关闭SSR",
+    "基础快捷键与行号"
+  ],
+  "acceptanceCriteria": [
+    "可编辑保存简单模板"
+  ],
+  "codeLocations": [
+    "frontend/components/prompt/PromptEditor.tsx"
+  ],
+  "testStrategy": [
+    "手测"
+  ],
+  "aiPromptSuggestion": "集成 Monaco Editor，用作 Handlebars 模板编辑器，支持只读、基本配置。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-302",
+  "module": "Prompt管理",
+  "title": "变量提示与自动补全（Completion Provider）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-301"],
+  "description": "实现从上下文提取变量（form/*、system/*、user/*、node/*），在 {{ 光标处提示可选变量与Snippet。",
+  "technicalRequirements": [
+    "扫描文档提取 {{var}}",
+    "注册 Monaco CompletionItemProvider"
+  ],
+  "acceptanceCriteria": [
+    "输入 {{ 开始能出现智能补全",
+    "选择后正确插入"
+  ],
+  "codeLocations": [
+    "frontend/components/prompt/var-completion.ts"
+  ],
+  "testStrategy": [
+    "RTL：补全交互"
+  ],
+  "aiPromptSuggestion": "为 Monaco 编写变量自动补全：监听 {{，从上下文提供可用变量与片段。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-303",
+  "module": "Prompt管理",
+  "title": "受限 Handlebars 渲染与预览 API",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "后端实现 /admin/prompts/preview，受限 helpers（不允许 eval），传入 variables 进行渲染并返回结果与缺失变量列表。",
+  "technicalRequirements": [
+    "默认转义",
+    "helpers 白名单：eq, not, and, or, join, json"
+  ],
+  "acceptanceCriteria": [
+    "可实时预览与高亮缺失变量",
+    "无任意代码执行风险"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/prompts.route.ts",
+    "backend/src/services/prompt.service.ts"
+  ],
+  "testStrategy": [
+    "UT：渲染/缺失变量/阻止危险表达式"
+  ],
+  "aiPromptSuggestion": "实现 Handlebars 受限渲染服务：白名单 helpers，禁止任意函数执行；提供预览接口与UT。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-304",
+  "module": "Prompt管理",
+  "title": "Prompt 分类/版本/回滚",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P1",
+  "dependencies": ["CMS-303"],
+  "description": "在 system_configs 扩展 prompt 类别，并提供 prompt_versions 表实现历史版本与回滚。",
+  "technicalRequirements": [
+    "版本自增，保存diff（可选）",
+    "回滚写入快照与失效广播"
+  ],
+  "acceptanceCriteria": [
+    "可查看历史与一键回滚",
+    "回滚后预览一致"
+  ],
+  "codeLocations": [
+    "backend/src/repositories/prompts.repo.ts",
+    "backend/src/routes/admin/prompts.route.ts"
+  ],
+  "testStrategy": [
+    "IT：保存/回滚链路"
+  ],
+  "aiPromptSuggestion": "实现 Prompt 的版本管理：保存即新版本、列表查看、回滚写快照，发布失效消息。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-305",
+  "module": "Prompt管理",
+  "title": "Prompt 测试运行（调用 AI API 对比结果）",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P1",
+  "dependencies": ["CMS-303","CMS-003","CMS-004"],
+  "description": "选择 Provider + 模型参数，输入变量，调用 AI 接口拿到结果并与历史版本结果对比。",
+  "technicalRequirements": [
+    "保存测试记录：prompt_id/version/variables/result摘要",
+    "对比两版本差异"
+  ],
+  "acceptanceCriteria": [
+    "能直观看到不同版本效果差异",
+    "失败时有错误信息与重试建议"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/prompts/tester.tsx",
+    "backend/src/controllers/admin/prompts-test.controller.ts"
+  ],
+  "testStrategy": [
+    "IT：调用通用 Provider 生成"
+  ],
+  "aiPromptSuggestion": "实现 Prompt 测试器：选择 Provider+模型，输入变量，调用生成并保存记录，可对比不同版本结果。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-306",
+  "module": "Prompt管理",
+  "title": "Feature 向导 Step4：预览与发布",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-106","CMS-208"],
+  "description": "在 Step4 展示表单预览与流程图缩略图，并提供“测试运行”“发布”按钮；发布写 feature_definitions 并广播失效。",
+  "technicalRequirements": [
+    "生成封面缩略图（流程图快照）",
+    "检查拓扑合法与Provider可用性"
+  ],
+  "acceptanceCriteria": [
+    "发布成功后在工作台可见",
+    "测试运行可出结果"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/features/new/Step4Publish.tsx",
+    "backend/src/routes/admin/features.route.ts"
+  ],
+  "testStrategy": [
+    "IT：创建新 Feature 的闭环"
+  ],
+  "aiPromptSuggestion": "实现 Step4：预览表单与流程，执行测试，点击发布写入 feature_definitions 并广播缓存失效。"
+}
+```
+
+---
+
+### 组五：内容管理（8 张）
+
+```json
+{
+  "taskId": "CMS-401",
+  "module": "内容管理",
+  "title": "公告管理 CRUD + 定时上下线",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "实现 /admin/announcements API 与前端页面，支持富文本、目标用户、定时发布/过期与软删除。",
+  "technicalRequirements": [
+    "富文本：AntD + 简化版 editor",
+    "status/publish_at/expire_at 管理"
+  ],
+  "acceptanceCriteria": [
+    "公告创建/编辑/下线生效",
+    "前台读取按时间/状态过滤"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/announcements.route.ts",
+    "frontend/app/admin/announcements/page.tsx"
+  ],
+  "testStrategy": [
+    "IT：CRUD 与定时状态变更"
+  ],
+  "aiPromptSuggestion": "实现公告模块：后端CRUD与前端管理页，支持定时上下线与目标人群字段。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-402",
+  "module": "内容管理",
+  "title": "轮播图管理 + COS 上传 + 拖拽排序",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "实现 banners 管理，客户端直传 COS（STS 临时凭证），支持拖拽排序与定时上下线。",
+  "technicalRequirements": [
+    "STS 获取接口",
+    "React DnD 排序并批量保存 sort_order"
+  ],
+  "acceptanceCriteria": [
+    "图片上传成功并可预览",
+    "排序更新立即生效"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/banners.route.ts",
+    "frontend/app/admin/banners/page.tsx"
+  ],
+  "testStrategy": [
+    "IT：上传+排序"
+  ],
+  "aiPromptSuggestion": "实现轮播管理：COS 直传（STS）、拖拽排序、定时上下线。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-403",
+  "module": "内容管理",
+  "title": "会员套餐管理（计划/权益）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "实现 membership_plans 与 membership_benefits 的 CRUD，支持关联 feature_definitions 并设置显示顺序与推荐标签。",
+  "technicalRequirements": [
+    "多选 features，写中间表",
+    "排序/状态控制"
+  ],
+  "acceptanceCriteria": [
+    "套餐与功能关联正确",
+    "前台可按排序展示"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/memberships.route.ts",
+    "frontend/app/admin/memberships/page.tsx"
+  ],
+  "testStrategy": [
+    "IT：计划与权益的增删改查"
+  ],
+  "aiPromptSuggestion": "实现套餐管理：计划/权益CRUD，关联 features，设置排序和推荐标签。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-404",
+  "module": "内容管理",
+  "title": "文案配置（按页面/语言）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "在 system_configs 中实现 page/locale 维度的文案管理，提供前端 CRUD 与运行期读取接口。",
+  "technicalRequirements": [
+    "唯一键：category+page+locale+key",
+    "批量导入导出"
+  ],
+  "acceptanceCriteria": [
+    "前台根据 locale 正确加载文案",
+    "导入导出 JSON 可用"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/copies.route.ts",
+    "frontend/app/admin/copies/page.tsx"
+  ],
+  "testStrategy": [
+    "IT：CRUD 与导入导出"
+  ],
+  "aiPromptSuggestion": "实现文案配置：按页面/语言维护键值，支持导入导出。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-405",
+  "module": "内容管理",
+  "title": "工作台 Feature 展示联动（从 feature_definitions 读取）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-306"],
+  "description": "前台工作台根据 feature_definitions 展示功能卡片，权限过滤与配额读取，排序与分类展示。",
+  "technicalRequirements": [
+    "缓存读取（Redis优先）",
+    "按角色过滤"
+  ],
+  "acceptanceCriteria": [
+    "新发布的Feature可见且可用",
+    "无额外交互卡顿"
+  ],
+  "codeLocations": [
+    "frontend/app/workbench/page.tsx"
+  ],
+  "testStrategy": [
+    "手测：新功能卡发布后可见"
+  ],
+  "aiPromptSuggestion": "将工作台功能卡从 feature_definitions 动态渲染，按角色与分类展示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-406",
+  "module": "内容管理",
+  "title": "前台文案与公告/轮播渲染接入",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-401","CMS-402","CMS-404"],
+  "description": "前台首页读取 banners/announcements/copies，支持 locale 与定时上下线。",
+  "technicalRequirements": [
+    "缓存优先读取",
+    "过期过滤"
+  ],
+  "acceptanceCriteria": [
+    "按时上线/下线行为正确",
+    "切换语言生效"
+  ],
+  "codeLocations": [
+    "frontend/app/page.tsx",
+    "frontend/lib/api/publicContent.ts"
+  ],
+  "testStrategy": [
+    "手测 + 单测"
+  ],
+  "aiPromptSuggestion": "首页接入公告/轮播/文案，按 locale 显示并遵循上下线与缓存策略。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-407",
+  "module": "内容管理",
+  "title": "内容审核与审计日志（轻量版）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-401","CMS-402","CMS-404"],
+  "description": "为内容变更写入 audit_logs，记录操作人/前后对比，提供简单查看界面。",
+  "technicalRequirements": [
+    "记录 diff 或旧值快照",
+    "只读UI"
+  ],
+  "acceptanceCriteria": [
+    "可搜索近30天内容变更",
+    "可一键查看旧值"
+  ],
+  "codeLocations": [
+    "backend/src/repositories/audit.repo.ts",
+    "frontend/app/admin/audit/page.tsx"
+  ],
+  "testStrategy": [
+    "UT：日志写入格式"
+  ],
+  "aiPromptSuggestion": "实现内容审计日志：写入、查询、只读展示，最小可用。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-408",
+  "module": "内容管理",
+  "title": "批量导入导出（公告/轮播/文案/套餐）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-401","CMS-402","CMS-403","CMS-404"],
+  "description": "统一实现四类内容的JSON导入导出，便于备份迁移。",
+  "technicalRequirements": [
+    "结构校验与部分导入",
+    "失败行报告"
+  ],
+  "acceptanceCriteria": [
+    "导入失败有明细报告",
+    "导出文件包含版本与时间戳"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/bulk.route.ts",
+    "frontend/app/admin/bulk/page.tsx"
+  ],
+  "testStrategy": [
+    "UT：结构与错误报告"
+  ],
+  "aiPromptSuggestion": "实现内容的批量导入导出接口与前端页面，包含错误报告。"
+}
+```
+
+---
+
+### 组六：缓存与实时更新 & 测试（5 张）
+
+```json
+{
+  "taskId": "CMS-501",
+  "module": "缓存与实时更新",
+  "title": "Redis 缓存封装与本地 LRU（读路径）",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "实现 getConfig(key, loader) 通用读缓存：先本地 LRU，再 Redis，再快照，再 DB；并统计命中率。",
+  "technicalRequirements": [
+    "LRU 基于 quick-lru 或自实现",
+    "指标：hit/miss/latency"
+  ],
+  "acceptanceCriteria": [
+    "可通过配置键读取并缓存",
+    "断网/Redis挂时自动降级"
+  ],
+  "codeLocations": [
+    "backend/src/cache/config-cache.ts",
+    "backend/src/utils/metrics.ts"
+  ],
+  "testStrategy": [
+    "UT：多层级回退逻辑"
+  ],
+  "aiPromptSuggestion": "实现多层级读取缓存：LRU→Redis→快照→DB 降级链路，并记录指标。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-502",
+  "module": "缓存与实时更新",
+  "title": "配置更新广播与精准失效（Pub/Sub）",
+  "phase": "Week 1",
+  "estimatedHours": 4,
+  "priority": "P0",
+  "dependencies": ["CMS-501"],
+  "description": "写入/回滚配置时，通过 Redis 发布 cfg:invalidate {scope,key,version}，各进程订阅并精准失效本地 LRU 与 Redis。",
+  "technicalRequirements": [
+    "频道：cfg:invalidate",
+    "payload：scope/key/version"
+  ],
+  "acceptanceCriteria": [
+    "更新后1s内各进程缓存失效",
+    "无误杀其他键"
+  ],
+  "codeLocations": [
+    "backend/src/pubsub/index.ts",
+    "backend/src/cache/config-cache.ts"
+  ],
+  "testStrategy": [
+    "IT：多进程模拟（PM2）"
+  ],
+  "aiPromptSuggestion": "实现 Redis Pub/Sub 广播：发布 cfg:invalidate，订阅方精准失效对应键。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-503",
+  "module": "缓存与实时更新",
+  "title": "配置快照表与回滚脚本",
+  "phase": "Week 1",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "创建 config_snapshots 表，写入与回滚 CLI：select by scope/key/version，一键回滚并发布失效。",
+  "technicalRequirements": [
+    "Knex migration+seed",
+    "CLI：node scripts/rollback-config.ts"
+  ],
+  "acceptanceCriteria": [
+    "能回滚到指定版本并立即生效",
+    "快照写入包含操作者与时间"
+  ],
+  "codeLocations": [
+    "backend/migrations/xxxx_create_config_snapshots.ts",
+    "backend/scripts/rollback-config.ts"
+  ],
+  "testStrategy": [
+    "IT：回滚链路"
+  ],
+  "aiPromptSuggestion": "创建 config_snapshots 表并实现回滚脚本：输入 scope/key/version 执行回滚与广播失效。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-504",
+  "module": "测试与优化",
+  "title": "关键路径 E2E（创建Feature→试跑→发布→前台可见）",
+  "phase": "Week 3",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-106","CMS-208","CMS-306","CMS-405"],
+  "description": "使用 Playwright 编写端到端测试：从新建Feature到试跑、发布、前台展示的全流程。",
+  "technicalRequirements": [
+    "Mock 外部Provider与真实模式切换",
+    "CI可运行"
+  ],
+  "acceptanceCriteria": [
+    "E2E 通过率100%（稳定环境）",
+    "失败截图/视频产出"
+  ],
+  "codeLocations": [
+    "tests/e2e/feature-create.spec.ts"
+  ],
+  "testStrategy": [
+    "E2E：多数据集"
+  ],
+  "aiPromptSuggestion": "编写 Playwright E2E：自动化从创建Feature到发布与前台展示的流程，支持截图录像。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-505",
+  "module": "测试与优化",
+  "title": "性能基线与回归（缓存命中率/拓扑验证耗时）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-501","CMS-204"],
+  "description": "采集并输出两项核心指标：配置读取缓存命中率与拓扑验证耗时，作为性能基线。",
+  "technicalRequirements": [
+    "metrics.ts 输出到控制台与日志",
+    "简单图表（前端页面可选）"
+  ],
+  "acceptanceCriteria": [
+    "提供基线数值与建议阈值",
+    "后续优化可对比"
+  ],
+  "codeLocations": [
+    "backend/src/utils/metrics.ts",
+    "frontend/app/admin/metrics/page.tsx"
+  ],
+  "testStrategy": [
+    "手测 + 单测"
+  ],
+  "aiPromptSuggestion": "采集并展示缓存命中率与拓扑验证耗时，输出基线与阈值，并在页面展示。"
+}
+```
+
+---
+
+## 附：关键伪代码与路由清单
+
+**管道执行入口（伪代码）**
+
+```ts
+async function runPipeline(pipelineId: number, formData: any, opts: { test?: boolean }) {
+  const pipeline = await loadPipelineFromCache(pipelineId); // Redis/LRU/快照
+  validateTopology(pipeline); // 抛出结构错误
+  const ctx = buildExecContext(opts);
+  const state = { vars: { form: formData, system: {...}, node:{} } };
+  for (const step of topoSort(pipeline)) {
+    const provider = await loadProvider(step.handlerKey);
+    const params = materialize(step.in, state.vars); // {{var}} 替换
+    const res = await withRetryTimeout(() => provider.execute(params, ctx), step.retry, step.timeoutMs);
+    if (!res.ok) throw new PipelineError(step.id, res.error);
+    writeOutputsToState(step.out, res.result, state.vars);
+  }
+  return extractFinal(state);
+}
+```
+
+**缓存失效（伪代码）**
+
+```ts
+// on write
+await knex('form_schemas').insert({...}); 
+await knex('config_snapshots').insert({ scope:'form', ref_id:id, version, json });
+await redis.publish('cfg:invalidate', JSON.stringify({ scope:'form', key:id, version }));
+
+// on subscribe
+redis.on('message', (ch, msg) => {
+  const { scope, key } = JSON.parse(msg);
+  lru.invalidate(composeKey(scope, key));
+  redisClient.del(composeKey(scope, key));
+});
+```
+
+**路由（核心）**
+
+* `POST /admin/forms` / `GET /admin/forms/:id/versions` / `POST /admin/forms/:id/rollback`
+* `POST /admin/pipelines` / `GET /admin/pipelines/:id/versions` / `POST /admin/pipelines/:id/test`
+* `POST /admin/features` / `GET /admin/features`
+* `POST /admin/providers/test-connection` / CRUD
+* `POST /admin/prompts/preview` / versions / test-run
+* `GET /public/content/home`（聚合公告/轮播/文案，供前台使用）
+
+---
+
+## 结语与执行建议
+
+* **先难后易**：Week 1 把“Provider 动态化 + 缓存与快照 + React Flow / Form.io POC”拿下，你的底座就稳了。
+* **MVP 只做 P0**，两周即可闭环（新建 Feature → 表单/流程 → 试跑 → 发布 → 前台可见）。
+* **持续验证**：每晚跑一次 E2E；每个写路径都生成快照并广播失效；把“回滚脚本”当成救命绳。
+* **安全边界明确**：不执行数据库里的任何代码；扩展逻辑通过 SCF；密钥统一加密与轮换。
+
+> 如果需要，我可以把 **Knex migration 模板 / TypeScript 接口骨架 / Next.js 页面框架** 直接按上述 **codeLocations** 出具样例文件结构与基础代码块，方便你“一键粘贴→AI补全”。

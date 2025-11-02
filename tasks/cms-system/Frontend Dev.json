@@ -1,0 +1,768 @@
+{
+  "角色": "Frontend Dev",
+  "职责": "负责表单设计器、流程编辑器、Prompt编辑器、Admin UI界面开发",
+  "对应Skills手册": "skills/frontend_dev_skill/",
+  "任务数量": 27,
+  "任务列表": [
+    {
+      "taskId": "CMS-007",
+      "module": "Provider管理",
+      "title": "Provider 管理前端页面（AntD）",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-006"
+      ],
+      "description": "Next.js /admin/providers：列表（搜索/过滤）、创建/编辑抽屉、测试连接按钮、凭证敏感字段受保护显示。",
+      "technicalRequirements": [
+        "AntD Table/Form/Drawer",
+        "只在客户端解密显示掩码，真实值不回显",
+        "操作完成后触发缓存失效广播（后端负责）"
+      ],
+      "acceptanceCriteria": [
+        "可完成端到端的 CRUD 与测试连接",
+        "UI 校验与错误提示清晰"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/providers/page.tsx",
+        "frontend/app/admin/providers/[id]/edit.tsx",
+        "frontend/lib/api/adminProviders.ts"
+      ],
+      "testStrategy": [
+        "手测 + 关键交互的RTL单测"
+      ],
+      "aiPromptSuggestion": "实现 /admin/providers 前端：列表+筛选+抽屉表单+测试连接按钮。注意敏感字段掩码显示与提交格式。"
+    },
+    {
+      "taskId": "CMS-101",
+      "module": "表单设计器",
+      "title": "集成 react-formio（仅前端）并关闭SSR",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "Next.js 14 App Router 集成 react-formio 的 FormBuilder 与 Renderer，使用 next/dynamic 关闭SSR，加载必要样式。",
+      "technicalRequirements": [
+        "动态导入 FormBuilder/Renderer",
+        "限定只使用开源组件库，屏蔽 premium 组件",
+        "国际化中文"
+      ],
+      "acceptanceCriteria": [
+        "能拖拽基本字段并导出 Formio JSON",
+        "Renderer 能渲染导出的 JSON"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/forms/builder/page.tsx",
+        "frontend/components/formio/FormBuilder.tsx"
+      ],
+      "testStrategy": [
+        "手测为主，确保构建与渲染无SSR警告"
+      ],
+      "aiPromptSuggestion": "在 Next.js 集成 react-formio：动态导入 FormBuilder + Renderer，展示一个Demo页面，可导出JSON并在Renderer渲染。"
+    },
+    {
+      "taskId": "CMS-102",
+      "module": "表单设计器",
+      "title": "Formio JSON → UFS 适配器（单向）",
+      "phase": "Week 1",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-101"
+      ],
+      "description": "实现把 Formio components[] 映射为 UFS.fields[]，支持10类字段与常见属性（label/required/default/validate/options等）。",
+      "technicalRequirements": [
+        "字段类型映射表与单元测试",
+        "丢弃无关或未支持属性",
+        "校验必要字段"
+      ],
+      "acceptanceCriteria": [
+        "对每类组件至少有1个UT样例通过",
+        "UFS 可被现有动态渲染使用"
+      ],
+      "codeLocations": [
+        "frontend/lib/formio/adapter.ts",
+        "frontend/__tests__/formio-adapter.test.ts"
+      ],
+      "testStrategy": [
+        "UT：10类字段映射+边界校验"
+      ],
+      "aiPromptSuggestion": "实现 adapter.ts：将 Formio JSON 转为 UFS（统一表单Schema），覆盖 10 类组件。编写UT验证映射与校验。"
+    },
+    {
+      "taskId": "CMS-103",
+      "module": "表单设计器",
+      "title": "UFS 表单实时预览（react-hook-form + AntD）",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-102"
+      ],
+      "description": "实现 UFS 渲染器，使用 RHF + AntD 控件，支持 required/默认值/联动visibleWhen。",
+      "technicalRequirements": [
+        "RHF Controller 对接 AntD",
+        "visibleWhen 简单表达式（等值）",
+        "图片/颜色/日期等组件"
+      ],
+      "acceptanceCriteria": [
+        "从适配后的 UFS JSON 即时渲染",
+        "字段联动可用、校验可见"
+      ],
+      "codeLocations": [
+        "frontend/components/ufs/UfsRenderer.tsx"
+      ],
+      "testStrategy": [
+        "RTL：基本渲染与交互"
+      ],
+      "aiPromptSuggestion": "实现 UfsRenderer.tsx：用 RHF+AntD 渲染 UFS，支持10种字段与visibleWhen联动、必填校验。"
+    },
+    {
+      "taskId": "CMS-104",
+      "module": "表单设计器",
+      "title": "UFS 校验器（Zod）与前后端复用",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-103"
+      ],
+      "description": "用 Zod 表达 UFS 的字段与 crossRules，前端提交与后端写入前均走同一校验包。",
+      "technicalRequirements": [
+        "包：@app/shared/validation 导出 zod schema",
+        "后端二次校验并返回统一错误结构"
+      ],
+      "acceptanceCriteria": [
+        "非法表单结构被拦截",
+        "前后端错误信息一致"
+      ],
+      "codeLocations": [
+        "shared/validation/ufs.ts",
+        "backend/src/middleware/validateUfs.ts"
+      ],
+      "testStrategy": [
+        "UT：字段/跨字段规则"
+      ],
+      "aiPromptSuggestion": "实现 shared/validation/ufs.ts 的 Zod 校验，前后端复用，中英文错误消息。"
+    },
+    {
+      "taskId": "CMS-105",
+      "module": "表单设计器",
+      "title": "表单Schema存储API与版本化/回滚",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-104"
+      ],
+      "description": "实现 /admin/forms 的保存、获取历史版本、回滚接口，并在写入时生成配置快照与Redis失效通知。",
+      "technicalRequirements": [
+        "Knex 版本表或在 form_schemas 增 version 字段",
+        "写入 config_snapshots",
+        "发布 cfg:invalidate"
+      ],
+      "acceptanceCriteria": [
+        "能选择历史版本并回滚成功",
+        "回滚后 UFS 可被渲染器使用"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/forms.route.ts",
+        "backend/src/repositories/formSchemas.repo.ts"
+      ],
+      "testStrategy": [
+        "IT：保存/回滚链路",
+        "UT：repo 版本处理"
+      ],
+      "aiPromptSuggestion": "实现表单Schema版本接口：保存即生成新版本并写入快照；提供历史列表与回滚；发布Redis失效消息。"
+    },
+    {
+      "taskId": "CMS-106",
+      "module": "表单设计器",
+      "title": "表单设计器UI：向导式（Step 2）整合",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-101",
+        "CMS-103",
+        "CMS-105"
+      ],
+      "description": "把 FormBuilder、UFS 预览与版本选择集成到 Feature 创建向导的Step 2。",
+      "technicalRequirements": [
+        "AntD Steps + Drawer",
+        "导出→适配→预览一体化",
+        "保存生成 form_schemas 记录"
+      ],
+      "acceptanceCriteria": [
+        "在向导中自然使用表单设计功能",
+        "完成后生成有效 form_schema_id"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/features/new/Step2Form.tsx"
+      ],
+      "testStrategy": [
+        "手测流程顺畅，无多余刷新"
+      ],
+      "aiPromptSuggestion": "实现 Feature 向导 Step2：内嵌 FormBuilder 与预览，确认后保存为 form_schemas 版本，并返回ID。"
+    },
+    {
+      "taskId": "CMS-107",
+      "module": "表单设计器",
+      "title": "大表单性能优化（分步+惰性注册+虚拟滚动）",
+      "phase": "Week 3",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-103"
+      ],
+      "description": "为 UFS 渲染增加分步渲染、惰性注册字段与 react-window 虚拟滚动策略。",
+      "technicalRequirements": [
+        "每步≤12字段",
+        "不可见字段不注册",
+        "长列表虚拟化"
+      ],
+      "acceptanceCriteria": [
+        "渲染时间显著下降（>30%）",
+        "交互无卡顿"
+      ],
+      "codeLocations": [
+        "frontend/components/ufs/UfsRenderer.tsx"
+      ],
+      "testStrategy": [
+        "性能对比：前后两版TTI/交互耗时"
+      ],
+      "aiPromptSuggestion": "优化 UfsRenderer：分步渲染+惰性注册+react-window 虚拟化，给出简单性能对比日志。"
+    },
+    {
+      "taskId": "CMS-108",
+      "module": "表单设计器",
+      "title": "字段可重用片段（Snippet）与模板库",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P2",
+      "dependencies": [
+        "CMS-103"
+      ],
+      "description": "支持把常用字段组合存为片段，快速插入到FormBuilder或直接插入UFS。",
+      "technicalRequirements": [
+        "片段存储于 system_configs(category='form_snippet')",
+        "插入后自动重命名重复key"
+      ],
+      "acceptanceCriteria": [
+        "能创建/插入片段",
+        "重复key自动处理"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/forms/snippets.tsx",
+        "backend/src/routes/admin/form-snippets.route.ts"
+      ],
+      "testStrategy": [
+        "UT：重命名逻辑"
+      ],
+      "aiPromptSuggestion": "实现表单片段库：保存/列表/插入UFS；处理字段key冲突。"
+    },
+    {
+      "taskId": "CMS-109",
+      "module": "表单设计器",
+      "title": "UFS → 提交数据校验回放（预运行）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-104"
+      ],
+      "description": "在 Admin 中提供表单样本数据校验功能，展示字段级错误与 crossRules 触发结果。",
+      "technicalRequirements": [
+        "前端调用后端 Zod 校验",
+        "错误映射到字段提示"
+      ],
+      "acceptanceCriteria": [
+        "能在保存前提前发现数据问题",
+        "错误展示清晰"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/forms/validator.tsx",
+        "backend/src/routes/admin/forms.route.ts"
+      ],
+      "testStrategy": [
+        "RTL：错误提示映射"
+      ],
+      "aiPromptSuggestion": "实现表单数据预校验功能：输入样本数据，后端用 Zod 校验并返回字段错误，前端逐项展示。"
+    },
+    {
+      "taskId": "CMS-110",
+      "module": "表单设计器",
+      "title": "UFS 导入/导出（JSON）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P2",
+      "dependencies": [
+        "CMS-103",
+        "CMS-105"
+      ],
+      "description": "支持从本地导入UFS JSON或导出当前UFS，便于备份与迁移。",
+      "technicalRequirements": [
+        "JSON 结构校验",
+        "兼容版本字段"
+      ],
+      "acceptanceCriteria": [
+        "导入非法JSON有友好提示",
+        "导出文件包含version与元信息"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/forms/import-export.tsx"
+      ],
+      "testStrategy": [
+        "UT：结构校验"
+      ],
+      "aiPromptSuggestion": "实现UFS的导入导出功能：选择文件→校验→保存为新版本；支持下载导出现有UFS。"
+    },
+    {
+      "taskId": "CMS-201",
+      "module": "流程编辑器",
+      "title": "React Flow 集成与基础节点库",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "集成 React Flow，定义节点样式与基础类型（PROVIDER/CONDITION/POST_PROCESS/END），支持拖拽与连接。",
+      "technicalRequirements": [
+        "nodeTypes/edgeTypes 稳定引用",
+        "minimap/zoom/对齐线"
+      ],
+      "acceptanceCriteria": [
+        "可拖入节点并连线、删除",
+        "保存为 Pipeline JSON（初版）"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/pipelines/editor/page.tsx",
+        "frontend/components/flow/NodeTypes.tsx"
+      ],
+      "testStrategy": [
+        "手测交互"
+      ],
+      "aiPromptSuggestion": "集成 React Flow：提供基础节点库与连线交互，可导出/导入初版JSON。"
+    },
+    {
+      "taskId": "CMS-202",
+      "module": "流程编辑器",
+      "title": "节点配置侧边栏（Provider/参数/超时/重试）",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-201",
+        "CMS-007"
+      ],
+      "description": "实现右侧抽屉配置当前选中节点：选择 providerRefId、handlerKey、超时/重试、输入输出映射（变量选择器）。",
+      "technicalRequirements": [
+        "AntD Form + 可选项来自 /admin/providers",
+        "变量选择器支持 form/* 与上游节点 out/*"
+      ],
+      "acceptanceCriteria": [
+        "配置变化实时写回节点 data",
+        "必填项校验完整"
+      ],
+      "codeLocations": [
+        "frontend/components/flow/NodeInspector.tsx"
+      ],
+      "testStrategy": [
+        "RTL：配置表单校验"
+      ],
+      "aiPromptSuggestion": "为流程编辑器实现右侧配置面板：绑定 provider 列表、必填校验、变量选择器。"
+    },
+    {
+      "taskId": "CMS-203",
+      "module": "流程编辑器",
+      "title": "Pipeline JSON Schema v1 定义与保存/读取 API",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-201"
+      ],
+      "description": "定义 Pipeline v1 数据结构与Zod校验，实现 /admin/pipelines 的保存、读取与版本化/快照。",
+      "technicalRequirements": [
+        "Zod 校验 nodes/edges/onError/vars",
+        "保存即生成版本与快照/失效消息"
+      ],
+      "acceptanceCriteria": [
+        "非法结构拦截，有清晰提示",
+        "版本回滚可用"
+      ],
+      "codeLocations": [
+        "shared/validation/pipeline.ts",
+        "backend/src/routes/admin/pipelines.route.ts"
+      ],
+      "testStrategy": [
+        "UT：Schema校验",
+        "IT：保存/回滚"
+      ],
+      "aiPromptSuggestion": "定义 pipeline v1 的 Zod schema，并实现保存/读取/回滚接口，写UT/IT。"
+    },
+    {
+      "taskId": "CMS-204",
+      "module": "流程编辑器",
+      "title": "拓扑合法性验证（Kahn算法+变量可达性）",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-203"
+      ],
+      "description": "实现 pipeline 合法性校验：环检测、入度/出度规则、条件边完整性、变量来源可达性与输出重名冲突检查。",
+      "technicalRequirements": [
+        "Kahn 拓扑排序",
+        "数据血缘图：form 与节点 out 映射",
+        "错误附着到节点/边 ID"
+      ],
+      "acceptanceCriteria": [
+        "可列出所有错误并高亮到画布",
+        "阻止保存非法拓扑"
+      ],
+      "codeLocations": [
+        "frontend/lib/pipeline/validator.ts"
+      ],
+      "testStrategy": [
+        "UT：环/缺少true/false/未定义变量/重名输出"
+      ],
+      "aiPromptSuggestion": "编写 validator.ts：用 Kahn 检测环、检查条件边、做变量可达性与输出重名校验，返回结构化错误。"
+    },
+    {
+      "taskId": "CMS-205",
+      "module": "流程编辑器",
+      "title": "测试运行器（模拟/真实）与可视化日志",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-003",
+        "CMS-004",
+        "CMS-204"
+      ],
+      "description": "提供 /admin/pipelines/:id/test 接口，支持模拟（mock Provider）与真实调用切换，前端展示每步耗时/请求响应。",
+      "technicalRequirements": [
+        "对接现有引擎，隔离配额与业务账单",
+        "日志结构化：stepId、status、latency、error"
+      ],
+      "acceptanceCriteria": [
+        "能跑通示例Pipeline并展示过程日志",
+        "错误时提供上下文与重试建议"
+      ],
+      "codeLocations": [
+        "backend/src/controllers/admin/pipelines-test.controller.ts",
+        "frontend/app/admin/pipelines/[id]/test.tsx"
+      ],
+      "testStrategy": [
+        "IT：mock/真实两种模式",
+        "UT：日志整形"
+      ],
+      "aiPromptSuggestion": "实现测试运行器：后端提供mock/真实执行开关，返回每步日志；前端以时间线展示。"
+    },
+    {
+      "taskId": "CMS-206",
+      "module": "流程编辑器",
+      "title": "并行与Join节点（FORK/JOIN）",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-204"
+      ],
+      "description": "增加并行分支与汇合节点，Join 需等待所有上游完成或根据策略（任一/全部）。",
+      "technicalRequirements": [
+        "JOIN 策略：ALL/ANY",
+        "拓扑校验扩展入度/出度规则"
+      ],
+      "acceptanceCriteria": [
+        "能表达两条并行支线并在 JOIN 合流",
+        "校验能识别JOIN规则错误"
+      ],
+      "codeLocations": [
+        "frontend/components/flow/NodeTypes.tsx",
+        "shared/validation/pipeline.ts"
+      ],
+      "testStrategy": [
+        "UT：JOIN ANY/ALL",
+        "IT：示例流程执行"
+      ],
+      "aiPromptSuggestion": "实现 FORK/JOIN 节点及其校验与执行策略，给出示例。"
+    },
+    {
+      "taskId": "CMS-207",
+      "module": "流程编辑器",
+      "title": "变量选择器与引用提示（form/node/system）",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-202",
+        "CMS-203"
+      ],
+      "description": "在节点配置面板为输入/输出提供变量树选择器，来源含 form/*、system/*、上游节点 out/*，并校验未定义引用。",
+      "technicalRequirements": [
+        "变量树 UI 与搜索",
+        "未定义引用标红"
+      ],
+      "acceptanceCriteria": [
+        "选中变量会写入 {{path}} 占位",
+        "非法 path 有即时提示"
+      ],
+      "codeLocations": [
+        "frontend/components/flow/VarPicker.tsx"
+      ],
+      "testStrategy": [
+        "RTL：选择与校验交互"
+      ],
+      "aiPromptSuggestion": "实现 VarPicker：可浏览变量树并选择写入占位到输入映射，对未定义path即时标红。"
+    },
+    {
+      "taskId": "CMS-208",
+      "module": "流程编辑器",
+      "title": "Feature 向导 Step3：流程编排整合",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-201",
+        "CMS-204",
+        "CMS-205"
+      ],
+      "description": "将流程编辑器嵌入向导 Step3，使得管理员在一步内完成节点拖拽、配置、校验与保存。",
+      "technicalRequirements": [
+        "向导中持久化 pipeline_schema_id",
+        "保存后版本+快照"
+      ],
+      "acceptanceCriteria": [
+        "从向导可直接进入试跑并回看日志",
+        "保存成功返回 pipeline_schema_id"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/features/new/Step3Pipeline.tsx"
+      ],
+      "testStrategy": [
+        "手测：从Step2→Step3→试跑→保存"
+      ],
+      "aiPromptSuggestion": "在 Feature 向导 Step3 嵌入流程编辑器，打通保存与试跑全链路。"
+    },
+    {
+      "taskId": "CMS-209",
+      "module": "流程编辑器",
+      "title": "错误收敛与画布高亮（校验结果可视化）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-204"
+      ],
+      "description": "对 validator 返回的结构化错误，在画布与侧栏同步高亮，点击错误定位到节点/边。",
+      "technicalRequirements": [
+        "错误列表与跳转",
+        "多处错误聚合"
+      ],
+      "acceptanceCriteria": [
+        "复杂流程下可快速修复所有错误",
+        "无多次渲染卡顿"
+      ],
+      "codeLocations": [
+        "frontend/components/flow/ValidationPanel.tsx"
+      ],
+      "testStrategy": [
+        "RTL：定位交互"
+      ],
+      "aiPromptSuggestion": "给出 ValidationPanel：渲染错误列表，点击聚焦对应节点/边并高亮。"
+    },
+    {
+      "taskId": "CMS-210",
+      "module": "流程编辑器",
+      "title": "Pipeline 导入/导出（JSON）与样例库",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P2",
+      "dependencies": [
+        "CMS-203"
+      ],
+      "description": "支持导入/导出 Pipeline JSON，提供三个官方样例（上传→增强→后处理）。",
+      "technicalRequirements": [
+        "JSON 校验并转为最新版本",
+        "样例库在 system_configs 中维护"
+      ],
+      "acceptanceCriteria": [
+        "导入非法结构有提示",
+        "导出包含版本与元信息"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/pipelines/import-export.tsx"
+      ],
+      "testStrategy": [
+        "UT：结构校验"
+      ],
+      "aiPromptSuggestion": "实现 pipeline 的导入导出与样例库，保证版本兼容检查。"
+    },
+    {
+      "taskId": "CMS-301",
+      "module": "Prompt管理",
+      "title": "Monaco 集成与基础编辑器",
+      "phase": "Week 2",
+      "estimatedHours": 4,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "Next.js 动态加载 Monaco，编辑器采用 Handlebars 语法高亮与只读切换。",
+      "technicalRequirements": [
+        "next/dynamic 关闭SSR",
+        "基础快捷键与行号"
+      ],
+      "acceptanceCriteria": [
+        "可编辑保存简单模板"
+      ],
+      "codeLocations": [
+        "frontend/components/prompt/PromptEditor.tsx"
+      ],
+      "testStrategy": [
+        "手测"
+      ],
+      "aiPromptSuggestion": "集成 Monaco Editor，用作 Handlebars 模板编辑器，支持只读、基本配置。"
+    },
+    {
+      "taskId": "CMS-302",
+      "module": "Prompt管理",
+      "title": "变量提示与自动补全（Completion Provider）",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-301"
+      ],
+      "description": "实现从上下文提取变量（form/*、system/*、user/*、node/*），在 {{ 光标处提示可选变量与Snippet。",
+      "technicalRequirements": [
+        "扫描文档提取 {{var}}",
+        "注册 Monaco CompletionItemProvider"
+      ],
+      "acceptanceCriteria": [
+        "输入 {{ 开始能出现智能补全",
+        "选择后正确插入"
+      ],
+      "codeLocations": [
+        "frontend/components/prompt/var-completion.ts"
+      ],
+      "testStrategy": [
+        "RTL：补全交互"
+      ],
+      "aiPromptSuggestion": "为 Monaco 编写变量自动补全：监听 {{，从上下文提供可用变量与片段。"
+    },
+    {
+      "taskId": "CMS-303",
+      "module": "Prompt管理",
+      "title": "受限 Handlebars 渲染与预览 API",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "后端实现 /admin/prompts/preview，受限 helpers（不允许 eval），传入 variables 进行渲染并返回结果与缺失变量列表。",
+      "technicalRequirements": [
+        "默认转义",
+        "helpers 白名单：eq, not, and, or, join, json"
+      ],
+      "acceptanceCriteria": [
+        "可实时预览与高亮缺失变量",
+        "无任意代码执行风险"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/prompts.route.ts",
+        "backend/src/services/prompt.service.ts"
+      ],
+      "testStrategy": [
+        "UT：渲染/缺失变量/阻止危险表达式"
+      ],
+      "aiPromptSuggestion": "实现 Handlebars 受限渲染服务：白名单 helpers，禁止任意函数执行；提供预览接口与UT。"
+    },
+    {
+      "taskId": "CMS-304",
+      "module": "Prompt管理",
+      "title": "Prompt 分类/版本/回滚",
+      "phase": "Week 3",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-303"
+      ],
+      "description": "在 system_configs 扩展 prompt 类别，并提供 prompt_versions 表实现历史版本与回滚。",
+      "technicalRequirements": [
+        "版本自增，保存diff（可选）",
+        "回滚写入快照与失效广播"
+      ],
+      "acceptanceCriteria": [
+        "可查看历史与一键回滚",
+        "回滚后预览一致"
+      ],
+      "codeLocations": [
+        "backend/src/repositories/prompts.repo.ts",
+        "backend/src/routes/admin/prompts.route.ts"
+      ],
+      "testStrategy": [
+        "IT：保存/回滚链路"
+      ],
+      "aiPromptSuggestion": "实现 Prompt 的版本管理：保存即新版本、列表查看、回滚写快照，发布失效消息。"
+    },
+    {
+      "taskId": "CMS-305",
+      "module": "Prompt管理",
+      "title": "Prompt 测试运行（调用 AI API 对比结果）",
+      "phase": "Week 3",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-303",
+        "CMS-003",
+        "CMS-004"
+      ],
+      "description": "选择 Provider + 模型参数，输入变量，调用 AI 接口拿到结果并与历史版本结果对比。",
+      "technicalRequirements": [
+        "保存测试记录：prompt_id/version/variables/result摘要",
+        "对比两版本差异"
+      ],
+      "acceptanceCriteria": [
+        "能直观看到不同版本效果差异",
+        "失败时有错误信息与重试建议"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/prompts/tester.tsx",
+        "backend/src/controllers/admin/prompts-test.controller.ts"
+      ],
+      "testStrategy": [
+        "IT：调用通用 Provider 生成"
+      ],
+      "aiPromptSuggestion": "实现 Prompt 测试器：选择 Provider+模型，输入变量，调用生成并保存记录，可对比不同版本结果。"
+    },
+    {
+      "taskId": "CMS-306",
+      "module": "Prompt管理",
+      "title": "Feature 向导 Step4：预览与发布",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-106",
+        "CMS-208"
+      ],
+      "description": "在 Step4 展示表单预览与流程图缩略图，并提供“测试运行”“发布”按钮；发布写 feature_definitions 并广播失效。",
+      "technicalRequirements": [
+        "生成封面缩略图（流程图快照）",
+        "检查拓扑合法与Provider可用性"
+      ],
+      "acceptanceCriteria": [
+        "发布成功后在工作台可见",
+        "测试运行可出结果"
+      ],
+      "codeLocations": [
+        "frontend/app/admin/features/new/Step4Publish.tsx",
+        "backend/src/routes/admin/features.route.ts"
+      ],
+      "testStrategy": [
+        "IT：创建新 Feature 的闭环"
+      ],
+      "aiPromptSuggestion": "实现 Step4：预览表单与流程，执行测试，点击发布写入 feature_definitions 并广播缓存失效。"
+    }
+  ]
+}

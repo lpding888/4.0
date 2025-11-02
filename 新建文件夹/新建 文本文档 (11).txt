@@ -1,0 +1,1145 @@
+下面是一份**可直接交付执行**的全套方案与任务卡。内容覆盖：安全加固、性能优化、高并发、合规与上线保障。文末给出\*\*按部门分组的 30 张 AI 任务卡（标准 JSON、每卡 18 字段）\*\*与实施路线图和验收标准。
+
+---
+
+## 第一部分：安全加固方案（执行版）
+
+> 目标：把可预防的安全问题在设计、编码、部署、运维各阶段“前移消解”，把不可避免的风险“降级隔离”，把已发生的异常“快速发现与止损”。
+
+### 1. Web 安全防护
+
+**1.1 XSS 防护**
+
+* **输入验证与白名单**
+
+  * 表单与接口：对字符串长度、字符集、格式（手机号、邮箱、身份证）做白名单校验，拒绝或矫正异常输入；对富文本仅保留允许标签与属性（如 DOMPurify/Sanitize-HTML 自建 allowlist）。
+  * 上传类接口：校验扩展名、MIME、文件头签名（Magic Number），对图像做二次编码处理（去除 EXIF）。
+* **输出编码**
+
+  * 在 HTML 上下文转义 `& < > " ' /`；在属性上下文、URL 上下文、CSS/JS 上下文分别做对应编码；禁止把不可信数据插入 `innerHTML`、`dangerouslySetInnerHTML`。React 下优先保持声明式渲染。
+* **CSP（Content-Security-Policy）**
+
+  * `default-src 'self'; script-src 'self' 'strict-dynamic' https: 'nonce-<runtime>'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests; report-to /csp/report`
+  * 先以 `Content-Security-Policy-Report-Only` 启动观测 1-2 周，修正再切换到强制。
+* **Cookie 安全**
+
+  * 会话类 Cookie：`HttpOnly; Secure; SameSite=Lax|Strict`；避免前端 JS 读取。
+  * 不在 URL、LocalStorage、SessionStorage 存放敏感会话材料。
+* **框架实践**
+
+  * Node/Express：启用 Helmet（`helmet.contentSecurityPolicy`、`helmet.xssFilter`、`helmet.noSniff`、`helmet.frameguard`）。
+  * 组件中避免 `dangerouslySetInnerHTML`；必须使用时结合 nonce 与受控白名单。
+
+**1.2 CSRF 防护**
+
+* **双重防护**：对需要身份态的 **写操作**（POST/PUT/PATCH/DELETE）启用 **CSRF Token**（一次性/每会话），并确保 **SameSite Cookie**（默认 `Lax`）+ **Referer/Origin 校验**（允许本站与可信子域名）。
+* **接口幂等**：对容易被误触发的写接口（支付、删除）引入 **二次确认** 与 **一次性事务票据（One-time token）**。
+* **CORS 最小授权**：仅放行受控来源、限制方法与头；拒绝通配符 `*` 搭配凭证。
+
+**1.3 SQL 注入防护**
+
+* **强制参数化**：数据库访问层以 Knex.js/ORM 的 **占位符绑定** 代替字符串拼接；禁用动态 `whereRaw`（如必须使用，严格白名单 + 转义）。
+* **输入校验与长度限制**：避免长字符串进 SQL；统一转义与截断策略并记录审计日志。
+* **最小权限**：应用使用的数据库账号仅授予必要 CRUD；生产拒绝 `SUPER/FILE/PROCESS` 等高权限；隔离 DDL 权限。
+* **审计**：启用慢查询与错误查询日志，针对异常频率触发告警。
+
+**1.4 点击劫持防护**
+
+* **响应头**：`X-Frame-Options: DENY`（或基于业务需要配置 `SAMEORIGIN`）；CSP 中使用 `frame-ancestors 'none'` 或受控域。
+* **视觉钓鱼检测**：对关键按钮增加 **交互延迟/可见性检测**（IntersectionObserver），避免透明覆盖诱导点击。
+* **OAuth/支付回调页**：限定可嵌入来源并做 referer/origin 复核。
+
+---
+
+### 2. API 安全防护
+
+**2.1 认证与鉴权**
+
+* **JWT**
+
+  * 使用非对称签名（优先 `RS256`），私钥托管在 KMS/密钥服务，公钥通过 JWKS 轮换；**默认过期短（15–30 分钟），支持 Refresh Token 轮转**（被动续期 + 登出/撤销黑名单）；
+  * 令牌中仅放必要 claims（`sub`, `iat`, `exp`, `scope/roles`, `jti`），避免敏感明文字段。
+* **RBAC/ABAC**
+
+  * **角色→权限→资源** 三层抽象，后端基于中间件在路由粒度做权限检查；对敏感操作叠加 **资源所有权** 校验（`ownerId === userId`）与 **组织/租户** 隔离。
+* **API Key 管理**
+
+  * 面向机器对机器（M2M）调用分配独立密钥/签名（HMAC）；**按客户端维度限流与撤销**；密钥仅在服务端保存 Hash。
+
+**2.2 请求限流与滥用防护**
+
+* **多维限流**：IP 维度、用户/租户维度、接口维度（敏感接口更严）；结合 **Token Bucket** + **Sliding Window**；对验证码、登录、注册等关键路径单独配置。
+* **突发控制**：对 API 网关/反向代理（Nginx）启用 `limit_req` 与 `limit_conn`；网关层 429 返回携带 `Retry-After`。
+* **WAF/机器人识别**：结合 CDN/WAF/UA 指纹识别异常模式，自动拉黑或挑战验证（如 JS Challenge）。
+
+**2.3 敏感数据保护**
+
+* **传输加密**：全站强制 HTTPS（TLS1.2+，优先 TLS1.3）；关闭弱密码套件与压缩；HTTP→HTTPS 301。
+* **存储加密**：磁盘与数据库（特定列，如手机号/身份证）使用 **AES-256-GCM** 透明加密；密钥从 KMS 动态获取；密钥轮换策略（半年/年）。
+* **脱敏展示与日志脱敏**：界面只显示必要信息（如手机号 `136****8888`），日志严禁记录密码、明文 Token、身份证完整号、定位原始坐标；对异常日志进行 Hash 化定位。
+
+---
+
+### 3. 服务器与网络安全防护
+
+**3.1 基线与防火墙**
+
+* **端口最小暴露**：仅开放 `80/443/22`（或堡垒机专用端口）；其余全部拒绝；外部数据库端口（3306/5432/6379）**禁止公网直连**。
+* **SSH 加固**：禁用 root 直登；密钥登录；`AllowUsers` 白名单；`Fail2ban`/云防暴策略；登陆审计。
+* **系统基线**：最小化镜像、及时补丁；内核参数（`net.ipv4.*`）调优；关闭无用服务；时钟同步。
+
+**3.2 HTTPS 配置**
+
+* **证书与更新**：自动签发（Let’s Encrypt/托管证书服务）+ 自动续期；
+* **强制安全**：`HSTS: max-age=31536000; includeSubDomains; preload`；`X-Content-Type-Options: nosniff`；`Referrer-Policy: strict-origin-when-cross-origin`；`Permissions-Policy` 收紧。
+* **HTTP/2/3**：开启以降低握手开销与多路复用。
+
+**3.3 DDoS/抗恶意**
+
+* **CDN/WAF**：在边缘启用缓存/动态加速/恶意流量清洗；对 Layer7 大量相似请求匹配策略；
+* **黑白名单**：自动化封禁（速率、地理、ASN 为特征），提供申诉白名单通道；
+* **熔断降级**：当下游不可用时返回缓存/静态页；避免放大效应。
+
+---
+
+### 4. 数据安全与合规
+
+**4.1 备份与恢复**
+
+* **策略**：数据库 **日备**（全量/增量）、对象存储 **跨地域冗余**，保留策略（7/30/180 天）；
+* **演练**：季度恢复演练（RPO/RTO 目标），以真实匿名化数据验证；
+* **分级**：按数据敏感度定密与访问审批，访问留痕。
+
+**4.2 合规与用户权利**
+
+* **政策与告知**：隐私政策、Cookie 告知与同意管理（按地区差异化开启）；
+* **数据主体权利**：导出（机器可读）、更正、删除/注销与撤回同意；
+* **最小必要原则**：采集前置必要说明；默认关闭不必要采集；
+* **跨境与第三方**：对第三方 SDK 做 **最小权限审查** 与数据映射清单；签署数据处理协议（DPA）；对面向欧盟用户对齐 GDPR 要求，对境内用户遵循《数据安全法》《个人信息保护法》《网络安全法》等。
+
+---
+
+## 第二部分：性能优化方案（执行版）
+
+### 5. 前端性能优化
+
+* **资源与包体**
+
+  * 代码分割：按路由与组件粒度 `dynamic import + React.lazy/Suspense`；第三方库做 **按需加载**（Tree-shaking，避免 All-in-one）；
+  * 图片优化：WebP/AVIF 优先；自适应多分辨率（`srcset`/`sizes`）；CDN 自适应转码；图标统一 SVG Sprite/Iconfont。
+  * 懒加载与预获取：视口懒加载（IntersectionObserver）、关键路径 `rel=preload`、跨域依赖 `preconnect/dns-prefetch`。
+* **运行时优化（React）**
+
+  * `memo/useMemo/useCallback` 控制重渲染；虚拟列表；去抖/节流高频事件；
+  * 避免在渲染阶段发起副作用；减少 context 过度传递（拆分 Provider）。
+* **缓存与协议**
+
+  * 静态资源 `Cache-Control: public, max-age=31536000, immutable`，带内容指纹；
+  * HTML `no-cache` + ETag；开启 HTTP/2/3 与压缩（Brotli/Gzip）。
+* **可观测性**
+
+  * 采集 FCP/LCP/CLS/INP、资源错误、卡顿堆栈；对关键页面设 SLO（如 LCP P75 < 2.5s）。
+
+### 6. 后端性能优化
+
+* **数据库**
+
+  * 索引：组合索引覆盖高频查询；避免低选择性列；使用 EXPLAIN 逐条核查；
+  * 查询：只取必要字段；分页用 `keyset pagination` 优先；避免 N+1；
+  * 连接池：根据 CPU/IO 与数据库上限设置（如 Postgres 8–20/实例），超时与重试退避。
+* **缓存**
+
+  * Redis：热点 Key、配置缓存、权限集合，明确 **TTL** 与 **主动失效**；
+  * 二级缓存：本地 LRU（短 TTL）+ Redis（中 TTL）；Cache-Aside 模式；穿透/雪崩/击穿防护（空值缓存、抖动 TTL、互斥锁）。
+* **异步化与解耦**
+
+  * 任务队列（BullMQ/RabbitMQ）：短信、邮件、报表、第三方回调；**幂等键** 与 **重试退避**；
+  * 批处理/合并：对高频小请求做 **批量合并**（如写入队列/合并查询）。
+* **I/O 与运行时**
+
+  * 文件流式处理；避免一次性读全；
+  * Node.js 线程池参数调优（`UV_THREADPOOL_SIZE`）与 GC 参数按容器内存上限设置；
+  * 预热连接（DB/Redis/HTTP）。
+
+### 7. 高并发优化
+
+* **负载均衡**
+
+  * Nginx/SLB：轮询/最少连接；健康检查（被动+主动）；**蓝绿/金丝雀** 发布；
+  * 长连接/超时：合理 `keepalive_timeout` 与后端超时，防止连接泄露。
+* **缓存策略（多层）**
+
+  * 浏览器缓存 + CDN 边缘缓存 + 源站 Redis；对接口按 **可缓存性** 分类（强缓存/协商缓存/不可缓存）。
+* **数据库与存储**
+
+  * 读写分离：主写从读，延迟感知读；
+  * 慢查询治理：设阈值（>200ms）自动采样与报警；
+  * 连接池与熔断：连接耗尽时快速失败并降级。
+* **弹性与降级**
+
+  * 自动扩缩容（HPA 按 QPS/CPU/延迟）；
+  * 业务降级开关：非关键功能关闭或降质；
+  * 限流/排队：高峰期进入排队页或削峰队列。
+* **监控与告警**
+
+  * 指标：QPS、P50/P95、错误率、饱和度、队列深度、GC 暂停、DB 慢查询；
+  * 报警：阈值 + 斜率（SLO 违规时告警）。
+
+---
+
+## 第三部分：任务卡拆分（核心 JSON，30 张，18 字段）
+
+> **说明**：以下为 **标准 JSON**，按部门分组。每张任务卡包含 18 个字段：
+> `id, department, title, description, rationale, scope, prerequisites, owner_role, collaborators, acceptance_criteria, deliverables, steps, risk_and_mitigations, dependencies, estimate, priority, metrics, references`
+
+```json
+{
+  "Web安全部门": [
+    {
+      "id": "SEC-WEB-001",
+      "department": "Web安全部门",
+      "title": "XSS防护：CSP配置与输出编码",
+      "description": "为Web与Admin站点实施严格CSP并统一输出编码策略，移除危险内联脚本，接入CSP上报。",
+      "rationale": "消除反射型与存储型XSS面，优先在浏览器侧阻断。",
+      "scope": "Web前端(PC/H5)、Admin控制台、静态资源站点",
+      "prerequisites": "域名白名单梳理；CDN及Nginx可配响应头；Helmet已集成",
+      "owner_role": "安全工程师",
+      "collaborators": ["前端工程师","后端工程师","DevOps"],
+      "acceptance_criteria": [
+        "生产启用强制CSP，Report-Only观测≥7天无功能回归",
+        "XSS自动化扫描0高危；Bug Bounty无复现",
+        "关键页面DOM XSS告警=0"
+      ],
+      "deliverables": ["CSP头配置与白名单清单","CSP报告收集端点与仪表盘","输出编码规范文档"],
+      "steps": [
+        "以Report-Only收集违规来源并清单化",
+        "落标nonce/strict-dynamic并移除内联脚本",
+        "切换强制CSP并持续监控7天"
+      ],
+      "risk_and_mitigations": "过严策略导致功能异常→先Report-Only，灰度放量；提供临时豁免清单并限期整改。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P0",
+      "metrics": "CSP违规率; 前端错误率; XSS漏洞数",
+      "references": ["OWASP ASVS","CSP Level3","Helmet文档"]
+    },
+    {
+      "id": "SEC-WEB-002",
+      "department": "Web安全部门",
+      "title": "CSRF防护：Token与SameSite",
+      "description": "对所有写操作接口强制CSRF Token校验，Cookie加SameSite=Lax/Strict并校验Origin/Referer。",
+      "rationale": "阻断跨站请求伪造攻击。",
+      "scope": "登录/注册、资料修改、订单、支付等写接口",
+      "prerequisites": "服务端模板/中间件可注入Token; 前端表单/请求拦截器可携带Token",
+      "owner_role": "后端工程师",
+      "collaborators": ["安全工程师","前端工程师"],
+      "acceptance_criteria": [
+        "关键写接口均校验CSRF且覆盖率100%",
+        "Cookie默认SameSite=Lax并Secure+HttpOnly",
+        "外部站点发起写请求均403/失败"
+      ],
+      "deliverables": ["CSRF中间件与校验逻辑","Token刷新与失效机制","测试用例与字典库"],
+      "steps": [
+        "识别写接口并打标签",
+        "集成CSRF中间件与Token注入",
+        "前端拦截器透传Token并覆盖用例"
+      ],
+      "risk_and_mitigations": "跨域子域业务受限→对可信来源配置CORS+Origin校验并最小授权。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "写接口CSRF覆盖率; CSRF绕过渗透用例数",
+      "references": ["OWASP CSRF Cheat Sheet"]
+    },
+    {
+      "id": "SEC-WEB-003",
+      "department": "Web安全部门",
+      "title": "SQL注入防护检查（Knex参数化）",
+      "description": "统一强制使用Knex参数绑定，审计所有原生SQL与whereRaw调用并替换或白名单限制。",
+      "rationale": "杜绝注入面，减少人工拼接SQL风险。",
+      "scope": "所有数据访问层与报表SQL",
+      "prerequisites": "代码仓库可全局搜索；测试环境可跑回归",
+      "owner_role": "后端工程师",
+      "collaborators": ["安全工程师","DBA"],
+      "acceptance_criteria": [
+        "whereRaw使用点=0或纳入白名单并附逃逸证明",
+        "静态扫描SQL注入告警=0",
+        "渗透测试SQLi用例全部失败"
+      ],
+      "deliverables": ["DAO层改造PR","白名单清单与审批记录","自动化扫描规则"],
+      "steps": [
+        "静态扫描定位拼接SQL",
+        "替换为参数化/存储过程",
+        "回归与渗透扫描校验"
+      ],
+      "risk_and_mitigations": "改造引起性能差异→对关键查询做EXPLAIN与基准对比。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P0",
+      "metrics": "注入告警数; whereRaw余量; 渗透阻断率",
+      "references": ["OWASP SQL Injection Prevention"]
+    },
+    {
+      "id": "SEC-WEB-004",
+      "department": "Web安全部门",
+      "title": "点击劫持防护（X-Frame-Options/CSP）",
+      "description": "全站设置X-Frame-Options与CSP frame-ancestors，限制被第三方嵌入。",
+      "rationale": "阻断UI重叠诱导点击等攻击。",
+      "scope": "所有HTTP响应，含回调与支付结果页",
+      "prerequisites": "网关/Nginx或应用可下发响应头",
+      "owner_role": "安全工程师",
+      "collaborators": ["后端工程师","运维"],
+      "acceptance_criteria": [
+        "关键页面被第三方frame嵌入时均被浏览器拦截",
+        "安全头在生产覆盖率100%",
+        "相关渗透用例均失败"
+      ],
+      "deliverables": ["响应头配置变更","测试用例与自动化脚本"],
+      "steps": [
+        "网关与应用层下发统一安全头",
+        "关键页回归测试",
+        "持续监控兼容性日志"
+      ],
+      "risk_and_mitigations": "确需被可信业务嵌入→在frame-ancestors加入受控白名单并记录审批。",
+      "dependencies": [],
+      "estimate": "1d",
+      "priority": "P1",
+      "metrics": "安全头覆盖率; 外部嵌入拦截次数",
+      "references": ["RFC7034 X-Frame-Options","CSP frame-ancestors"]
+    },
+    {
+      "id": "SEC-WEB-005",
+      "department": "Web安全部门",
+      "title": "统一安全响应头（Helmet）",
+      "description": "启用Helmet并配置noSniff、Referrer-Policy、Permissions-Policy、HSTS等安全头。",
+      "rationale": "默认即安全，减少浏览器侧攻击面。",
+      "scope": "Node/Express/Koa服务与边缘网关",
+      "prerequisites": "依赖可升级；具备回滚机制",
+      "owner_role": "后端工程师",
+      "collaborators": ["安全工程师","运维"],
+      "acceptance_criteria": [
+        "SSL Labs评级A/A+",
+        "安全头扫描无高危遗漏",
+        "核心浏览器兼容无功能回归"
+      ],
+      "deliverables": ["Helmet配置文件","Nginx头部模板","扫描报告"],
+      "steps": [
+        "集成Helmet并按策略配置",
+        "Nginx对齐头部模板",
+        "灰度发布并监控"
+      ],
+      "risk_and_mitigations": "过严策略影响SDK→按域/路径差异化策略并灰度验证。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P1",
+      "metrics": "SSL Labs评分; 安全头覆盖率",
+      "references": ["Helmet Docs","SSL Labs"]
+    },
+    {
+      "id": "SEC-WEB-006",
+      "department": "Web安全部门",
+      "title": "HTTPS强制与重定向",
+      "description": "实现HTTP→HTTPS 301，全链路TLS，屏蔽混合内容。",
+      "rationale": "防窃听与中间人攻击，保证机密性与完整性。",
+      "scope": "所有站点，含静态资源域与API子域",
+      "prerequisites": "证书签发与自动续期就绪",
+      "owner_role": "运维",
+      "collaborators": ["安全工程师","后端工程师"],
+      "acceptance_criteria": [
+        "HTTP访问均301到HTTPS",
+        "浏览器混合内容告警=0",
+        "TLS版本>=1.2且优先1.3"
+      ],
+      "deliverables": ["Nginx重写规则","证书与自动续期脚本","混合内容扫描清单"],
+      "steps": [
+        "配置301重定向与HSTS",
+        "清理非HTTPS资源与链接",
+        "压测与监控TLS握手指标"
+      ],
+      "risk_and_mitigations": "旧终端兼容→保留TLS1.2并监控失败率，必要时分域兼容。",
+      "dependencies": ["SEC-SERVER-004"],
+      "estimate": "1d",
+      "priority": "P0",
+      "metrics": "HTTPS占比; 混合内容次数",
+      "references": ["RFC6797 HSTS"]
+    },
+    {
+      "id": "SEC-WEB-007",
+      "department": "Web安全部门",
+      "title": "安全审计与漏洞扫描",
+      "description": "对前后端进行SAST/DAST/依赖扫描与渗透测试，建立循环改进。",
+      "rationale": "持续发现并清理新增风险。",
+      "scope": "代码仓、容器镜像、运行实例",
+      "prerequisites": "测试环境、扫描账户与脚本就绪",
+      "owner_role": "安全工程师",
+      "collaborators": ["QA","后端工程师","前端工程师"],
+      "acceptance_criteria": [
+        "高危漏洞=0并完成修复验证",
+        "中危修复率≥95%",
+        "形成季度安全报告"
+      ],
+      "deliverables": ["扫描结果清单","修复跟踪单","复测报告"],
+      "steps": [
+        "集成到CI的SAST/依赖/镜像扫描",
+        "灰度环境DAST与手工渗透",
+        "复测与关闭缺陷"
+      ],
+      "risk_and_mitigations": "误报导致阻塞→引入风险例外流程并限定有效期。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "高/中危数量; 修复时长MTTR",
+      "references": ["OWASP Top 10","ASVS","CIS Benchmarks"]
+    }
+  ],
+  "API安全部门": [
+    {
+      "id": "SEC-API-001",
+      "department": "API安全部门",
+      "title": "JWT Token安全加固",
+      "description": "改为RS256签名，短期Access+可轮转Refresh，黑名单撤销，JWKS公钥轮换。",
+      "rationale": "降低密钥泄漏影响，支持吊销与最小有效期。",
+      "scope": "所有认证与用户态API",
+      "prerequisites": "KMS/密钥服务，网关可验证JWKS",
+      "owner_role": "后端工程师",
+      "collaborators": ["安全工程师","DevOps"],
+      "acceptance_criteria": [
+        "Access有效期≤30min，Refresh≤14d",
+        "支持强制下线与吊销",
+        "令牌负载不含敏感明文"
+      ],
+      "deliverables": ["认证服务改造PR","JWKS端点","吊销列表实现"],
+      "steps": [
+        "接入KMS并生成签名对",
+        "发布JWKS并调整验证逻辑",
+        "实现Refresh轮转与吊销"
+      ],
+      "risk_and_mitigations": "老客户端不兼容→并行支持HS256一段时间并逐步下线。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P0",
+      "metrics": "签名算法覆盖; 吊销成功率; 非法令牌拒绝率",
+      "references": ["RFC7519 JWT","JWKS规范"]
+    },
+    {
+      "id": "SEC-API-002",
+      "department": "API安全部门",
+      "title": "RBAC权限控制",
+      "description": "角色-权限-资源三层模型，中间件在路由级别做权限检查，敏感操作校验资源所有权与租户隔离。",
+      "rationale": "将越权风险降到最低，满足多租户隔离。",
+      "scope": "Admin与用户中心、订单、支付等",
+      "prerequisites": "用户与组织模型清晰，权限矩阵已评审",
+      "owner_role": "后端工程师",
+      "collaborators": ["产品经理","安全工程师"],
+      "acceptance_criteria": [
+        "权限矩阵100%落地",
+        "越权渗透用例全部失败",
+        "权限变更可审计"
+      ],
+      "deliverables": ["权限矩阵与配置","鉴权中间件","审计日志方案"],
+      "steps": [
+        "梳理资源与动作并建模",
+        "实现鉴权拦截器",
+        "灰度与渗透校验"
+      ],
+      "risk_and_mitigations": "权限过细导致维护成本高→按域划分并提供策略合并工具。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "越权告警数; 鉴权平均延迟",
+      "references": ["OWASP ASVS-Access Control"]
+    },
+    {
+      "id": "SEC-API-003",
+      "department": "API安全部门",
+      "title": "全局限流中间件",
+      "description": "实现IP/用户/接口多维限流与速率限制，返回429并附Retry-After。",
+      "rationale": "抑制滥用与撞库等暴力请求。",
+      "scope": "公网开放API与登录/验证码等接口",
+      "prerequisites": "Redis可用作计数器；网关支持限流插件",
+      "owner_role": "后端工程师",
+      "collaborators": ["运维","安全工程师"],
+      "acceptance_criteria": [
+        "高风险接口单独更严阈值",
+        "错误码与提示一致",
+        "压测下限流准确率>99%"
+      ],
+      "deliverables": ["限流配置模板","Redis脚本/插件","监控面板"],
+      "steps": [
+        "定义各维度阈值与窗口",
+        "实现中间件/网关策略",
+        "联调监控与压测校准"
+      ],
+      "risk_and_mitigations": "错误限流影响用户→白名单/豁免策略与灰度验证。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "429比例; 限流准确率; 恶意请求下降幅度",
+      "references": ["Token Bucket/Sliding Window算法"]
+    },
+    {
+      "id": "SEC-API-004",
+      "department": "API安全部门",
+      "title": "敏感数据加密与脱敏",
+      "description": "对特定字段列级加密，界面与日志做脱敏，密钥托管KMS并定期轮换。",
+      "rationale": "即使数据外泄也降低敏感性暴露。",
+      "scope": "用户/订单/支付相关表与日志系统",
+      "prerequisites": "KMS与密钥生命周期策略",
+      "owner_role": "后端工程师",
+      "collaborators": ["DBA","安全工程师"],
+      "acceptance_criteria": [
+        "日志无明文PII/凭证",
+        "敏感列落地AES-GCM加密",
+        "密钥轮换不影响业务"
+      ],
+      "deliverables": ["加密适配层","日志脱敏库","密钥轮换Runbook"],
+      "steps": [
+        "识别敏感数据并分级",
+        "封装加解密SDK与脱敏函数",
+        "灰度数据迁移与回归"
+      ],
+      "risk_and_mitigations": "性能开销→按热点列引入透明加解密并加缓存。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "明文字段数; PII脱敏覆盖率; 加解密耗时",
+      "references": ["NIST推荐算法","OWASP Logging指南"]
+    },
+    {
+      "id": "SEC-API-005",
+      "department": "API安全部门",
+      "title": "API密钥管理（M2M）",
+      "description": "按客户端发放API Key/HMAC签名，具备灰度撤销与权限范围（Scope）。",
+      "rationale": "细粒度追踪与撤销以控制风险。",
+      "scope": "第三方与内部机器调用",
+      "prerequisites": "密钥发放与存储（仅保存Hash）",
+      "owner_role": "后端工程师",
+      "collaborators": ["产品经理","安全工程师"],
+      "acceptance_criteria": [
+        "每密钥可限定IP/频次/权限",
+        "撤销生效≤1分钟",
+        "审计可追踪到客户端"
+      ],
+      "deliverables": ["密钥发放门户","HMAC签名校验","审计报表"],
+      "steps": [
+        "实现密钥生命周期与Scope",
+        "接入网关验签与限流",
+        "对接审计与报警"
+      ],
+      "risk_and_mitigations": "密钥泄露→绑定IP与轮换，异常速率自动撤销。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P1",
+      "metrics": "密钥撤销时延; 非法签名拦截率",
+      "references": ["API Key最佳实践"]
+    },
+    {
+      "id": "SEC-API-006",
+      "department": "API安全部门",
+      "title": "日志脱敏与合规留痕",
+      "description": "统一日志规范，屏蔽PII与凭证，记录关键安全事件留痕并设定保留周期。",
+      "rationale": "既满足排障与审计，也避免泄露二次风险。",
+      "scope": "应用日志/访问日志/安全事件日志",
+      "prerequisites": "日志收集与集中化平台可用",
+      "owner_role": "后端工程师",
+      "collaborators": ["安全工程师","运维"],
+      "acceptance_criteria": [
+        "敏感字段100%脱敏或Hash",
+        "日志留存与访问控制合规",
+        "审计事件具备唯一会话与用户关联"
+      ],
+      "deliverables": ["日志字段规范","脱敏中间件","审计事件字典"],
+      "steps": [
+        "制定字段与分级策略",
+        "改造日志SDK与拦截器",
+        "抽样审计与告警联动"
+      ],
+      "risk_and_mitigations": "过度脱敏影响排障→引入可溯源Hash与受控解密流程。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P1",
+      "metrics": "脱敏覆盖率; 未脱敏样本数; 审计事件完整率",
+      "references": ["隐私最小化原则","OWASP Logging"]
+    }
+  ],
+  "服务器安全部门": [
+    {
+      "id": "SEC-SERVER-001",
+      "department": "服务器安全部门",
+      "title": "防火墙与端口最小化",
+      "description": "仅对外开放80/443/22(或堡垒端口)，数据库与缓存仅内网可达，默认拒绝策略。",
+      "rationale": "减少暴露面，阻断随机探测与爆破。",
+      "scope": "生产与预发布VPC/子网/安全组",
+      "prerequisites": "云防火墙/安全组可配置",
+      "owner_role": "运维",
+      "collaborators": ["安全工程师"],
+      "acceptance_criteria": [
+        "公网可达端口仅清单内",
+        "端口扫描无异常开放",
+        "外部无法直连DB/Redis"
+      ],
+      "deliverables": ["安全组模板","端口基线报告"],
+      "steps": [
+        "清点服务端口与必要性",
+        "应用最小暴露策略",
+        "验证与持续合规检查"
+      ],
+      "risk_and_mitigations": "误封影响联调→临时白名单与变更窗口。",
+      "dependencies": [],
+      "estimate": "1d",
+      "priority": "P0",
+      "metrics": "开放端口数; 扫描异常数",
+      "references": ["CIS基线"]
+    },
+    {
+      "id": "SEC-SERVER-002",
+      "department": "服务器安全部门",
+      "title": "SSH密钥登录配置",
+      "description": "禁用密码与root登录，强制密钥与多次失败封禁，启用登录审计。",
+      "rationale": "防止暴力破解与凭据喷洒。",
+      "scope": "所有Linux实例/容器宿主机",
+      "prerequisites": "堡垒机或Jump Server可用",
+      "owner_role": "运维",
+      "collaborators": ["安全工程师"],
+      "acceptance_criteria": [
+        "root远程登录被拒绝",
+        "密码登录被禁用",
+        "登录有审计可追踪"
+      ],
+      "deliverables": ["sshd_config模板","Fail2ban策略","审计对接"],
+      "steps": [
+        "分发密钥与权限最小化",
+        "修改sshd配置并灰度",
+        "联通堡垒机与审计"
+      ],
+      "risk_and_mitigations": "锁外风险→预留紧急维护通道与回滚。",
+      "dependencies": [],
+      "estimate": "1d",
+      "priority": "P0",
+      "metrics": "密码登录尝试次数; 封禁命中数",
+      "references": ["OpenSSH指南"]
+    },
+    {
+      "id": "SEC-SERVER-003",
+      "department": "服务器安全部门",
+      "title": "DDoS防护与IP黑名单",
+      "description": "启用CDN清洗与速率限制，基于特征自动拉黑并提供白名单通道。",
+      "rationale": "降低大流量与机器人攻击影响。",
+      "scope": "公网暴露域名与API网关",
+      "prerequisites": "CDN/WAF服务可用",
+      "owner_role": "运维",
+      "collaborators": ["安全工程师"],
+      "acceptance_criteria": [
+        "突发流量可维持SLA",
+        "恶意IP封禁时延<1min",
+        "误封率<0.1%"
+      ],
+      "deliverables": ["WAF/清洗策略","黑白名单服务","监控与告警规则"],
+      "steps": [
+        "配置清洗与挑战策略",
+        "接入日志与特征模型",
+        "联动黑白名单服务"
+      ],
+      "risk_and_mitigations": "误封影响业务→引入验证码/JS Challenge替代硬封。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "清洗触发次数; 误封率; 可用性SLA",
+      "references": ["DDoS最佳实践"]
+    },
+    {
+      "id": "SEC-SERVER-004",
+      "department": "服务器安全部门",
+      "title": "SSL证书配置与HSTS",
+      "description": "申请或接入托管证书，开启HSTS与TLS1.3，自动续期。",
+      "rationale": "保障传输安全与用户端强制HTTPS。",
+      "scope": "所有域名/子域名",
+      "prerequisites": "证书管理平台或ACME可用",
+      "owner_role": "运维",
+      "collaborators": ["后端工程师"],
+      "acceptance_criteria": [
+        "证书未过期告警=0",
+        "SSL Labs评分A+",
+        "HSTS覆盖根域与子域"
+      ],
+      "deliverables": ["证书自动化脚本","HSTS配置","TLS套件清单"],
+      "steps": [
+        "申请并部署证书",
+        "配置HSTS与TLS参数",
+        "压测与兼容性验证"
+      ],
+      "risk_and_mitigations": "老终端兼容→保留必要套件并分域兼容。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "证书剩余天数; SSL评分",
+      "references": ["RFC6797","SSL Labs指南"]
+    },
+    {
+      "id": "SEC-SERVER-005",
+      "department": "服务器安全部门",
+      "title": "服务器安全加固巡检",
+      "description": "按CIS基线执行系统加固与周期巡检，形成基线报告与整改闭环。",
+      "rationale": "减少系统层可利用弱点。",
+      "scope": "生产/预发实例与镜像",
+      "prerequisites": "基线检查脚本/Agent可执行",
+      "owner_role": "运维",
+      "collaborators": ["安全工程师"],
+      "acceptance_criteria": [
+        "高危基线项合规率100%",
+        "中危项>95%",
+        "生成巡检与整改报告"
+      ],
+      "deliverables": ["基线脚本与结果","整改清单","复检报告"],
+      "steps": [
+        "运行基线扫描与打分",
+        "按优先级整改",
+        "复检并归档"
+      ],
+      "risk_and_mitigations": "紧急修复影响业务→设维护窗口与回滚计划。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P1",
+      "metrics": "合规率; 高危项数量; MTTR",
+      "references": ["CIS Linux Benchmark"]
+    }
+  ],
+  "数据安全部门": [
+    {
+      "id": "SEC-DATA-001",
+      "department": "数据安全部门",
+      "title": "数据库定期备份策略",
+      "description": "日全量/增量备份+按7/30/180天保留，脱敏样本用于演练。",
+      "rationale": "保障可恢复性并控制成本。",
+      "scope": "生产数据库（主/从）",
+      "prerequisites": "备份存储与权限到位",
+      "owner_role": "DBA",
+      "collaborators": ["运维"],
+      "acceptance_criteria": [
+        "备份成功率≥99.9%",
+        "校验通过（校验和/校验表）",
+        "RPO≤24h（或按业务SLO）"
+      ],
+      "deliverables": ["备份脚本与计划","校验报告","保留策略说明"],
+      "steps": [
+        "制定计划与窗口",
+        "实现并行备份与校验",
+        "定期验证恢复可用性"
+      ],
+      "risk_and_mitigations": "备份窗口影响性能→异步/低峰并限速。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "备份成功率; 恢复用时RTO",
+      "references": ["备份最佳实践"]
+    },
+    {
+      "id": "SEC-DATA-002",
+      "department": "数据安全部门",
+      "title": "COS/对象存储异地容灾",
+      "description": "启用跨地域复制与版本控制，访问按最小权限授权。",
+      "rationale": "单地域灾害时快速切换与恢复。",
+      "scope": "对象存储Bucket（上传/日志/静态资源）",
+      "prerequisites": "目标地域与带宽配额",
+      "owner_role": "运维",
+      "collaborators": ["数据工程师"],
+      "acceptance_criteria": [
+        "复制延迟可监控且<5min",
+        "版本控制开启并可回滚",
+        "权限最小化与审计开启"
+      ],
+      "deliverables": ["跨地域复制策略","权限与KMS加密策略","演练报告"],
+      "steps": [
+        "创建目的地Bucket并配置复制",
+        "开启版本控制与KMS",
+        "切换演练与回滚测试"
+      ],
+      "risk_and_mitigations": "复制成本上升→按前缀与生命周期策略精细化。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P1",
+      "metrics": "复制时延; 存储成本; 回滚时长",
+      "references": ["对象存储跨域容灾指南"]
+    },
+    {
+      "id": "SEC-DATA-003",
+      "department": "数据安全部门",
+      "title": "备份恢复演练（季度）",
+      "description": "以匿名化样本数据执行全链路恢复演练，记录RTO/RPO并优化。",
+      "rationale": "确保灾备方案可用而非纸面。",
+      "scope": "数据库+对象存储+应用配置",
+      "prerequisites": "演练环境与脚本",
+      "owner_role": "DBA",
+      "collaborators": ["运维","后端工程师"],
+      "acceptance_criteria": [
+        "RTO与RPO达标",
+        "演练步骤可复现并自动化",
+        "问题与改进清单闭环"
+      ],
+      "deliverables": ["演练Runbook","RTO/RPO报告","整改项清单"],
+      "steps": [
+        "构建演练环境与脚本",
+        "按Runbook恢复并计时",
+        "输出报告与优化项"
+      ],
+      "risk_and_mitigations": "演练干扰生产→使用隔离环境与脱敏数据。",
+      "dependencies": ["SEC-DATA-001"],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "RTO; RPO; 演练频率",
+      "references": ["灾备演练最佳实践"]
+    },
+    {
+      "id": "SEC-DATA-004",
+      "department": "数据安全部门",
+      "title": "隐私政策与数据合规落地",
+      "description": "完善隐私政策、Cookie同意、第三方清单与数据流图，满足适用法律要求。",
+      "rationale": "合法合规前提下开展业务与出海。",
+      "scope": "官网/产品、SDK、第三方共享",
+      "prerequisites": "法务参与与适用地区确认",
+      "owner_role": "法务/合规",
+      "collaborators": ["产品经理","安全工程师"],
+      "acceptance_criteria": [
+        "隐私政策对外可见且可读性达标",
+        "第三方SDK评估与最小权限",
+        "合规审计通过"
+      ],
+      "deliverables": ["隐私政策与版本记录","数据流图/台账","第三方评估报告"],
+      "steps": [
+        "梳理数据项与用途",
+        "更新政策与同意管理",
+        "审计与整改闭环"
+      ],
+      "risk_and_mitigations": "政策与实现不一致→引入发布前清单审计。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "政策更新频率; 审计问题数",
+      "references": ["数据安全法","个人信息保护法","GDPR要点"]
+    },
+    {
+      "id": "SEC-DATA-005",
+      "department": "数据安全部门",
+      "title": "用户数据导出与删除",
+      "description": "实现数据可携（导出）与删除/注销流程，提供自助界面与服务端审计。",
+      "rationale": "满足用户权利与对外合规要求。",
+      "scope": "用户中心与资料/订单/日志关联",
+      "prerequisites": "数据血缘与映射清晰",
+      "owner_role": "后端工程师",
+      "collaborators": ["法务/合规","产品经理"],
+      "acceptance_criteria": [
+        "导出为机器可读格式(JSON/CSV)",
+        "删除含二级索引与副本清理",
+        "请求全程可审计可追踪"
+      ],
+      "deliverables": ["导出与删除API","前端自助入口","审计与通知机制"],
+      "steps": [
+        "梳理数据血缘与存储位置",
+        "实现API与异步清理任务",
+        "权限校验与审计联动"
+      ],
+      "risk_and_mitigations": "误删严重→分阶段软删+宽限期+恢复通道。",
+      "dependencies": ["SEC-DATA-004"],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "导出/删除平均时长; 失败率",
+      "references": ["数据主体权利实现指南"]
+    }
+  ],
+  "性能优化部门": [
+    {
+      "id": "PERF-CONCUR-001",
+      "department": "性能优化部门",
+      "title": "Nginx负载均衡配置",
+      "description": "基于最少连接与健康检查的反向代理，支持蓝绿/金丝雀发布与粘性会话按需配置。",
+      "rationale": "分摊流量与容错，平滑发布。",
+      "scope": "公共入口与微服务网关层",
+      "prerequisites": "至少2个后端副本可用",
+      "owner_role": "运维",
+      "collaborators": ["后端工程师"],
+      "acceptance_criteria": [
+        "健康检查覆盖所有后端",
+        "单点故障消除",
+        "蓝绿/金丝雀切换<1min"
+      ],
+      "deliverables": ["Nginx配置模板","健康检查脚本","发布Runbook"],
+      "steps": [
+        "配置upstream与健康检查",
+        "接入灰度权重与回滚",
+        "压测与观测验证"
+      ],
+      "risk_and_mitigations": "粘性导致倾斜→结合一致性哈希与容量规划。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "后端利用率均衡度; 切换时延",
+      "references": ["Nginx官方文档"]
+    },
+    {
+      "id": "PERF-CONCUR-002",
+      "department": "性能优化部门",
+      "title": "PM2集群优化",
+      "description": "按CPU核数启动集群，设定内存上限与自动重启，启用零停机热升级。",
+      "rationale": "用尽单机多核能力并提高稳定性。",
+      "scope": "Node.js服务",
+      "prerequisites": "容器资源配额明确",
+      "owner_role": "后端工程师",
+      "collaborators": ["运维"],
+      "acceptance_criteria": [
+        "崩溃自动拉起成功率100%",
+        "单机QPS提升≥N核倍数的70%",
+        "内存泄漏被上限保护"
+      ],
+      "deliverables": ["pm2.config.js","健康检查与探针","重启与升级策略"],
+      "steps": [
+        "配置cluster模式与max_memory_restart",
+        "接入探针与健康路由",
+        "基准压测与调参"
+      ],
+      "risk_and_mitigations": "频繁重启→监控泄漏源并回滚变更。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P1",
+      "metrics": "单机QPS; 重启次数; 内存峰值",
+      "references": ["PM2文档"]
+    },
+    {
+      "id": "PERF-CONCUR-003",
+      "department": "性能优化部门",
+      "title": "Redis缓存策略优化",
+      "description": "建立多层缓存（本地LRU+Redis），明确TTL与主动失效，防穿透/击穿/雪崩。",
+      "rationale": "减少数据库压力并稳定尾延迟。",
+      "scope": "读多场景与配置/权限缓存",
+      "prerequisites": "Redis高可用与监控",
+      "owner_role": "后端工程师",
+      "collaborators": ["DBA"],
+      "acceptance_criteria": [
+        "缓存命中率≥80%（目标域）",
+        "穿透/雪崩告警=0",
+        "尾延迟P95下降≥30%"
+      ],
+      "deliverables": ["缓存Key规范","失效与预热策略","监控面板"],
+      "steps": [
+        "识别热点与可缓存接口",
+        "实现Cache-Aside并设抖动TTL",
+        "上线预热与监控调优"
+      ],
+      "risk_and_mitigations": "脏读→引入版本号/消息通知主动失效。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P0",
+      "metrics": "命中率; P95; DB QPS下降幅度",
+      "references": ["缓存最佳实践"]
+    },
+    {
+      "id": "PERF-CONCUR-004",
+      "department": "性能优化部门",
+      "title": "数据库读写分离（可选）",
+      "description": "主写从读并延迟感知，读路由失败自动回退主库。",
+      "rationale": "提升读吞吐与抗压能力。",
+      "scope": "订单/内容/报告等读多场景",
+      "prerequisites": "主从复制与延迟监控",
+      "owner_role": "DBA",
+      "collaborators": ["后端工程师"],
+      "acceptance_criteria": [
+        "读请求命中从库≥80%",
+        "复制延迟可控且超阈回退",
+        "数据一致性无感"
+      ],
+      "deliverables": ["读写路由中间件","延迟阈值策略","回退机制与告警"],
+      "steps": [
+        "部署从库与监控延迟",
+        "实现读路由与幂等",
+        "灰度发布并回归一致性"
+      ],
+      "risk_and_mitigations": "延迟导致读旧→业务可接受则标注stale，否则回退主库。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P2",
+      "metrics": "从库命中率; 延迟分布; 一致性缺陷数",
+      "references": ["数据库复制指南"]
+    },
+    {
+      "id": "PERF-CONCUR-005",
+      "department": "性能优化部门",
+      "title": "CDN加速配置",
+      "description": "静态资源边缘缓存与自动转码，按路径/参数分类缓存策略。",
+      "rationale": "降低回源与首屏时延。",
+      "scope": "静态站点/图片/视频/API缓存可用域",
+      "prerequisites": "CDN可配置缓存与回源",
+      "owner_role": "运维",
+      "collaborators": ["前端工程师"],
+      "acceptance_criteria": [
+        "边缘命中率≥80%",
+        "首字节TTFB下降≥30%",
+        "回源流量下降≥40%"
+      ],
+      "deliverables": ["缓存规则与回源策略","图像转码策略","监控报表"],
+      "steps": [
+        "定义缓存分层与路径策略",
+        "开启WebP/AVIF与范围请求",
+        "联动预热与刷新机制"
+      ],
+      "risk_and_mitigations": "缓存污染→签名URL与Vary策略隔离。",
+      "dependencies": [],
+      "estimate": "2d",
+      "priority": "P0",
+      "metrics": "边缘命中率; TTFB; 回源比",
+      "references": ["CDN最佳实践"]
+    },
+    {
+      "id": "PERF-CONCUR-006",
+      "department": "性能优化部门",
+      "title": "压力测试与性能调优",
+      "description": "建立标准压测模型（登录/下单/浏览场景），输出瓶颈与优化建议并复测。",
+      "rationale": "以数据驱动调优，验证SLO达成。",
+      "scope": "核心业务链路与关键接口",
+      "prerequisites": "压测环境与脱敏数据，限流白名单",
+      "owner_role": "QA/性能工程师",
+      "collaborators": ["后端工程师","DBA","运维"],
+      "acceptance_criteria": [
+        "达到并发目标且错误率<0.1%",
+        "P95响应<目标阈值（如200ms）",
+        "瓶颈定位与修复闭环"
+      ],
+      "deliverables": ["压测脚本与报告","瓶颈清单","复测对比报告"],
+      "steps": [
+        "建模场景与数据准备",
+        "分阶段压测与观测",
+        "优化-复测-验收闭环"
+      ],
+      "risk_and_mitigations": "压测影响生产→隔离环境与限流防护。",
+      "dependencies": [],
+      "estimate": "4d",
+      "priority": "P0",
+      "metrics": "QPS; P95; 错误率; 资源利用率",
+      "references": ["性能工程实践"]
+    },
+    {
+      "id": "PERF-CONCUR-007",
+      "department": "性能优化部门",
+      "title": "监控和告警系统",
+      "description": "接入APM/指标/日志三板斧，定义SLO与多渠道告警，建立值班与应急流程。",
+      "rationale": "发现更早、定位更快、恢复更稳。",
+      "scope": "应用/DB/缓存/CDN/队列/系统",
+      "prerequisites": "监控与日志平台可用",
+      "owner_role": "运维",
+      "collaborators": ["后端工程师","安全工程师","QA"],
+      "acceptance_criteria": [
+        "关键SLO有对应监控与告警",
+        "告警噪音<20%（按周）",
+        "疑难故障平均恢复<5min"
+      ],
+      "deliverables": ["指标与看板","告警规则与抑制策略","应急响应Runbook"],
+      "steps": [
+        "定义SLO与指标字典",
+        "接入追踪/日志/指标",
+        "设置告警与演练"
+      ],
+      "risk_and_mitigations": "告警疲劳→分级与抑制，事后复盘优化阈值。",
+      "dependencies": [],
+      "estimate": "3d",
+      "priority": "P0",
+      "metrics": "MTTD/MTTR; 告警噪音率; SLO违约率",
+      "references": ["SRE实践","四黄金指标"]
+    }
+  ]
+}
+```
+
+---
+
+## 第四部分：实施路线图（4 周）
+
+> 假设当前为 **Week 0** 已完成方案评审；每周包含里程碑审查与回归。
+
+### Phase 1（Week 1）：Web & API 安全（P0 优先）
+
+* **目标**：清空高危攻防面，建立“默认安全”的基线。
+* **范围**：`SEC-WEB-001/002/003/006/005`，`SEC-API-001/003/004/006`。
+* **关键动作**：
+
+  1. CSP 先 Report-Only 收集清单，3 天内修复主要内联脚本与第三方来源，再切换强制；
+  2. CSRF 中间件接入全部写接口，前端拦截器联调；
+  3. Knex 参数化全量扫描替换；
+  4. JWT 切换 RS256 与 Refresh 轮转，接入吊销黑名单；
+  5. 限流策略上线并压测校准；
+  6. 日志脱敏基线。
+* **里程碑**：
+
+  * 高危扫描=0；CSRF/越权用例全部失败；HTTPS 强制生效；日志不含敏感明文。
+
+### Phase 2（Week 2）：服务器与数据安全
+
+* **范围**：`SEC-SERVER-001/002/004/003/005`，`SEC-DATA-001/002/003`。
+* **关键动作**：
+
+  1. 端口最小化、SSH 加固、证书与 HSTS、WAF/CDN 策略；
+  2. 备份策略落地并首次校验；对象存储跨地域复制；
+  3. 灾备演练框架与Runbook。
+* **里程碑**：
+
+  * SSL Labs A+；备份成功率≥99.9%；DDoS 清洗演练通过。
+
+### Phase 3（Week 3）：性能与高并发优化
+
+* **范围**：`PERF-CONCUR-001/002/003/005/007`（可选 `004`），前端优化与后端缓存同步推进。
+* **关键动作**：
+
+  1. Nginx 负载均衡 + 健康检查 + 金丝雀；
+  2. PM2 集群化与内存保护；
+  3. 多层缓存策略上线（本地LRU + Redis + CDN）；
+  4. 前端分包、图片转码、缓存策略；
+  5. 指标/日志/追踪看板搭建并设 SLO。
+* **里程碑**：
+
+  * P95 响应下降≥30%；边缘命中≥80%；单机 QPS 提升与可视化到位。
+
+### Phase 4（Week 4）：压力测试与上线准备
+
+* **范围**：`PERF-CONCUR-006` + `SEC-WEB-007` 渗透/回归 + `SEC-DATA-004/005` 合规完备。
+* **关键动作**：
+
+  1. 压测（登录/浏览/下单）三阶段：基线→定位→复测；
+  2. 全量安全扫描与人工渗透回归，闭环缺陷；
+  3. 合规材料（隐私政策、数据台账、第三方清单）发布；
+  4. 上线前演练：单AZ故障切换、回滚演练、熔断/降级开关验证。
+* **里程碑**：
+
+  * 达成上线验收指标（见下）。
+
+---
+
+## 验收标准（安全/性能/稳定性）
+
+**安全指标**
+
+* **扫描**：自动化扫描与手工复测 **0 个高危**、中危修复率 **≥95%**。
+* **渗透**：越权、XSS、CSRF、注入、点击劫持等关键用例全部失败。
+* **加密**：传输全 HTTPS（TLS1.2+，优先1.3），SSL Labs **A+**；敏感列落地加密并通过轮换演练。
+
+**性能指标**
+
+* **并发能力**：支撑 **1000** 并发在线（或按业务约束），错误率 < **0.1%**。
+* **响应时延**：API P95 < **200ms**（核心），平均 < **100ms**；前端 **Lighthouse > 90**。
+* **资源效率**：CPU/内存利用率平衡，缓存命中率 ≥ **80%**，回源下降 ≥ **40%**。
+
+**稳定性指标**
+
+* **可用性**：7×24 小时稳定运行，月度可用性 **> 99.9%**。
+* **恢复**：告警到定位 MTTD < **2 分钟**、恢复 MTTR < **5 分钟**。
+* **韧性**：单点故障自动切走，蓝绿/金丝雀与回滚演练通过。
+
+---
+
+## 附：实施与落地建议（要点清单）
+
+* **配置即代码（GitOps）**：CSP、Nginx、限流、告警、仪表盘皆以代码托管与审计。
+* **灰度思维**：所有高风险改动先灰度 10%→50%→100%，并绑定回滚方案。
+* **可观测性优先**：变更前后必须有对比面板（延迟、错误、吞吐、资源、告警）。
+* **最小权限**：人/机/密钥/服务账号权限按“先紧后松、按需临时提升”。
+* **例外管理**：所有“临时豁免”均设过期时间并纳入周会追踪。
+
+---
+
+如果你希望，我可以将上述 **JSON 任务卡**导出为独立文件（如 `tasks.json`）或按你们的项目管理工具（Jira/禅道/飞书多维表）模板转换成可导入格式（CSV/Excel），并附带一套基础的 **Nginx/Helmet/PM2/Redis** 配置样例清单。

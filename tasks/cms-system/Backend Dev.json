@@ -1,0 +1,431 @@
+{
+  "角色": "Backend Dev",
+  "职责": "负责Provider动态加载、缓存系统、数据库设计、内容管理API开发",
+  "对应Skills手册": "skills/backend_dev_skill/",
+  "任务数量": 15,
+  "任务列表": [
+    {
+      "taskId": "CMS-002",
+      "module": "Provider管理",
+      "title": "定义IProvider接口与BaseProvider基类",
+      "phase": "Week 1",
+      "estimatedHours": 4,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-001"
+      ],
+      "description": "用TypeScript定义IProvider接口、ExecContext、ExecResult等类型，并实现BaseProvider提供常用校验/重试模板方法。",
+      "technicalRequirements": [
+        "IProvider: key/validate/execute/healthcheck",
+        "RetryPolicy定义与封装重试逻辑（指数退避）",
+        "BaseProvider 内置超时控制（AbortController）与日志接口"
+      ],
+      "acceptanceCriteria": [
+        "可被任何 handler 继承复用",
+        "单元测试覆盖 BaseProvider 重试与超时"
+      ],
+      "codeLocations": [
+        "backend/src/providers/types.ts",
+        "backend/src/providers/base/base-provider.ts"
+      ],
+      "testStrategy": [
+        "UT：重试策略、超时中断、AbortSignal传播"
+      ],
+      "aiPromptSuggestion": "用 TypeScript 编写 providers/types.ts 与 base-provider.ts：定义 IProvider/RetryPolicy/ExecContext/ExecResult，并在 BaseProvider 实现带指数退避的 executeWithRetry(fn) 与超时控制。编写UT覆盖3个分支。"
+    },
+    {
+      "taskId": "CMS-003",
+      "module": "Provider管理",
+      "title": "实现 GenericHTTP Provider（请求模板+变量替换）",
+      "phase": "Week 1",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-002"
+      ],
+      "description": "实现通用 HTTP 调用的 Provider，支持 method/url/headers/body 模板与变量替换，安全转义，提取结果路径。",
+      "technicalRequirements": [
+        "req_template: {method,url,headers,body,extractPath}",
+        "变量替换：仅替换 {{var}}，不允许表达式执行",
+        "支持超时、重试、HTTP错误码归一化",
+        "extractPath 支持 JSONPath 或点路径（如 result.url）"
+      ],
+      "acceptanceCriteria": [
+        "可对任意REST接口完成配置化调用并解析返回",
+        "异常时返回统一错误码与详细 message",
+        "UT：模板替换/超时/重试/解析成功与失败"
+      ],
+      "codeLocations": [
+        "backend/src/providers/handlers/generic-http.ts",
+        "backend/src/utils/template.ts"
+      ],
+      "testStrategy": [
+        "UT：变量替换与边界字符",
+        "IT：调用mock server，验证extractPath"
+      ],
+      "aiPromptSuggestion": "实现 generic-http.ts：读取 req_template，进行 {{var}} 占位替换并发起请求，支持超时、重试、extractPath 解析与错误归一化；写 UT/IT 覆盖。"
+    },
+    {
+      "taskId": "CMS-005",
+      "module": "Provider管理",
+      "title": "运行时凭证加密与读取（AES-256-GCM）",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-001"
+      ],
+      "description": "为 provider_endpoints.auth/encrypted_credentials 实现加解密工具与轮换机制，读取时解密注入 Provider。",
+      "technicalRequirements": [
+        "env: MASTER_KEY，AES-256-GCM",
+        "加密字段白名单，写入前统一加密",
+        "支持密钥版本号与轮换"
+      ],
+      "acceptanceCriteria": [
+        "明文不落库，读取时可解密并缓存到内存（短时）",
+        "UT：加解密/篡改检测/错误key"
+      ],
+      "codeLocations": [
+        "backend/src/utils/crypto.ts",
+        "backend/src/repositories/providerEndpoints.repo.ts"
+      ],
+      "testStrategy": [
+        "UT：GCM随机IV、密钥错误时抛错、轮换"
+      ],
+      "aiPromptSuggestion": "实现 crypto.ts：AES-256-GCM encrypt/decrypt，支持密钥版本；在 providerEndpoints.repo 写入时自动加密敏感字段，读取时解密。编写UT覆盖异常场景。"
+    },
+    {
+      "taskId": "CMS-006",
+      "module": "Provider管理",
+      "title": "Provider 管理后台 CRUD API",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-005"
+      ],
+      "description": "实现 /admin/providers 的列表、创建、编辑、禁用、软删除、测试连接等 API。",
+      "technicalRequirements": [
+        "Knex 编写 CRUD",
+        "POST /admin/providers/test-connection 调用对应 Provider.healthcheck()",
+        "审计日志 provider_audit_logs"
+      ],
+      "acceptanceCriteria": [
+        "REST API 覆盖全部操作，含参数校验与错误码",
+        "UT/IT：新增/编辑/禁用/测试连接"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/providers.route.ts",
+        "backend/src/controllers/admin/providers.controller.ts",
+        "backend/src/repositories/providerEndpoints.repo.ts"
+      ],
+      "testStrategy": [
+        "IT：走真实路由调用",
+        "UT：repo 的入参校验与SQL执行"
+      ],
+      "aiPromptSuggestion": "实现 /admin/providers 路由与控制器：列表/创建/编辑/禁用/测试连接；入参校验、错误码、审计日志。写 IT 测试用 supertest。"
+    },
+    {
+      "taskId": "CMS-501",
+      "module": "缓存与实时更新",
+      "title": "Redis 缓存封装与本地 LRU（读路径）",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "实现 getConfig(key, loader) 通用读缓存：先本地 LRU，再 Redis，再快照，再 DB；并统计命中率。",
+      "technicalRequirements": [
+        "LRU 基于 quick-lru 或自实现",
+        "指标：hit/miss/latency"
+      ],
+      "acceptanceCriteria": [
+        "可通过配置键读取并缓存",
+        "断网/Redis挂时自动降级"
+      ],
+      "codeLocations": [
+        "backend/src/cache/config-cache.ts",
+        "backend/src/utils/metrics.ts"
+      ],
+      "testStrategy": [
+        "UT：多层级回退逻辑"
+      ],
+      "aiPromptSuggestion": "实现多层级读取缓存：LRU→Redis→快照→DB 降级链路，并记录指标。"
+    },
+    {
+      "taskId": "CMS-502",
+      "module": "缓存与实时更新",
+      "title": "配置更新广播与精准失效（Pub/Sub）",
+      "phase": "Week 1",
+      "estimatedHours": 4,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-501"
+      ],
+      "description": "写入/回滚配置时，通过 Redis 发布 cfg:invalidate {scope,key,version}，各进程订阅并精准失效本地 LRU 与 Redis。",
+      "technicalRequirements": [
+        "频道：cfg:invalidate",
+        "payload：scope/key/version"
+      ],
+      "acceptanceCriteria": [
+        "更新后1s内各进程缓存失效",
+        "无误杀其他键"
+      ],
+      "codeLocations": [
+        "backend/src/pubsub/index.ts",
+        "backend/src/cache/config-cache.ts"
+      ],
+      "testStrategy": [
+        "IT：多进程模拟（PM2）"
+      ],
+      "aiPromptSuggestion": "实现 Redis Pub/Sub 广播：发布 cfg:invalidate，订阅方精准失效对应键。"
+    },
+    {
+      "taskId": "CMS-503",
+      "module": "缓存与实时更新",
+      "title": "配置快照表与回滚脚本",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "创建 config_snapshots 表，写入与回滚 CLI：select by scope/key/version，一键回滚并发布失效。",
+      "technicalRequirements": [
+        "Knex migration+seed",
+        "CLI：node scripts/rollback-config.ts"
+      ],
+      "acceptanceCriteria": [
+        "能回滚到指定版本并立即生效",
+        "快照写入包含操作者与时间"
+      ],
+      "codeLocations": [
+        "backend/migrations/xxxx_create_config_snapshots.ts",
+        "backend/scripts/rollback-config.ts"
+      ],
+      "testStrategy": [
+        "IT：回滚链路"
+      ],
+      "aiPromptSuggestion": "创建 config_snapshots 表并实现回滚脚本：输入 scope/key/version 执行回滚与广播失效。"
+    },
+    {
+      "taskId": "CMS-401",
+      "module": "内容管理",
+      "title": "公告管理 CRUD + 定时上下线",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "实现 /admin/announcements API 与前端页面，支持富文本、目标用户、定时发布/过期与软删除。",
+      "technicalRequirements": [
+        "富文本：AntD + 简化版 editor",
+        "status/publish_at/expire_at 管理"
+      ],
+      "acceptanceCriteria": [
+        "公告创建/编辑/下线生效",
+        "前台读取按时间/状态过滤"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/announcements.route.ts",
+        "frontend/app/admin/announcements/page.tsx"
+      ],
+      "testStrategy": [
+        "IT：CRUD 与定时状态变更"
+      ],
+      "aiPromptSuggestion": "实现公告模块：后端CRUD与前端管理页，支持定时上下线与目标人群字段。"
+    },
+    {
+      "taskId": "CMS-402",
+      "module": "内容管理",
+      "title": "轮播图管理 + COS 上传 + 拖拽排序",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "实现 banners 管理，客户端直传 COS（STS 临时凭证），支持拖拽排序与定时上下线。",
+      "technicalRequirements": [
+        "STS 获取接口",
+        "React DnD 排序并批量保存 sort_order"
+      ],
+      "acceptanceCriteria": [
+        "图片上传成功并可预览",
+        "排序更新立即生效"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/banners.route.ts",
+        "frontend/app/admin/banners/page.tsx"
+      ],
+      "testStrategy": [
+        "IT：上传+排序"
+      ],
+      "aiPromptSuggestion": "实现轮播管理：COS 直传（STS）、拖拽排序、定时上下线。"
+    },
+    {
+      "taskId": "CMS-403",
+      "module": "内容管理",
+      "title": "会员套餐管理（计划/权益）",
+      "phase": "Week 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "实现 membership_plans 与 membership_benefits 的 CRUD，支持关联 feature_definitions 并设置显示顺序与推荐标签。",
+      "technicalRequirements": [
+        "多选 features，写中间表",
+        "排序/状态控制"
+      ],
+      "acceptanceCriteria": [
+        "套餐与功能关联正确",
+        "前台可按排序展示"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/memberships.route.ts",
+        "frontend/app/admin/memberships/page.tsx"
+      ],
+      "testStrategy": [
+        "IT：计划与权益的增删改查"
+      ],
+      "aiPromptSuggestion": "实现套餐管理：计划/权益CRUD，关联 features，设置排序和推荐标签。"
+    },
+    {
+      "taskId": "CMS-404",
+      "module": "内容管理",
+      "title": "文案配置（按页面/语言）",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [],
+      "description": "在 system_configs 中实现 page/locale 维度的文案管理，提供前端 CRUD 与运行期读取接口。",
+      "technicalRequirements": [
+        "唯一键：category+page+locale+key",
+        "批量导入导出"
+      ],
+      "acceptanceCriteria": [
+        "前台根据 locale 正确加载文案",
+        "导入导出 JSON 可用"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/copies.route.ts",
+        "frontend/app/admin/copies/page.tsx"
+      ],
+      "testStrategy": [
+        "IT：CRUD 与导入导出"
+      ],
+      "aiPromptSuggestion": "实现文案配置：按页面/语言维护键值，支持导入导出。"
+    },
+    {
+      "taskId": "CMS-405",
+      "module": "内容管理",
+      "title": "工作台 Feature 展示联动（从 feature_definitions 读取）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-306"
+      ],
+      "description": "前台工作台根据 feature_definitions 展示功能卡片，权限过滤与配额读取，排序与分类展示。",
+      "technicalRequirements": [
+        "缓存读取（Redis优先）",
+        "按角色过滤"
+      ],
+      "acceptanceCriteria": [
+        "新发布的Feature可见且可用",
+        "无额外交互卡顿"
+      ],
+      "codeLocations": [
+        "frontend/app/workbench/page.tsx"
+      ],
+      "testStrategy": [
+        "手测：新功能卡发布后可见"
+      ],
+      "aiPromptSuggestion": "将工作台功能卡从 feature_definitions 动态渲染，按角色与分类展示。"
+    },
+    {
+      "taskId": "CMS-406",
+      "module": "内容管理",
+      "title": "前台文案与公告/轮播渲染接入",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P1",
+      "dependencies": [
+        "CMS-401",
+        "CMS-402",
+        "CMS-404"
+      ],
+      "description": "前台首页读取 banners/announcements/copies，支持 locale 与定时上下线。",
+      "technicalRequirements": [
+        "缓存优先读取",
+        "过期过滤"
+      ],
+      "acceptanceCriteria": [
+        "按时上线/下线行为正确",
+        "切换语言生效"
+      ],
+      "codeLocations": [
+        "frontend/app/page.tsx",
+        "frontend/lib/api/publicContent.ts"
+      ],
+      "testStrategy": [
+        "手测 + 单测"
+      ],
+      "aiPromptSuggestion": "首页接入公告/轮播/文案，按 locale 显示并遵循上下线与缓存策略。"
+    },
+    {
+      "taskId": "CMS-407",
+      "module": "内容管理",
+      "title": "内容审核与审计日志（轻量版）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P2",
+      "dependencies": [
+        "CMS-401",
+        "CMS-402",
+        "CMS-404"
+      ],
+      "description": "为内容变更写入 audit_logs，记录操作人/前后对比，提供简单查看界面。",
+      "technicalRequirements": [
+        "记录 diff 或旧值快照",
+        "只读UI"
+      ],
+      "acceptanceCriteria": [
+        "可搜索近30天内容变更",
+        "可一键查看旧值"
+      ],
+      "codeLocations": [
+        "backend/src/repositories/audit.repo.ts",
+        "frontend/app/admin/audit/page.tsx"
+      ],
+      "testStrategy": [
+        "UT：日志写入格式"
+      ],
+      "aiPromptSuggestion": "实现内容审计日志：写入、查询、只读展示，最小可用。"
+    },
+    {
+      "taskId": "CMS-408",
+      "module": "内容管理",
+      "title": "批量导入导出（公告/轮播/文案/套餐）",
+      "phase": "Week 3",
+      "estimatedHours": 4,
+      "priority": "P2",
+      "dependencies": [
+        "CMS-401",
+        "CMS-402",
+        "CMS-403",
+        "CMS-404"
+      ],
+      "description": "统一实现四类内容的JSON导入导出，便于备份迁移。",
+      "technicalRequirements": [
+        "结构校验与部分导入",
+        "失败行报告"
+      ],
+      "acceptanceCriteria": [
+        "导入失败有明细报告",
+        "导出文件包含版本与时间戳"
+      ],
+      "codeLocations": [
+        "backend/src/routes/admin/bulk.route.ts",
+        "frontend/app/admin/bulk/page.tsx"
+      ],
+      "testStrategy": [
+        "UT：结构与错误报告"
+      ],
+      "aiPromptSuggestion": "实现内容的批量导入导出接口与前端页面，包含错误报告。"
+    }
+  ]
+}

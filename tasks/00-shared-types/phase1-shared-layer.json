@@ -1,0 +1,246 @@
+[
+  {
+    "taskId": "MOBILE-SHARED-001",
+    "title": "配置数据结构定义（TypeScript接口）",
+    "department": "Frontend",
+    "priority": "P0",
+    "estimatedHours": 6,
+    "dependencies": [],
+    "description": "定义移动端配置驱动架构的核心数据结构，包括MiniAppConfig、ThemeConfig、PageConfig、ComponentNode等接口定义，为三端共享提供统一类型系统。",
+    "technicalRequirements": [
+      "使用TypeScript 5定义所有接口",
+      "支持strict模式类型检查",
+      "提供完整的JSDoc注释",
+      "导出类型到@types目录供其他包使用",
+      "包含完整的配置示例（JSON Schema）"
+    ],
+    "acceptanceCriteria": [
+      "所有核心接口定义完整（MiniAppConfig、ThemeConfig、TabBarItem、PageConfig、ComponentNode、PermissionConfig）",
+      "类型定义通过TypeScript编译无错误",
+      "提供至少3个完整的配置示例（business、wardrobe-male、wardrobe-female）",
+      "文档完整，每个字段都有注释说明",
+      "可被Taro、RN、Next.js三端正常引用"
+    ],
+    "deliverables": [
+      "packages/shared-config/src/types/config.ts",
+      "packages/shared-config/src/types/theme.ts",
+      "packages/shared-config/src/types/navigation.ts",
+      "packages/shared-config/src/types/component.ts",
+      "packages/shared-config/examples/business-config.json",
+      "packages/shared-config/examples/wardrobe-male-config.json",
+      "packages/shared-config/examples/wardrobe-female-config.json",
+      "packages/shared-config/README.md"
+    ],
+    "needsCoordination": [
+      "Backend: 提供配置API的返回值结构（确保类型一致）",
+      "所有Frontend任务: 依赖这些类型定义"
+    ],
+    "aiPromptSuggestion": {
+      "system": "你是Frontend Dev专家，精通TypeScript类型系统设计和配置驱动架构。你的任务是定义一套完整的配置数据结构，确保类型安全、可扩展且易于维护。",
+      "user": "请基于GPT-5方案中的MiniAppConfig定义，实现完整的TypeScript接口。\n\n要求：\n1. 定义MiniAppConfig接口（包含version、etag、mode、theme、tabBar、pages、permissions字段）\n2. 定义ThemeConfig接口（支持三种模式的主题配置，包含cssVars、colors字段）\n3. 定义TabBarItem接口（支持动态菜单，包含key、text、icon、path、enabled、requiredPermission字段）\n4. 定义PageConfig接口（支持动态页面，包含path、title、layout、nodes、enabled字段）\n5. 定义ComponentNode接口（支持递归嵌套，包含key、props、children、region、requiredPermission字段）\n6. 定义PermissionConfig接口（支持RBAC，包含roles、rolePermissions字段）\n7. 提供3个完整的JSON配置示例\n8. 确保所有接口都有完整的JSDoc注释\n\n参考GPT-5方案代码：\n```typescript\ninterface MiniAppConfig {\n  version: string;\n  etag: string;\n  mode: 'business' | 'wardrobe-male' | 'wardrobe-female';\n  theme: ThemeConfig;\n  tabBar: TabBarItem[];\n  pages: PageConfig[];\n  permissions: PermissionConfig;\n}\n```\n\n请产出完整代码并组织到合理的文件结构中。"
+    },
+    "reviewPolicy": {
+      "requiresReview": true,
+      "reviewers": ["Reviewer"],
+      "reviewScope": ["类型安全性", "可扩展性", "文档完整性"]
+    },
+    "qaPolicy": {
+      "requiresQA": false,
+      "testingScope": []
+    },
+    "status": "Ready"
+  },
+  {
+    "taskId": "MOBILE-SHARED-002",
+    "title": "配置解析器实现（parse + validate）",
+    "department": "Frontend",
+    "priority": "P0",
+    "estimatedHours": 8,
+    "dependencies": ["MOBILE-SHARED-001"],
+    "description": "实现配置解析器，支持从JSON解析为类型化对象，并提供完整的校验机制，确保配置正确性和安全性。",
+    "technicalRequirements": [
+      "使用Zod或Yup进行运行时类型校验",
+      "支持配置版本兼容性检查",
+      "提供详细的错误提示信息",
+      "支持部分配置merge（热更新场景）",
+      "性能优化：大配置解析<50ms"
+    ],
+    "acceptanceCriteria": [
+      "实现parseConfig函数，支持JSON→MiniAppConfig转换",
+      "实现validateConfig函数，校验配置完整性和合法性",
+      "支持配置版本migration（v1→v2）",
+      "错误提示清晰，包含字段路径和具体错误原因",
+      "UT覆盖率≥80%，包含正常和异常用例"
+    ],
+    "deliverables": [
+      "packages/shared-config/src/parser/index.ts",
+      "packages/shared-config/src/parser/validator.ts",
+      "packages/shared-config/src/parser/migrator.ts",
+      "packages/shared-config/tests/parser.spec.ts",
+      "packages/shared-config/tests/validator.spec.ts"
+    ],
+    "needsCoordination": [
+      "Backend: 确认配置API返回的JSON格式",
+      "MOBILE-SHARED-001: 依赖类型定义"
+    ],
+    "aiPromptSuggestion": {
+      "system": "你是Frontend Dev专家，精通数据校验和解析。你需要实现一个健壮的配置解析器，确保配置的正确性和安全性。",
+      "user": "请实现配置解析器，支持JSON→MiniAppConfig转换和完整校验。\n\n要求：\n1. 使用Zod库定义配置Schema\n2. 实现parseConfig(json: string): MiniAppConfig函数\n3. 实现validateConfig(config: unknown): ValidationResult函数\n4. 支持版本检查和migration（如v1配置迁移到v2）\n5. 提供详细的错误提示（包含字段路径和具体错误）\n6. 性能优化：大配置（1MB）解析<50ms\n7. 编写完整的单元测试（覆盖率≥80%）\n\n示例用法：\n```typescript\nconst config = parseConfig(jsonString);\nconst result = validateConfig(config);\nif (!result.valid) {\n  console.error(result.errors);\n}\n```\n\n请产出完整代码和测试。"
+    },
+    "reviewPolicy": {
+      "requiresReview": true,
+      "reviewers": ["Reviewer"],
+      "reviewScope": ["安全性", "性能", "错误处理"]
+    },
+    "qaPolicy": {
+      "requiresQA": false,
+      "testingScope": []
+    },
+    "status": "Ready"
+  },
+  {
+    "taskId": "MOBILE-SHARED-003",
+    "title": "组件注册表机制实现",
+    "department": "Frontend",
+    "priority": "P0",
+    "estimatedHours": 10,
+    "dependencies": ["MOBILE-SHARED-001"],
+    "description": "实现组件注册表机制，支持动态组件加载、白名单管理、懒加载优化，为配置驱动前端提供核心能力。",
+    "technicalRequirements": [
+      "支持同步和异步组件注册",
+      "支持React.lazy + Suspense懒加载",
+      "提供白名单校验机制",
+      "支持组件别名和版本管理",
+      "提供调试模式（显示组件加载日志）"
+    ],
+    "acceptanceCriteria": [
+      "实现ComponentRegistry类，支持register/get/has方法",
+      "支持同步组件：registry.register('List', ListComponent)",
+      "支持异步组件：registry.register('TaskCard', () => import('./TaskCard'))",
+      "提供白名单校验：未注册组件返回null或fallback组件",
+      "UT覆盖率≥80%，包含边界情况"
+    ],
+    "deliverables": [
+      "packages/shared-components/src/registry.ts",
+      "packages/shared-components/src/common/FallbackComponent.tsx",
+      "packages/shared-components/tests/registry.spec.ts",
+      "packages/shared-components/README.md（使用文档）"
+    ],
+    "needsCoordination": [
+      "所有组件开发任务: 组件开发完成后需要注册到registry"
+    ],
+    "aiPromptSuggestion": {
+      "system": "你是Frontend Dev专家，精通React组件系统和动态加载机制。你需要实现一个灵活且高效的组件注册表。",
+      "user": "请实现组件注册表机制，支持动态组件加载和白名单管理。\n\n要求：\n1. 实现ComponentRegistry类\n2. 支持同步组件注册：register(key: string, component: React.ComponentType)\n3. 支持异步组件注册：register(key: string, loader: () => Promise<{default: React.ComponentType}>)\n4. 提供get(key: string): React.ComponentType | null方法\n5. 提供has(key: string): boolean方法\n6. 支持白名单模式：只允许预注册的组件key\n7. 提供调试模式：console.log组件加载情况\n8. 实现FallbackComponent（当组件不存在时显示）\n9. 编写完整的单元测试\n\n示例用法：\n```typescript\nconst registry = new ComponentRegistry();\nregistry.register('List', DynamicList);\nregistry.register('TaskCard', () => import('./TaskCard'));\n\nconst Component = registry.get('List');\nif (Component) {\n  return <Component {...props} />;\n}\n```\n\n参考GPT-5方案中的registry.ts代码，请产出完整实现。"
+    },
+    "reviewPolicy": {
+      "requiresReview": true,
+      "reviewers": ["Reviewer"],
+      "reviewScope": ["安全性", "性能", "可扩展性"]
+    },
+    "qaPolicy": {
+      "requiresQA": false,
+      "testingScope": []
+    },
+    "status": "Ready"
+  },
+  {
+    "taskId": "MOBILE-SHARED-004",
+    "title": "主题Tokens系统实现",
+    "department": "Frontend",
+    "priority": "P0",
+    "estimatedHours": 8,
+    "dependencies": ["MOBILE-SHARED-001"],
+    "description": "实现Design Tokens系统，支持三种模式（business、wardrobe-male、wardrobe-female）的主题配置，提供CSS变量和JS对象两种访问方式。",
+    "technicalRequirements": [
+      "定义完整的Design Tokens（颜色、字体、间距、圆角、阴影等）",
+      "支持CSS变量注入（:root { --color-primary: xxx }）",
+      "支持JS对象访问（theme.colors.primary）",
+      "支持主题切换动画（过渡效果）",
+      "支持暗黑模式预留（P2需求）"
+    ],
+    "acceptanceCriteria": [
+      "定义3套完整主题（business、wardrobe-male、wardrobe-female）",
+      "每套主题包含至少30个token（颜色、字体、间距等）",
+      "提供主题切换函数：switchTheme(mode: string)",
+      "支持CSS变量和JS对象两种访问方式",
+      "主题切换流畅（过渡动画<300ms）"
+    ],
+    "deliverables": [
+      "packages/shared-theme/src/tokens/base.ts",
+      "packages/shared-theme/src/business.ts",
+      "packages/shared-theme/src/wardrobe-male.ts",
+      "packages/shared-theme/src/wardrobe-female.ts",
+      "packages/shared-theme/src/index.ts",
+      "packages/shared-theme/README.md"
+    ],
+    "needsCoordination": [
+      "设计师: 提供三种模式的设计规范（颜色、字体等）",
+      "所有UI组件: 使用主题系统的token"
+    ],
+    "aiPromptSuggestion": {
+      "system": "你是Frontend Dev专家，精通Design System和主题系统设计。你需要创建一个灵活且易用的主题系统。",
+      "user": "请实现主题Tokens系统，支持三种模式的主题配置。\n\n要求：\n1. 定义基础tokens（base.ts）：spacing、fontSize、fontWeight、borderRadius、shadow等\n2. 定义business主题：\n   - 主色调：深蓝/灰色/黑色\n   - 强调效率和专业\n3. 定义wardrobe-male主题：\n   - 主色调：深蓝/灰色/黑色\n   - 简洁清爽风格\n4. 定义wardrobe-female主题：\n   - 主色调：粉色/米色/薰衣草紫\n   - 温馨精致风格\n5. 提供CSS变量注入函数：injectCSSVars(theme)\n6. 提供主题切换函数：switchTheme(mode)\n7. 支持主题切换动画\n\n示例tokens结构：\n```typescript\nexport const businessTheme = {\n  colors: {\n    primary: '#1890FF',\n    secondary: '#52C41A',\n    background: '#FFFFFF',\n    text: '#262626',\n    // ...\n  },\n  spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },\n  fontSize: { xs: 12, sm: 14, md: 16, lg: 18, xl: 20 },\n  // ...\n};\n```\n\n请产出完整代码和使用文档。"
+    },
+    "reviewPolicy": {
+      "requiresReview": true,
+      "reviewers": ["Reviewer"],
+      "reviewScope": ["设计规范", "可访问性", "可扩展性"]
+    },
+    "qaPolicy": {
+      "requiresQA": false,
+      "testingScope": []
+    },
+    "status": "Ready"
+  },
+  {
+    "taskId": "MOBILE-SHARED-005",
+    "title": "API客户端封装（统一请求层）",
+    "department": "Frontend",
+    "priority": "P0",
+    "estimatedHours": 10,
+    "dependencies": [],
+    "description": "实现统一的API客户端，支持Taro、RN、Web三端，提供请求拦截、错误处理、Token自动注入、重试机制等能力。",
+    "technicalRequirements": [
+      "支持Taro.request、axios、fetch三种底层实现",
+      "提供统一的request函数接口",
+      "支持请求/响应拦截器",
+      "支持Token自动注入（从localStorage/MMKV读取）",
+      "支持请求重试机制（网络错误自动重试3次）",
+      "支持请求取消（AbortController）"
+    ],
+    "acceptanceCriteria": [
+      "实现统一的request<T>(url, options)函数",
+      "支持GET/POST/PUT/DELETE方法",
+      "自动注入Authorization header",
+      "401错误自动跳转登录",
+      "网络错误自动重试3次",
+      "UT覆盖率≥80%"
+    ],
+    "deliverables": [
+      "packages/shared-utils/src/api/client.ts",
+      "packages/shared-utils/src/api/interceptors.ts",
+      "packages/shared-utils/src/api/retry.ts",
+      "packages/shared-utils/tests/api.spec.ts",
+      "packages/shared-utils/README.md"
+    ],
+    "needsCoordination": [
+      "Backend: 提供API域名和Token机制",
+      "所有API调用任务: 使用此客户端"
+    ],
+    "aiPromptSuggestion": {
+      "system": "你是Frontend Dev专家，精通HTTP客户端设计和网络编程。你需要实现一个健壮且易用的API客户端。",
+      "user": "请实现统一的API客户端，支持三端（Taro、RN、Web）。\n\n要求：\n1. 实现request<T>(url: string, options?: RequestOptions): Promise<T>函数\n2. 支持平台检测：自动选择Taro.request/axios/fetch\n3. 实现请求拦截器：\n   - 自动注入Token（Authorization: Bearer xxx）\n   - 添加timestamp和签名（可选）\n4. 实现响应拦截器：\n   - 401错误自动跳转登录\n   - 统一错误格式转换\n5. 实现重试机制：\n   - 网络错误自动重试3次\n   - 指数退避策略（1s、2s、4s）\n6. 支持请求取消（AbortController）\n7. 提供类型安全的API封装示例\n\n示例用法：\n```typescript\nconst data = await request<TaskList>('/api/business/tasks', {\n  method: 'GET',\n  params: { page: 1, limit: 20 }\n});\n```\n\n请产出完整代码、测试和使用文档。"
+    },
+    "reviewPolicy": {
+      "requiresReview": true,
+      "reviewers": ["Reviewer"],
+      "reviewScope": ["安全性", "错误处理", "性能"]
+    },
+    "qaPolicy": {
+      "requiresQA": false,
+      "testingScope": []
+    },
+    "status": "Ready"
+  }
+]

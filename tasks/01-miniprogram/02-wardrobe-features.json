@@ -1,0 +1,561 @@
+{
+  "meta": {
+    "fileName": "02-wardrobe-features.json",
+    "platform": "miniprogram",
+    "category": "衣橱功能",
+    "taskCount": 11,
+    "totalEstimatedHours": 68,
+    "generatedBy": "Product Planner (AI老王)",
+    "generatedAt": "2025-11-01",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "taskId": "MOBILE-MP-007",
+      "title": "衣橱列表页 - 虚拟滚动 + 瀑布流",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-MP-003", "MOBILE-SHARED-005"],
+      "description": "实现衣橱列表页，支持虚拟滚动优化性能（处理1000+衣服），瀑布流布局展示衣服卡片，下拉刷新、上拉加载更多、筛选排序功能。",
+      "technicalRequirements": [
+        "使用@tarojs/components的VirtualList实现虚拟滚动",
+        "瀑布流布局（两列，高度自适应）",
+        "下拉刷新（Taro.startPullDownRefresh）",
+        "上拉加载更多（分页，每页20条）",
+        "筛选功能（按类别、颜色、季节、品牌）",
+        "排序功能（最新、最常穿、最少穿、价格）",
+        "空状态提示（暂无衣服）",
+        "加载状态（skeleton屏）",
+        "性能优化（虚拟滚动支持1000+条目，FPS≥55）"
+      ],
+      "acceptanceCriteria": [
+        "虚拟滚动正常（滚动流畅，FPS≥55）",
+        "瀑布流布局正确（高度自适应）",
+        "下拉刷新正常",
+        "上拉加载更多正常",
+        "筛选排序生效",
+        "空状态和加载状态正确显示",
+        "真机测试流畅（1000+条目无卡顿）",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/list/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/list/index.module.scss",
+        "packages/miniprogram/src/pages/wardrobe/list/components/FilterDrawer.tsx",
+        "packages/miniprogram/src/pages/wardrobe/list/components/SortDrawer.tsx",
+        "packages/miniprogram/src/hooks/useWardrobeList.ts",
+        "packages/miniprogram/src/pages/wardrobe/list/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供衣橱列表API（分页、筛选、排序）",
+        "API-Client: 封装衣橱列表请求"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通Taro虚拟滚动和性能优化。你的任务是实现一个高性能、用户体验优秀的衣橱列表页。",
+        "user": "请实现衣橱列表页：\n\n**核心功能：**\n\n1. **虚拟滚动实现**\n```typescript\nimport { VirtualList } from '@tarojs/components';\nimport { useWardrobeList } from '@/hooks/useWardrobeList';\n\nconst WardrobeList: React.FC = () => {\n  const {\n    items,\n    loading,\n    hasMore,\n    loadMore,\n    refresh,\n    filter,\n    setFilter,\n    sort,\n    setSort\n  } = useWardrobeList();\n\n  return (\n    <View className={styles.container}>\n      {/* 筛选栏 */}\n      <View className={styles.toolbar}>\n        <Button onClick={() => setShowFilter(true)}>筛选</Button>\n        <Button onClick={() => setShowSort(true)}>排序</Button>\n      </View>\n\n      {/* 虚拟滚动列表 */}\n      <VirtualList\n        height=\"100vh\"\n        itemCount={items.length}\n        itemSize={200}\n        onScroll={handleScroll}\n        overscanCount={5}\n      >\n        {({ index, style }) => (\n          <View style={style}>\n            <ClothCard data={items[index]} />\n          </View>\n        )}\n      </VirtualList>\n\n      {/* 加载状态 */}\n      {loading && <LoadingSpinner />}\n      {!hasMore && <Text className={styles.noMore}>没有更多了</Text>}\n    </View>\n  );\n};\n```\n\n2. **useWardrobeList Hook**\n```typescript\nexport function useWardrobeList() {\n  const [items, setItems] = useState<ClothItem[]>([]);\n  const [page, setPage] = useState(1);\n  const [loading, setLoading] = useState(false);\n  const [hasMore, setHasMore] = useState(true);\n  const [filter, setFilter] = useState<FilterOptions>({});\n  const [sort, setSort] = useState<SortOptions>({ field: 'createdAt', order: 'desc' });\n\n  // 加载数据\n  const loadData = async (isRefresh = false) => {\n    setLoading(true);\n    try {\n      const response = await apiClient.get('/api/wardrobe/list', {\n        params: {\n          page: isRefresh ? 1 : page,\n          pageSize: 20,\n          ...filter,\n          sortField: sort.field,\n          sortOrder: sort.order\n        }\n      });\n\n      const newItems = response.data.items;\n      setItems(isRefresh ? newItems : [...items, ...newItems]);\n      setHasMore(response.data.hasMore);\n      setPage(isRefresh ? 2 : page + 1);\n    } catch (error) {\n      Taro.showToast({ title: '加载失败', icon: 'none' });\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  // 下拉刷新\n  const refresh = async () => {\n    await loadData(true);\n    Taro.stopPullDownRefresh();\n  };\n\n  // 上拉加载更多\n  const loadMore = () => {\n    if (!loading && hasMore) {\n      loadData();\n    }\n  };\n\n  // 初始加载\n  useEffect(() => {\n    loadData(true);\n  }, [filter, sort]);\n\n  // 配置下拉刷新\n  useEffect(() => {\n    Taro.usePullDownRefresh(refresh);\n  }, []);\n\n  return {\n    items,\n    loading,\n    hasMore,\n    loadMore,\n    refresh,\n    filter,\n    setFilter,\n    sort,\n    setSort\n  };\n}\n```\n\n3. **筛选抽屉**\n```typescript\nconst FilterDrawer: React.FC<FilterDrawerProps> = ({ visible, onClose, onConfirm }) => {\n  const [category, setCategory] = useState<string[]>([]);\n  const [color, setColor] = useState<string[]>([]);\n  const [season, setSeason] = useState<string[]>([]);\n\n  return (\n    <Drawer visible={visible} onClose={onClose}>\n      <View className={styles.filterDrawer}>\n        <Text className={styles.title}>筛选</Text>\n\n        {/* 类别 */}\n        <CheckboxGroup value={category} onChange={setCategory}>\n          <Checkbox value=\"上装\">上装</Checkbox>\n          <Checkbox value=\"下装\">下装</Checkbox>\n          <Checkbox value=\"外套\">外套</Checkbox>\n          <Checkbox value=\"鞋子\">鞋子</Checkbox>\n        </CheckboxGroup>\n\n        {/* 颜色 */}\n        <CheckboxGroup value={color} onChange={setColor}>\n          <Checkbox value=\"黑色\">黑色</Checkbox>\n          <Checkbox value=\"白色\">白色</Checkbox>\n          <Checkbox value=\"蓝色\">蓝色</Checkbox>\n        </CheckboxGroup>\n\n        {/* 季节 */}\n        <CheckboxGroup value={season} onChange={setSeason}>\n          <Checkbox value=\"春季\">春季</Checkbox>\n          <Checkbox value=\"夏季\">夏季</Checkbox>\n          <Checkbox value=\"秋季\">秋季</Checkbox>\n          <Checkbox value=\"冬季\">冬季</Checkbox>\n        </CheckboxGroup>\n\n        <Button onClick={() => onConfirm({ category, color, season })}>确定</Button>\n      </View>\n    </Drawer>\n  );\n};\n```\n\n4. **性能优化**\n- 虚拟滚动（只渲染可见区域）\n- 图片懒加载（Intersection Observer）\n- 防抖节流（滚动事件）\n\n参考GPT-5方案中的虚拟滚动实现（第4节）。\n\n**验收标准：**\n- 虚拟滚动流畅（FPS≥55）\n- 筛选排序正常\n- 加载状态正确\n- 真机测试无卡顿"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["性能优化", "代码质量", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机性能测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-008",
+      "title": "衣服卡片组件 + 左滑删除手势",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-007"],
+      "description": "实现衣服卡片组件，展示衣服图片、名称、类别、颜色、品牌等信息，支持左滑显示删除按钮，长按显示更多操作菜单。",
+      "technicalRequirements": [
+        "使用@use-gesture/react处理滑动手势",
+        "左滑显示删除按钮（滑动距离>50%触发）",
+        "长按显示操作菜单（编辑、删除、分享）",
+        "图片懒加载（Intersection Observer）",
+        "支持占位图（加载中、加载失败）",
+        "主题适配（根据mode切换样式）",
+        "动画流畅（60fps）"
+      ],
+      "acceptanceCriteria": [
+        "左滑手势流畅（滑动>50%显示删除按钮）",
+        "长按菜单正常显示",
+        "图片懒加载生效",
+        "占位图正确显示",
+        "主题适配正确",
+        "动画流畅（60fps）",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/ClothCard/index.tsx",
+        "packages/miniprogram/src/components/ClothCard/index.module.scss",
+        "packages/miniprogram/src/components/ClothCard/__tests__/index.test.tsx",
+        "packages/miniprogram/src/hooks/useSwipeGesture.ts"
+      ],
+      "needsCoordination": [],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通移动端手势交互和动画优化。你的任务是实现一个交互流畅、体验优秀的衣服卡片组件。",
+        "user": "请实现衣服卡片组件：\n\n**核心功能：**\n\n1. **ClothCard组件**\n```typescript\nimport { View, Image, Text } from '@tarojs/components';\nimport { useSwipeGesture } from '@/hooks/useSwipeGesture';\nimport styles from './index.module.scss';\n\ninterface ClothCardProps {\n  data: ClothItem;\n  onDelete?: (id: string) => void;\n  onEdit?: (id: string) => void;\n}\n\nconst ClothCard: React.FC<ClothCardProps> = ({ data, onDelete, onEdit }) => {\n  const { bind, offsetX } = useSwipeGesture({\n    onSwipeLeft: () => console.log('Show delete button'),\n    threshold: 0.5 // 滑动50%触发\n  });\n\n  const [showMenu, setShowMenu] = useState(false);\n\n  const handleLongPress = () => {\n    Taro.showActionSheet({\n      itemList: ['编辑', '删除', '分享'],\n      success: (res) => {\n        if (res.tapIndex === 0) onEdit?.(data.id);\n        if (res.tapIndex === 1) handleDelete();\n        if (res.tapIndex === 2) handleShare();\n      }\n    });\n  };\n\n  const handleDelete = () => {\n    Taro.showModal({\n      title: '确认删除',\n      content: `确定删除"${data.name}"吗？`,\n      success: (res) => {\n        if (res.confirm) {\n          onDelete?.(data.id);\n        }\n      }\n    });\n  };\n\n  return (\n    <View className={styles.cardWrapper}>\n      <View\n        className={styles.card}\n        {...bind()}\n        style={{ transform: `translateX(${offsetX}px)` }}\n        onLongPress={handleLongPress}\n      >\n        {/* 图片 */}\n        <Image\n          className={styles.image}\n          src={data.imageUrl}\n          mode=\"aspectFill\"\n          lazyLoad\n        />\n\n        {/* 信息 */}\n        <View className={styles.info}>\n          <Text className={styles.name}>{data.name}</Text>\n          <View className={styles.tags}>\n            <Text className={styles.tag}>{data.category}</Text>\n            <Text className={styles.tag}>{data.color}</Text>\n            {data.brand && <Text className={styles.tag}>{data.brand}</Text>}\n          </View>\n          <Text className={styles.price}>¥{data.price}</Text>\n        </View>\n      </View>\n\n      {/* 删除按钮 */}\n      <View className={styles.deleteButton} onClick={handleDelete}>\n        <Text>删除</Text>\n      </View>\n    </View>\n  );\n};\n```\n\n2. **useSwipeGesture Hook**\n```typescript\nimport { useDrag } from '@use-gesture/react';\nimport { useSpring } from '@react-spring/web';\n\ninterface SwipeGestureOptions {\n  onSwipeLeft?: () => void;\n  onSwipeRight?: () => void;\n  threshold?: number; // 触发阈值（0-1）\n}\n\nexport function useSwipeGesture(options: SwipeGestureOptions) {\n  const [{ offsetX }, api] = useSpring(() => ({ offsetX: 0 }));\n\n  const bind = useDrag(({ down, movement: [mx], direction: [xDir] }) => {\n    // 左滑\n    if (xDir < 0 && Math.abs(mx) > 100 * (options.threshold || 0.5)) {\n      options.onSwipeLeft?.();\n      api.start({ offsetX: -100 }); // 显示删除按钮\n    }\n    // 右滑（恢复）\n    else if (xDir > 0) {\n      options.onSwipeRight?.();\n      api.start({ offsetX: 0 });\n    }\n    // 拖动中\n    else if (down) {\n      api.start({ offsetX: mx, immediate: true });\n    }\n    // 释放（回弹）\n    else {\n      api.start({ offsetX: 0 });\n    }\n  });\n\n  return { bind, offsetX };\n}\n```\n\n3. **样式**\n```scss\n.cardWrapper {\n  position: relative;\n  margin-bottom: 16px;\n  overflow: hidden;\n}\n\n.card {\n  background: white;\n  border-radius: 8px;\n  overflow: hidden;\n  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);\n  transition: transform 0.3s ease;\n}\n\n.image {\n  width: 100%;\n  height: 300px;\n  object-fit: cover;\n}\n\n.info {\n  padding: 16px;\n}\n\n.name {\n  font-size: 28px;\n  font-weight: 500;\n  margin-bottom: 8px;\n}\n\n.tags {\n  display: flex;\n  gap: 8px;\n  margin-bottom: 8px;\n}\n\n.tag {\n  background: #f0f0f0;\n  padding: 4px 8px;\n  border-radius: 4px;\n  font-size: 20px;\n}\n\n.price {\n  font-size: 24px;\n  color: #ff4d4f;\n  font-weight: bold;\n}\n\n.deleteButton {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 100px;\n  background: #ff4d4f;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: white;\n  font-size: 28px;\n}\n```\n\n参考GPT-5方案中的手势交互实现（第4节）。\n\n**验收标准：**\n- 左滑流畅\n- 长按菜单正常\n- 图片懒加载生效\n- 动画60fps"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["交互体验", "动画性能", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机手势测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-009",
+      "title": "添加衣服页 - 相机 + 图片裁剪",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-MP-001"],
+      "description": "实现添加衣服页，支持拍照/选择相册、图片裁剪（1:1方形）、图片压缩、上传COS、填写衣服信息（名称、类别、颜色、品牌、价格）。",
+      "technicalRequirements": [
+        "使用Taro.chooseMedia选择图片/拍照",
+        "集成taro-cropper图片裁剪（1:1方形）",
+        "图片压缩（质量80%，宽度≤1000px）",
+        "上传腾讯云COS（分片上传，支持断点续传）",
+        "上传进度显示（ProgressBar）",
+        "表单验证（名称必填、价格数字）",
+        "支持AI识别（调用后端API识别类别、颜色）",
+        "支持批量上传（最多9张）"
+      ],
+      "acceptanceCriteria": [
+        "拍照/选择相册正常",
+        "图片裁剪正确（1:1方形）",
+        "图片压缩正常（质量80%）",
+        "上传COS成功",
+        "上传进度正确显示",
+        "表单验证生效",
+        "AI识别正常",
+        "批量上传正常（最多9张）",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/add/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/add/index.module.scss",
+        "packages/miniprogram/src/components/ImageCropper/index.tsx",
+        "packages/miniprogram/src/components/ImageUploader/index.tsx",
+        "packages/miniprogram/src/services/cos.service.ts",
+        "packages/miniprogram/src/utils/imageCompressor.ts",
+        "packages/miniprogram/src/pages/wardrobe/add/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供COS临时密钥API",
+        "Backend: 提供AI识别API",
+        "COS: 配置CORS、存储桶权限"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通移动端图片处理和文件上传。你的任务是实现一个功能完善、体验优秀的添加衣服页。",
+        "user": "请实现添加衣服页：\n\n**核心功能：**\n\n1. **AddClothPage组件**\n```typescript\nimport { View, Button, Input, Form } from '@tarojs/components';\nimport { ImageUploader } from '@/components/ImageUploader';\nimport { cosService } from '@/services/cos.service';\nimport Taro from '@tarojs/taro';\n\nconst AddClothPage: React.FC = () => {\n  const [images, setImages] = useState<string[]>([]);\n  const [loading, setLoading] = useState(false);\n  const [form] = Form.useForm();\n\n  // 选择图片\n  const handleChooseImage = async () => {\n    const res = await Taro.chooseMedia({\n      count: 9 - images.length,\n      mediaType: ['image'],\n      sourceType: ['album', 'camera']\n    });\n\n    const newImages = res.tempFiles.map(file => file.tempFilePath);\n    setImages([...images, ...newImages]);\n  };\n\n  // 上传图片\n  const handleUpload = async () => {\n    setLoading(true);\n    try {\n      const uploadedUrls = await Promise.all(\n        images.map(async (image) => {\n          // 1. 压缩图片\n          const compressed = await imageCompressor.compress(image, {\n            quality: 0.8,\n            maxWidth: 1000\n          });\n\n          // 2. 上传COS\n          const url = await cosService.upload(compressed, {\n            onProgress: (percent) => {\n              console.log(`Upload progress: ${percent}%`);\n            }\n          });\n\n          return url;\n        })\n      );\n\n      // 3. AI识别\n      const aiResult = await apiClient.post('/api/ai/recognize-cloth', {\n        imageUrl: uploadedUrls[0]\n      });\n\n      // 4. 自动填充表单\n      form.setFieldsValue({\n        category: aiResult.data.category,\n        color: aiResult.data.color,\n        name: aiResult.data.name\n      });\n\n      Taro.showToast({ title: '上传成功' });\n    } catch (error) {\n      Taro.showToast({ title: '上传失败', icon: 'error' });\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  // 提交表单\n  const handleSubmit = async (values) => {\n    try {\n      await apiClient.post('/api/wardrobe/items', {\n        ...values,\n        images: uploadedUrls\n      });\n\n      Taro.showToast({ title: '添加成功' });\n      Taro.navigateBack();\n    } catch (error) {\n      Taro.showToast({ title: '添加失败', icon: 'error' });\n    }\n  };\n\n  return (\n    <View className={styles.container}>\n      {/* 图片上传 */}\n      <ImageUploader\n        value={images}\n        onChange={setImages}\n        maxCount={9}\n        onChoose={handleChooseImage}\n      />\n\n      {/* 表单 */}\n      <Form form={form} onFinish={handleSubmit}>\n        <Form.Item\n          name=\"name\"\n          label=\"衣服名称\"\n          rules={[{ required: true, message: '请输入衣服名称' }]}\n        >\n          <Input placeholder=\"请输入\" />\n        </Form.Item>\n\n        <Form.Item name=\"category\" label=\"类别\">\n          <Picker mode=\"selector\" range={['上装', '下装', '外套', '鞋子']}>\n            <View>请选择</View>\n          </Picker>\n        </Form.Item>\n\n        <Form.Item name=\"color\" label=\"颜色\">\n          <Input placeholder=\"请输入\" />\n        </Form.Item>\n\n        <Form.Item name=\"brand\" label=\"品牌\">\n          <Input placeholder=\"请输入\" />\n        </Form.Item>\n\n        <Form.Item\n          name=\"price\"\n          label=\"价格\"\n          rules={[{ pattern: /^\\d+(\\.\\d{1,2})?$/, message: '请输入正确的价格' }]}\n        >\n          <Input type=\"number\" placeholder=\"请输入\" />\n        </Form.Item>\n\n        <Button type=\"primary\" formType=\"submit\" loading={loading}>\n          添加\n        </Button>\n      </Form>\n    </View>\n  );\n};\n```\n\n2. **COS上传服务**\n```typescript\nimport COS from 'cos-wx-sdk-v5';\n\nclass COSService {\n  private cos: COS;\n\n  constructor() {\n    this.cos = new COS({\n      getAuthorization: async (options, callback) => {\n        // 获取临时密钥\n        const res = await apiClient.get('/api/cos/credentials');\n        callback({\n          TmpSecretId: res.data.credentials.tmpSecretId,\n          TmpSecretKey: res.data.credentials.tmpSecretKey,\n          SecurityToken: res.data.credentials.sessionToken,\n          ExpiredTime: res.data.expiredTime\n        });\n      }\n    });\n  }\n\n  async upload(filePath: string, options?: UploadOptions) {\n    return new Promise<string>((resolve, reject) => {\n      const key = `wardrobe/${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;\n\n      this.cos.uploadFile({\n        Bucket: 'ai-wardrobe-1234567890',\n        Region: 'ap-guangzhou',\n        Key: key,\n        FilePath: filePath,\n        onProgress: (info) => {\n          const percent = Math.round(info.percent * 100);\n          options?.onProgress?.(percent);\n        }\n      }, (err, data) => {\n        if (err) {\n          reject(err);\n        } else {\n          const url = `https://${data.Location}`;\n          resolve(url);\n        }\n      });\n    });\n  }\n}\n\nexport const cosService = new COSService();\n```\n\n3. **图片压缩工具**\n```typescript\nimport Taro from '@tarojs/taro';\n\nclass ImageCompressor {\n  async compress(filePath: string, options: CompressOptions) {\n    const res = await Taro.compressImage({\n      src: filePath,\n      quality: options.quality * 100,\n      compressedWidth: options.maxWidth\n    });\n\n    return res.tempFilePath;\n  }\n}\n\nexport const imageCompressor = new ImageCompressor();\n```\n\n参考GPT-5方案中的图片上传实现（第4节）。\n\n**验收标准：**\n- 图片上传成功\n- 压缩正常\n- 进度显示正确\n- AI识别生效\n- 表单验证正常"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["文件上传逻辑", "错误处理", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机上传测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-010",
+      "title": "衣服详情页 + 编辑功能",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-008"],
+      "description": "实现衣服详情页，展示衣服大图、详细信息、穿着记录、搭配推荐等，支持编辑衣服信息、删除衣服、分享到社交平台。",
+      "technicalRequirements": [
+        "图片预览（支持缩放、滑动切换）",
+        "展示详细信息（名称、类别、颜色、品牌、价格、购买日期、穿着次数）",
+        "穿着记录时间轴",
+        "AI搭配推荐（显示可搭配的其他衣服）",
+        "编辑功能（修改信息）",
+        "删除功能（二次确认）",
+        "分享功能（生成海报）",
+        "收藏功能（标记喜爱）"
+      ],
+      "acceptanceCriteria": [
+        "图片预览正常（缩放、滑动）",
+        "详细信息正确展示",
+        "穿着记录时间轴正确",
+        "AI搭配推荐正常",
+        "编辑功能正常",
+        "删除功能正常",
+        "分享海报生成正常",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/detail/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/detail/index.module.scss",
+        "packages/miniprogram/src/components/ImagePreview/index.tsx",
+        "packages/miniprogram/src/components/WearTimeline/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/detail/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供衣服详情API",
+        "Backend: 提供穿着记录API",
+        "Backend: 提供搭配推荐API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通移动端详情页设计和交互优化。你的任务是实现一个信息丰富、交互流畅的衣服详情页。",
+        "user": "请实现衣服详情页，包含图片预览、详细信息、穿着记录、AI搭配推荐等功能。参考GPT-5方案中的详情页设计（第4节）。\n\n**核心功能：**\n1. 图片预览（Swiper + 缩放）\n2. 详细信息展示\n3. 穿着记录时间轴\n4. AI搭配推荐\n5. 编辑/删除/分享功能\n\n**验收标准：**\n- 图片预览流畅\n- 信息展示完整\n- 时间轴正确\n- 推荐准确\n- 操作正常"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["交互体验", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机交互测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-011",
+      "title": "搭配推荐页 - AI算法 + 瀑布流",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 10,
+      "dependencies": ["MOBILE-MP-007"],
+      "description": "实现搭配推荐页，调用后端AI算法生成穿搭方案，瀑布流展示推荐结果，支持保存搭配、分享到社交平台、生成穿搭日历。",
+      "technicalRequirements": [
+        "调用后端AI搭配推荐API",
+        "瀑布流展示推荐结果",
+        "支持筛选条件（场合、季节、风格）",
+        "保存搭配方案（用户收藏）",
+        "分享到微信/朋友圈（生成海报）",
+        "生成穿搭日历（7天穿搭计划）",
+        "加载状态（AI生成中...）",
+        "空状态提示（暂无推荐）"
+      ],
+      "acceptanceCriteria": [
+        "AI推荐API调用正常",
+        "瀑布流展示正确",
+        "筛选功能生效",
+        "保存搭配正常",
+        "分享海报生成正常",
+        "穿搭日历生成正确",
+        "加载状态正确显示",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/outfits/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/outfits/index.module.scss",
+        "packages/miniprogram/src/components/OutfitCard/index.tsx",
+        "packages/miniprogram/src/components/OutfitCalendar/index.tsx",
+        "packages/miniprogram/src/hooks/useOutfitRecommendation.ts",
+        "packages/miniprogram/src/pages/wardrobe/outfits/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供AI搭配推荐API",
+        "Backend: 提供保存搭配API",
+        "Backend: 提供穿搭日历API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通AI功能集成和复杂交互实现。你的任务是实现一个智能、美观的搭配推荐页。",
+        "user": "请实现搭配推荐页，包含AI推荐、瀑布流展示、保存/分享、穿搭日历等功能。参考GPT-5方案中的AI推荐实现（第4节）。\n\n**核心功能：**\n1. AI推荐API调用\n2. 瀑布流展示\n3. 筛选功能\n4. 保存/分享\n5. 穿搭日历\n\n**验收标准：**\n- AI推荐准确\n- 展示美观\n- 筛选生效\n- 保存正常\n- 日历正确"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["AI集成", "交互体验", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["AI推荐测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-012",
+      "title": "衣橱数据分析页 - 图表 + 洞察",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-007"],
+      "description": "实现衣橱数据分析页，展示衣橱统计数据（总件数、总价值、各类别占比、颜色分布、品牌分布），AI生成洞察报告（穿衣习惯、购物建议）。",
+      "technicalRequirements": [
+        "使用ECharts绘制图表（饼图、柱状图、折线图）",
+        "展示统计数据（总件数、总价值、平均价格）",
+        "类别占比饼图",
+        "颜色分布柱状图",
+        "品牌分布饼图",
+        "穿着频率折线图（最近30天）",
+        "AI洞察报告（穿衣习惯、购物建议）",
+        "支持导出报告（PDF/图片）"
+      ],
+      "acceptanceCriteria": [
+        "图表渲染正确",
+        "统计数据准确",
+        "AI洞察生成正常",
+        "导出功能正常",
+        "真机测试流畅",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/analytics/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/analytics/index.module.scss",
+        "packages/miniprogram/src/components/Charts/PieChart.tsx",
+        "packages/miniprogram/src/components/Charts/BarChart.tsx",
+        "packages/miniprogram/src/components/AIInsight/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/analytics/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供统计数据API",
+        "Backend: 提供AI洞察API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通数据可视化和图表渲染。你的任务是实现一个数据丰富、洞察深刻的衣橱分析页。",
+        "user": "请实现衣橱数据分析页，包含图表展示、统计数据、AI洞察等功能。参考GPT-5方案中的数据分析实现（第4节）。\n\n**核心功能：**\n1. ECharts图表（饼图、柱状图、折线图）\n2. 统计数据展示\n3. AI洞察报告\n4. 导出功能\n\n**验收标准：**\n- 图表正确\n- 数据准确\n- 洞察合理\n- 导出正常"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["图表实现", "数据准确性"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["图表测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-013",
+      "title": "穿搭社区页 - 瀑布流 + 点赞评论",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-MP-011"],
+      "description": "实现穿搭社区页，瀑布流展示用户分享的穿搭方案，支持点赞、评论、收藏、关注用户、查看穿搭详情。",
+      "technicalRequirements": [
+        "瀑布流布局（类似小红书）",
+        "支持下拉刷新、上拉加载更多",
+        "点赞动画（心形动画）",
+        "评论功能（输入框、表情）",
+        "收藏功能（加入我的收藏）",
+        "关注用户功能",
+        "查看穿搭详情（大图预览、完整描述）",
+        "筛选功能（最新、最热、关注）"
+      ],
+      "acceptanceCriteria": [
+        "瀑布流渲染正确",
+        "点赞动画流畅",
+        "评论功能正常",
+        "收藏功能正常",
+        "关注功能正常",
+        "详情页正确",
+        "筛选生效",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/community/index/index.tsx",
+        "packages/miniprogram/src/pages/community/index/index.module.scss",
+        "packages/miniprogram/src/pages/community/detail/index.tsx",
+        "packages/miniprogram/src/components/OutfitPost/index.tsx",
+        "packages/miniprogram/src/components/CommentList/index.tsx",
+        "packages/miniprogram/src/hooks/useCommunityFeed.ts",
+        "packages/miniprogram/src/pages/community/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供社区Feed API",
+        "Backend: 提供点赞/评论/收藏API",
+        "Backend: 提供关注用户API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通社交类应用开发和交互设计。你的任务是实现一个活跃、美观的穿搭社区页。",
+        "user": "请实现穿搭社区页，包含瀑布流展示、点赞评论、收藏关注等功能。参考GPT-5方案中的社区功能实现（第4节）。\n\n**核心功能：**\n1. 瀑布流布局\n2. 点赞/评论/收藏\n3. 关注用户\n4. 查看详情\n5. 筛选功能\n\n**验收标准：**\n- 瀑布流流畅\n- 交互正常\n- 动画美观\n- 筛选生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["交互体验", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["社交功能测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-014",
+      "title": "发布穿搭页 - 图片编辑 + 标签",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-013"],
+      "description": "实现发布穿搭页，支持选择多张图片、图片编辑（滤镜、贴纸）、添加标签（场合、风格）、填写描述、发布到社区。",
+      "technicalRequirements": [
+        "选择多张图片（最多9张）",
+        "图片编辑（滤镜、亮度、对比度）",
+        "添加贴纸（文字、表情）",
+        "添加标签（场合、风格、品牌）",
+        "填写描述（支持@用户、#话题）",
+        "定位功能（显示发布地点）",
+        "草稿保存（本地缓存）",
+        "发布成功后跳转到社区"
+      ],
+      "acceptanceCriteria": [
+        "图片选择正常",
+        "图片编辑功能正常",
+        "标签添加正常",
+        "描述填写正常",
+        "定位功能正常",
+        "草稿保存正常",
+        "发布成功",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/community/publish/index.tsx",
+        "packages/miniprogram/src/pages/community/publish/index.module.scss",
+        "packages/miniprogram/src/components/ImageEditor/index.tsx",
+        "packages/miniprogram/src/components/TagSelector/index.tsx",
+        "packages/miniprogram/src/pages/community/publish/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供发布穿搭API",
+        "COS: 上传图片"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通图片编辑和内容发布功能。你的任务是实现一个功能丰富、体验流畅的发布穿搭页。",
+        "user": "请实现发布穿搭页，包含图片编辑、标签添加、描述填写、发布功能。参考GPT-5方案中的发布功能实现（第4节）。\n\n**核心功能：**\n1. 图片选择与编辑\n2. 标签添加\n3. 描述填写\n4. 定位功能\n5. 草稿保存\n6. 发布\n\n**验收标准：**\n- 图片编辑正常\n- 标签添加正常\n- 发布成功"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["图片编辑功能", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["发布流程测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-015",
+      "title": "购物清单页 - AI推荐 + 价格追踪",
+      "department": "Frontend",
+      "priority": "P2",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-012"],
+      "description": "实现购物清单页，基于衣橱分析AI推荐缺失单品，支持添加商品链接、价格追踪、降价提醒、一键购买。",
+      "technicalRequirements": [
+        "AI推荐缺失单品（根据衣橱分析）",
+        "添加商品链接（淘宝、京东、拼多多）",
+        "价格追踪（定期爬取价格）",
+        "降价提醒（推送通知）",
+        "一键购买（跳转商品链接）",
+        "收藏商品（加入愿望清单）",
+        "筛选功能（按类别、价格）",
+        "排序功能（价格、热度）"
+      ],
+      "acceptanceCriteria": [
+        "AI推荐准确",
+        "商品链接正常",
+        "价格追踪正常",
+        "降价提醒生效",
+        "一键购买正常",
+        "筛选排序生效",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/wardrobe/shopping-list/index.tsx",
+        "packages/miniprogram/src/pages/wardrobe/shopping-list/index.module.scss",
+        "packages/miniprogram/src/components/ProductCard/index.tsx",
+        "packages/miniprogram/src/hooks/useShoppingList.ts",
+        "packages/miniprogram/src/pages/wardrobe/shopping-list/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供AI推荐API",
+        "Backend: 提供价格追踪API",
+        "Backend: 提供推送通知"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通电商功能和价格监控。你的任务是实现一个智能、实用的购物清单页。",
+        "user": "请实现购物清单页，包含AI推荐、价格追踪、降价提醒、一键购买等功能。参考GPT-5方案中的购物清单实现（第4节）。\n\n**核心功能：**\n1. AI推荐缺失单品\n2. 价格追踪\n3. 降价提醒\n4. 一键购买\n5. 筛选排序\n\n**验收标准：**\n- AI推荐准确\n- 价格追踪正常\n- 提醒生效\n- 购买流畅"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["AI集成", "价格追踪逻辑"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["价格追踪测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-016",
+      "title": "个人主页 + 设置页",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-001"],
+      "description": "实现个人主页，展示用户信息、衣橱统计、穿搭分享、粉丝关注等，以及设置页，支持修改个人资料、切换mode、隐私设置、退出登录。",
+      "technicalRequirRequirements": [
+        "展示用户信息（头像、昵称、简介）",
+        "衣橱统计（总件数、总价值）",
+        "穿搭分享（发布的穿搭列表）",
+        "粉丝关注（粉丝数、关注数）",
+        "修改个人资料（头像、昵称、简介）",
+        "切换mode（business、wardrobe-male、wardrobe-female）",
+        "隐私设置（是否公开衣橱、穿搭）",
+        "退出登录"
+      ],
+      "acceptanceCriteria": [
+        "用户信息正确展示",
+        "统计数据准确",
+        "穿搭列表正确",
+        "粉丝关注正常",
+        "个人资料修改正常",
+        "mode切换生效",
+        "隐私设置生效",
+        "退出登录正常",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/pages/profile/index/index.tsx",
+        "packages/miniprogram/src/pages/profile/index/index.module.scss",
+        "packages/miniprogram/src/pages/profile/settings/index.tsx",
+        "packages/miniprogram/src/pages/profile/settings/index.module.scss",
+        "packages/miniprogram/src/pages/profile/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Backend: 提供用户信息API",
+        "Backend: 提供修改资料API",
+        "Backend: 提供切换mode API"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通用户中心和设置页开发。你的任务是实现一个信息完整、交互流畅的个人主页和设置页。",
+        "user": "请实现个人主页和设置页，包含用户信息、衣橱统计、穿搭分享、个人资料修改、mode切换、隐私设置等功能。参考GPT-5方案中的个人中心实现（第5节）。\n\n**核心功能：**\n1. 用户信息展示\n2. 衣橱统计\n3. 穿搭分享列表\n4. 粉丝关注\n5. 个人资料修改\n6. mode切换\n7. 隐私设置\n8. 退出登录\n\n**验收标准：**\n- 信息展示正确\n- 修改功能正常\n- mode切换生效\n- 设置生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["交互体验", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["用户中心测试", "单元测试"]
+      },
+      "status": "Ready"
+    }
+  ]
+}

@@ -38,3 +38,6 @@ Thumbs.db
 
 # 可能的临时输出
 tmp/
+
+# 空文件
+nul

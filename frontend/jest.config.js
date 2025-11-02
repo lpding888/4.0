@@ -10,6 +10,10 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   testMatch: [
+    '**/__tests__/**/*.test.js',
+    '**/__tests__/**/*.test.jsx',
+    '**/__tests__/**/*.test.ts',
+    '**/__tests__/**/*.test.tsx',
     '**/tests/**/*.test.js',
     '**/tests/**/*.test.jsx',
     '**/tests/**/*.test.ts',
@@ -25,9 +29,12 @@ const customJestConfig = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(antd|@ant-design|rc-.*|@babel/runtime|@rc-component|@ctrl|@testing-library)/)',
+  ],
   testTimeout: 10000,
 }
 

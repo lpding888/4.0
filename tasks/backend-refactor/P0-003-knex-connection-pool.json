@@ -1,0 +1,50 @@
+{
+  "taskId": "BACKEND-P0-003",
+  "title": "Knex连接池优化 - min/max/idle/health配置",
+  "department": "Backend",
+  "priority": "P0",
+  "estimatedHours": 4,
+  "dependencies": [],
+  "description": "优化Knex数据库连接池配置，调整min/max连接数、空闲超时、获取超时参数，添加健康检查机制。解决生产环境连接池耗尽和僵尸连接问题。",
+  "technicalRequirements": [
+    "修改knexfile.ts的pool配置：min=10（避免冷启动），max=100（支持高并发）",
+    "设置idleTimeoutMillis=30000（30秒空闲自动回收）",
+    "设置acquireConnectionTimeout=10000（10秒获取不到连接报错）",
+    "添加afterCreate健康检查：执行SELECT 1验证连接可用性",
+    "添加连接池监控：记录pool.used、pool.free、pool.pending指标",
+    "配置错误处理：连接失败时记录详细日志"
+  ],
+  "acceptanceCriteria": [
+    "knexfile.ts的pool配置已更新（min=10, max=100）",
+    "空闲连接30秒后自动回收",
+    "获取连接超过10秒抛出超时错误",
+    "afterCreate健康检查正常工作，能检测到僵尸连接",
+    "连接池监控指标正常输出到日志",
+    "高并发测试（100并发请求）连接池不耗尽"
+  ],
+  "deliverables": [
+    "backend/knexfile.ts（更新pool配置）",
+    "backend/src/db/index.ts（添加连接池监控）",
+    "backend/tests/db/connection-pool.spec.ts（连接池测试）",
+    "docs/database-connection-pool-config.md（配置说明文档）"
+  ],
+  "needsCoordination": [
+    "需要通知运维：生产环境需要重启服务应用新配置",
+    "需要通知监控团队：新增连接池监控指标"
+  ],
+  "aiPromptSuggestion": {
+    "system": "你是一名资深的Backend开发工程师，精通Node.js + Knex.js + MySQL连接池优化。你了解数据库连接池的最佳实践，知道如何根据并发压力调整配置。你遵循运维友好原则，代码必须包含完整的监控和错误处理。",
+    "user": "## 任务目标\n优化Knex连接池配置，解决生产环境连接池耗尽和僵尸连接问题。\n\n## 具体要求\n\n### 1. 修改knexfile.ts\n文件：`backend/knexfile.ts`\n\n```typescript\nimport type { Knex } from 'knex';\n\nconst config: { [key: string]: Knex.Config } = {\n  development: {\n    client: 'mysql2',\n    connection: {\n      host: process.env.DB_HOST || 'localhost',\n      port: parseInt(process.env.DB_PORT || '3306'),\n      user: process.env.DB_USER || 'root',\n      password: process.env.DB_PASSWORD || '',\n      database: process.env.DB_NAME || 'ai_photo',\n    },\n    pool: {\n      min: 10,  // ✅ 最小连接数（避免冷启动）\n      max: 100,  // ✅ 最大连接数（支持高并发）\n      idleTimeoutMillis: 30000,  // ✅ 空闲30秒回收\n      acquireConnectionTimeout: 10000,  // ✅ 10秒获取超时\n      \n      // ✅ 健康检查（检测僵尸连接）\n      afterCreate: (conn: any, done: Function) => {\n        conn.query('SELECT 1', (err: Error) => {\n          if (err) {\n            console.error('数据库连接健康检查失败:', err);\n          }\n          done(err, conn);\n        });\n      },\n    },\n    migrations: {\n      directory: './src/db/migrations',\n      extension: 'ts',\n    },\n    seeds: {\n      directory: './src/db/seeds',\n      extension: 'ts',\n    },\n  },\n  \n  production: {\n    client: 'mysql2',\n    connection: {\n      host: process.env.DB_HOST,\n      port: parseInt(process.env.DB_PORT || '3306'),\n      user: process.env.DB_USER,\n      password: process.env.DB_PASSWORD,\n      database: process.env.DB_NAME,\n    },\n    pool: {\n      min: 10,\n      max: 100,\n      idleTimeoutMillis: 30000,\n      acquireConnectionTimeout: 10000,\n      afterCreate: (conn: any, done: Function) => {\n        conn.query('SELECT 1', (err: Error) => {\n          if (err) {\n            console.error('[CRITICAL] 数据库连接健康检查失败:', err);\n          }\n          done(err, conn);\n        });\n      },\n    },\n    migrations: {\n      directory: './src/db/migrations',\n      extension: 'ts',\n    },\n  },\n};\n\nexport default config;\n```\n\n### 2. 添加连接池监控\n文件：`backend/src/db/index.ts`\n\n```typescript\nimport knex from 'knex';\nimport knexConfig from '../../knexfile';\n\nconst environment = process.env.NODE_ENV || 'development';\nconst config = knexConfig[environment];\n\nexport const db = knex(config);\n\n// ✅ 连接池监控（每30秒输出一次）\nif (process.env.NODE_ENV === 'production') {\n  setInterval(() => {\n    const pool = (db.client as any).pool;\n    console.log('[DB Pool Metrics]', {\n      used: pool.numUsed(),\n      free: pool.numFree(),\n      pending: pool.numPendingAcquires(),\n      max: pool.max,\n      min: pool.min,\n    });\n  }, 30000);\n}\n\n// ✅ 连接错误处理\ndb.on('query-error', (error, obj) => {\n  console.error('[DB Query Error]', {\n    error: error.message,\n    sql: obj.sql,\n    bindings: obj.bindings,\n  });\n});\n\nexport default db;\n```\n\n### 3. 连接池测试\n文件：`backend/tests/db/connection-pool.spec.ts`\n\n```typescript\nimport { db } from '../../src/db';\n\ndescribe('数据库连接池测试', () => {\n  afterAll(async () => {\n    await db.destroy();\n  });\n  \n  it('应该能正常获取连接', async () => {\n    const result = await db.raw('SELECT 1 as value');\n    expect(result[0][0].value).toBe(1);\n  });\n  \n  it('应该能处理100个并发查询', async () => {\n    const queries = Array(100).fill(null).map(() => \n      db.raw('SELECT SLEEP(0.1)')\n    );\n    \n    await expect(Promise.all(queries)).resolves.toBeDefined();\n  });\n  \n  it('应该在获取连接超时时抛出错误', async () => {\n    // 占满连接池\n    const pool = (db.client as any).pool;\n    const max = pool.max;\n    \n    const holdConnections = Array(max).fill(null).map(() => \n      db.raw('SELECT SLEEP(15)')  // 持有连接15秒\n    );\n    \n    // 尝试获取新连接，应该超时\n    await expect(\n      db.raw('SELECT 1')\n    ).rejects.toThrow(/timeout/);\n    \n    await Promise.allSettled(holdConnections);\n  }, 20000);\n});\n```\n\n### 4. 配置说明文档\n文件：`docs/database-connection-pool-config.md`\n\n内容：\n- 连接池参数说明（min/max/idle/acquire的含义）\n- 为什么选择这些参数值（根据并发压力估算）\n- 如何监控连接池状态\n- 常见问题排查（连接池耗尽、僵尸连接等）\n\n## 交付验收标准\n1. knexfile.ts的pool配置已更新\n2. 连接池监控正常输出日志\n3. 健康检查机制正常工作\n4. 连接池测试通过（包含并发测试）\n5. 配置说明文档完整\n\n## 注意事项\n- ⚠️ min=10可以避免冷启动，但会占用资源\n- ⚠️ max=100需要根据MySQL的max_connections配置调整\n- ⚠️ idleTimeoutMillis不能太短，否则频繁创建连接影响性能\n- ⚠️ 生产环境修改配置需要重启服务"
+  },
+  "reviewPolicy": {
+    "requiresReview": true,
+    "reviewers": ["Reviewer"],
+    "reviewFocus": ["配置合理性", "监控完整性", "错误处理"]
+  },
+  "qaPolicy": {
+    "requiresQA": true,
+    "testingScope": ["Unit", "Performance"],
+    "testingDepth": "Basic"
+  },
+  "status": "Ready"
+}

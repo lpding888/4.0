@@ -1,0 +1,223 @@
+{
+  "meta": {
+    "fileName": "04-shared-components.json",
+    "platform": "miniprogram",
+    "category": "共享组件",
+    "taskCount": 4,
+    "totalEstimatedHours": 16,
+    "generatedBy": "Product Planner (AI老王)",
+    "generatedAt": "2025-11-01",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "taskId": "MOBILE-MP-024",
+      "title": "公共UI组件库（Button、Input、Modal等）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-MP-006"],
+      "description": "实现公共UI组件库，包含Button、Input、Modal、Drawer、Toast、Loading等基础组件，支持主题适配，遵循设计规范。",
+      "technicalRequirements": [
+        "Button组件（type、size、loading、disabled）",
+        "Input组件（type、placeholder、validation）",
+        "Modal组件（title、content、footer）",
+        "Drawer组件（position、visible、onClose）",
+        "Toast组件（type、message、duration）",
+        "Loading组件（type、text）",
+        "主题适配（从ThemeConfig获取颜色）",
+        "TypeScript类型定义完整",
+        "单元测试覆盖率≥80%"
+      ],
+      "acceptanceCriteria": [
+        "所有组件正确渲染",
+        "主题适配正常",
+        "TypeScript类型完整",
+        "文档完整（Storybook）",
+        "单元测试覆盖率≥80%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/Button/index.tsx",
+        "packages/miniprogram/src/components/Input/index.tsx",
+        "packages/miniprogram/src/components/Modal/index.tsx",
+        "packages/miniprogram/src/components/Drawer/index.tsx",
+        "packages/miniprogram/src/components/Toast/index.tsx",
+        "packages/miniprogram/src/components/Loading/index.tsx",
+        "packages/miniprogram/src/components/__tests__/*.test.tsx",
+        "packages/miniprogram/docs/components.md"
+      ],
+      "needsCoordination": [
+        "Theme-System: 引用主题颜色"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通React组件开发和设计系统。你的任务是实现一个高质量、可复用的UI组件库。",
+        "user": "请实现公共UI组件库，包含Button、Input、Modal、Drawer、Toast、Loading等组件。参考GPT-5方案中的组件库实现（第3节）。\n\n**核心组件：**\n\n1. **Button组件**\n```typescript\ninterface ButtonProps {\n  type?: 'primary' | 'default' | 'text';\n  size?: 'large' | 'medium' | 'small';\n  loading?: boolean;\n  disabled?: boolean;\n  onClick?: () => void;\n  children: React.ReactNode;\n}\n\nconst Button: React.FC<ButtonProps> = ({\n  type = 'default',\n  size = 'medium',\n  loading = false,\n  disabled = false,\n  onClick,\n  children\n}) => {\n  const theme = useTheme();\n\n  return (\n    <View\n      className={`btn btn-${type} btn-${size}`}\n      style={{\n        backgroundColor: type === 'primary' ? theme.colors.primary : 'transparent',\n        color: type === 'primary' ? '#fff' : theme.colors.primary\n      }}\n      onClick={disabled || loading ? undefined : onClick}\n    >\n      {loading && <LoadingIcon />}\n      <Text>{children}</Text>\n    </View>\n  );\n};\n```\n\n2. **Input组件**\n```typescript\ninterface InputProps {\n  value: string;\n  onChange: (value: string) => void;\n  type?: 'text' | 'number' | 'password';\n  placeholder?: string;\n  disabled?: boolean;\n  error?: string;\n}\n\nconst Input: React.FC<InputProps> = ({\n  value,\n  onChange,\n  type = 'text',\n  placeholder,\n  disabled,\n  error\n}) => {\n  return (\n    <View className=\"input-wrapper\">\n      <TaroInput\n        value={value}\n        onInput={(e) => onChange(e.detail.value)}\n        type={type}\n        placeholder={placeholder}\n        disabled={disabled}\n        className={error ? 'input-error' : ''}\n      />\n      {error && <Text className=\"error-text\">{error}</Text>}\n    </View>\n  );\n};\n```\n\n3. **Modal组件**\n```typescript\ninterface ModalProps {\n  visible: boolean;\n  title: string;\n  content: React.ReactNode;\n  onOk?: () => void;\n  onCancel?: () => void;\n}\n\nconst Modal: React.FC<ModalProps> = ({\n  visible,\n  title,\n  content,\n  onOk,\n  onCancel\n}) => {\n  if (!visible) return null;\n\n  return (\n    <View className=\"modal-mask\">\n      <View className=\"modal-container\">\n        <Text className=\"modal-title\">{title}</Text>\n        <View className=\"modal-content\">{content}</View>\n        <View className=\"modal-footer\">\n          <Button onClick={onCancel}>取消</Button>\n          <Button type=\"primary\" onClick={onOk}>确定</Button>\n        </View>\n      </View>\n    </View>\n  );\n};\n```\n\n4. **单元测试**\n```typescript\ndescribe('Button', () => {\n  it('should render correctly', () => {\n    const { getByText } = render(<Button>Click me</Button>);\n    expect(getByText('Click me')).toBeTruthy();\n  });\n\n  it('should handle click', () => {\n    const onClick = jest.fn();\n    const { getByText } = render(<Button onClick={onClick}>Click me</Button>);\n    fireEvent.click(getByText('Click me'));\n    expect(onClick).toHaveBeenCalled();\n  });\n});\n```\n\n**验收标准：**\n- 组件渲染正确\n- 主题适配生效\n- 类型定义完整\n- 测试覆盖率≥80%"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["组件质量", "类型定义", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["组件测试", "主题测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-025",
+      "title": "表单组件库（Form、FormItem、Validation）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-024"],
+      "description": "实现表单组件库，包含Form、FormItem、表单验证、错误提示等，支持声明式表单定义，遵循Ant Design表单规范。",
+      "technicalRequirements": [
+        "Form组件（管理表单状态）",
+        "FormItem组件（包装表单项）",
+        "表单验证（required、pattern、custom）",
+        "错误提示（实时显示）",
+        "表单提交（onFinish、onFinishFailed）",
+        "表单重置（resetFields）",
+        "表单回填（setFieldsValue）",
+        "TypeScript类型定义完整"
+      ],
+      "acceptanceCriteria": [
+        "Form组件正常工作",
+        "FormItem正确包装",
+        "表单验证生效",
+        "错误提示正确显示",
+        "表单提交正常",
+        "表单重置正常",
+        "表单回填正常",
+        "单元测试覆盖率≥80%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/Form/index.tsx",
+        "packages/miniprogram/src/components/Form/FormItem.tsx",
+        "packages/miniprogram/src/components/Form/useForm.ts",
+        "packages/miniprogram/src/components/Form/__tests__/index.test.tsx",
+        "packages/miniprogram/docs/form.md"
+      ],
+      "needsCoordination": [],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通表单设计和验证逻辑。你的任务是实现一个功能完善、易用的表单组件库。",
+        "user": "请实现表单组件库，包含Form、FormItem、表单验证、错误提示等功能。参考GPT-5方案中的表单实现（第3节）以及Ant Design Form API。\n\n**核心功能：**\n1. Form组件\n2. FormItem组件\n3. 表单验证\n4. 错误提示\n5. 表单提交/重置/回填\n\n**验收标准：**\n- Form正常工作\n- 验证生效\n- 提示正确\n- API完整"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["表单逻辑", "验证规则", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["表单测试", "验证测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-026",
+      "title": "图片/视频组件（预览、裁剪、上传）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-009"],
+      "description": "封装图片/视频相关组件，包含ImagePreview（图片预览）、ImageCropper（图片裁剪）、VideoPlayer（视频播放）、MediaUploader（媒体上传）。",
+      "technicalRequirements": [
+        "ImagePreview组件（支持缩放、滑动切换）",
+        "ImageCropper组件（1:1裁剪）",
+        "VideoPlayer组件（播放、暂停、进度条）",
+        "MediaUploader组件（选择、上传、进度）",
+        "支持主题适配",
+        "TypeScript类型定义完整",
+        "单元测试覆盖率≥70%"
+      ],
+      "acceptanceCriteria": [
+        "ImagePreview正常预览",
+        "ImageCropper裁剪正确",
+        "VideoPlayer播放流畅",
+        "MediaUploader上传正常",
+        "主题适配生效",
+        "类型定义完整",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/ImagePreview/index.tsx",
+        "packages/miniprogram/src/components/ImageCropper/index.tsx",
+        "packages/miniprogram/src/components/VideoPlayer/index.tsx",
+        "packages/miniprogram/src/components/MediaUploader/index.tsx",
+        "packages/miniprogram/src/components/__tests__/media.test.tsx"
+      ],
+      "needsCoordination": [
+        "COS: 上传服务"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通图片/视频处理组件开发。你的任务是实现一套完善的媒体组件库。",
+        "user": "请实现图片/视频组件，包含ImagePreview、ImageCropper、VideoPlayer、MediaUploader。参考GPT-5方案中的媒体组件实现（第4节）。\n\n**核心组件：**\n1. ImagePreview\n2. ImageCropper\n3. VideoPlayer\n4. MediaUploader\n\n**验收标准：**\n- 预览流畅\n- 裁剪正确\n- 播放正常\n- 上传稳定"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["媒体处理", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["媒体组件测试", "单元测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-027",
+      "title": "数据可视化组件（ECharts封装）",
+      "department": "Frontend",
+      "priority": "P1",
+      "estimatedHours": 2,
+      "dependencies": ["MOBILE-MP-012"],
+      "description": "封装ECharts图表组件，包含PieChart（饼图）、BarChart（柱状图）、LineChart（折线图），支持主题适配和响应式。",
+      "technicalRequirements": [
+        "PieChart组件（饼图）",
+        "BarChart组件（柱状图）",
+        "LineChart组件（折线图）",
+        "支持主题适配（颜色从ThemeConfig获取）",
+        "响应式（自适应容器大小）",
+        "加载状态（skeleton）",
+        "空状态提示（暂无数据）",
+        "TypeScript类型定义完整"
+      ],
+      "acceptanceCriteria": [
+        "PieChart渲染正确",
+        "BarChart渲染正确",
+        "LineChart渲染正确",
+        "主题适配生效",
+        "响应式正常",
+        "加载状态正确",
+        "空状态正确",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/Charts/PieChart.tsx",
+        "packages/miniprogram/src/components/Charts/BarChart.tsx",
+        "packages/miniprogram/src/components/Charts/LineChart.tsx",
+        "packages/miniprogram/src/components/Charts/BaseChart.tsx",
+        "packages/miniprogram/src/components/Charts/__tests__/index.test.tsx"
+      ],
+      "needsCoordination": [
+        "Theme-System: 引用主题颜色"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通ECharts和数据可视化。你的任务是实现一套易用、美观的图表组件库。",
+        "user": "请实现ECharts图表组件，包含PieChart、BarChart、LineChart，支持主题适配和响应式。参考GPT-5方案中的图表组件实现（第4节）。\n\n**核心组件：**\n1. PieChart（饼图）\n2. BarChart（柱状图）\n3. LineChart（折线图）\n4. BaseChart（基础封装）\n\n**验收标准：**\n- 渲染正确\n- 主题适配\n- 响应式\n- 状态正确"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["图表实现", "代码质量"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["图表测试", "单元测试"]
+      },
+      "status": "Ready"
+    }
+  ]
+}

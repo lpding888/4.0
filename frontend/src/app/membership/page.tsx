@@ -128,7 +128,7 @@ export default function MembershipPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: '#F9FAFB',
       padding: '40px 20px'
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
@@ -142,10 +142,10 @@ export default function MembershipPage() {
 
         {/* 页面标题 */}
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <Title level={1} style={{ color: '#fff', marginBottom: '16px' }}>
-            <CrownOutlined /> 开通会员
+          <Title level={1} style={{ color: '#1F2937', marginBottom: '16px' }}>
+            <CrownOutlined style={{ color: '#92400E' }} /> 开通会员
           </Title>
-          <Text style={{ color: '#fff', fontSize: '18px' }}>
+          <Text style={{ color: '#6B7280', fontSize: '18px' }}>
             解锁AI服装处理全部功能,提升您的业务效率
           </Text>
         </div>

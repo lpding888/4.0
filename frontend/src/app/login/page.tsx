@@ -90,14 +90,15 @@ export default function LoginPage() {
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: '#F9FAFB',
       padding: '20px'
     }}>
       <Card
         style={{
           width: '100%',
           maxWidth: '400px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          border: '1px solid var(--border-primary)',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
           borderRadius: '12px'
         }}
       >
@@ -177,18 +178,18 @@ export default function LoginPage() {
           <div style={{ textAlign: 'center' }}>
             <Text type="secondary" style={{ fontSize: '12px' }}>
               登录即代表同意
-              <a href="#" style={{ color: '#667eea' }}> 用户协议 </a>
+              <a href="#" style={{ color: '#92400E' }}> 用户协议 </a>
               和
-              <a href="#" style={{ color: '#667eea' }}> 隐私政策</a>
+              <a href="#" style={{ color: '#92400E' }}> 隐私政策</a>
             </Text>
           </div>
         </Form>
 
-        <div style={{ 
-          marginTop: '24px', 
-          padding: '16px', 
-          background: '#f5f5f5', 
-          borderRadius: '8px' 
+        <div style={{
+          marginTop: '24px',
+          padding: '16px',
+          background: '#F9FAFB',
+          borderRadius: '8px'
         }}>
           <Text type="secondary" style={{ fontSize: '13px' }}>
             <strong>提示:</strong>

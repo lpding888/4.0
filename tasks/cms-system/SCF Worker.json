@@ -1,0 +1,70 @@
+{
+  "角色": "SCF Worker",
+  "职责": "负责云函数Provider实现与现有Provider重构",
+  "对应Skills手册": "skills/scf_worker_skill/",
+  "任务数量": 2,
+  "任务列表": [
+    {
+      "taskId": "CMS-004",
+      "module": "Provider管理",
+      "title": "实现 SCF Provider（云函数调用扩展点）",
+      "phase": "Week 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-002"
+      ],
+      "description": "实现腾讯云 SCF 的 Provider，支持签名/Region/函数名/异步与同步调用，以满足定制逻辑的扩展。",
+      "technicalRequirements": [
+        "auth: {secretId, secretKey, token, region}",
+        "params: {functionName, payload, invokeType}",
+        "统一错误码与日志"
+      ],
+      "acceptanceCriteria": [
+        "能向SCF提交payload并得到返回",
+        "错误签名/权限不足时有清晰错误",
+        "UT：签名参数校验/异常路径"
+      ],
+      "codeLocations": [
+        "backend/src/providers/handlers/scf.ts"
+      ],
+      "testStrategy": [
+        "UT：参数校验",
+        "IT：mock SCF endpoint（或本地桩）调用"
+      ],
+      "aiPromptSuggestion": "实现 scf.ts：封装 SCF 调用（同步/异步），参数校验、错误归一化、日志。提供UT+可替换的HTTP桩测试。"
+    },
+    {
+      "taskId": "CMS-008",
+      "module": "Provider管理",
+      "title": "现有 Provider 重构适配 IProvider（Tencent/RunningHub/SCF）",
+      "phase": "Week 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": [
+        "CMS-002",
+        "CMS-004"
+      ],
+      "description": "将现有硬编码 Provider 改为 IProvider 实现，并通过 ProviderLoader 加载，去除 pipelineEngine.service.js 的 switch-case。",
+      "technicalRequirements": [
+        "三个现有 Provider 均实现 validate/execute",
+        "兼容旧的参数格式（必要时提供适配器）"
+      ],
+      "acceptanceCriteria": [
+        "回归现有流程全部可用",
+        "删除/禁用旧 switch-case 模块",
+        "UT：每个Provider基本路径+异常路径"
+      ],
+      "codeLocations": [
+        "backend/src/providers/handlers/tencent-ci.ts",
+        "backend/src/providers/handlers/runninghub.ts",
+        "backend/src/providers/handlers/scf.ts"
+      ],
+      "testStrategy": [
+        "UT：适配器逻辑",
+        "IT：管道试跑通过"
+      ],
+      "aiPromptSuggestion": "重构现有 Provider 到 IProvider：实现 validate/execute，移除 pipelineEngine.service.js 中的 switch-case，保证回归测试通过。"
+    }
+  ]
+}

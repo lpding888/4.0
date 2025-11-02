@@ -72,11 +72,8 @@ export default function DistributionDashboardPage() {
   if (loading) {
     return (
       <div
-        className="
-          min-h-screen
-          bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950
-          flex items-center justify-center
-        "
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: '#F9FAFB' }}
       >
         <Spin size="large" tip="加载中..." />
       </div>
@@ -87,42 +84,55 @@ export default function DistributionDashboardPage() {
   if (status?.status === 'pending') {
     return (
       <div
-        className="
-          min-h-screen
-          bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950
-          py-12 px-4
-        "
+        className="min-h-screen py-12 px-4"
+        style={{ background: '#F9FAFB' }}
       >
         <div className="container mx-auto max-w-2xl text-center">
           <div
-            className="
-              backdrop-blur-md bg-white/5
-              border border-white/10
-              rounded-2xl shadow-2xl
-              p-12
-            "
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '16px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+              padding: '48px'
+            }}
           >
             <div className="text-6xl mb-6">⏳</div>
-            <h2 className="text-3xl font-light text-white mb-4">
+            <h2
+              style={{
+                fontSize: '28px',
+                fontWeight: 600,
+                color: '#1F2937',
+                marginBottom: '16px'
+              }}
+            >
               申请审核中
             </h2>
-            <p className="text-white/60 mb-8">
+            <p style={{ color: '#6B7280', marginBottom: '32px' }}>
               您的分销员申请正在审核中，我们将在1-3个工作日内完成审核。
               <br />
               审核通过后，您将收到通知并获得专属邀请码。
             </p>
             <button
               onClick={() => router.push('/workspace')}
-              className="
-                px-6 py-3
-                rounded-lg
-                border border-cyan-400/50
-                bg-cyan-500/10
-                text-cyan-300
-                font-medium
-                transition-all duration-300
-                hover:bg-cyan-400/20 hover:border-cyan-300
-              "
+              style={{
+                padding: '12px 32px',
+                borderRadius: '24px',
+                border: '1.5px solid var(--border-primary)',
+                background: '#FFFFFF',
+                color: '#92400E',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#92400E';
+                e.currentTarget.style.background = '#F9FAFB';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-primary)';
+                e.currentTarget.style.background = '#FFFFFF';
+              }}
             >
               返回工作台
             </button>
@@ -136,42 +146,55 @@ export default function DistributionDashboardPage() {
   if (status?.status !== 'active') {
     return (
       <div
-        className="
-          min-h-screen
-          bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950
-          py-12 px-4
-        "
+        className="min-h-screen py-12 px-4"
+        style={{ background: '#F9FAFB' }}
       >
         <div className="container mx-auto max-w-2xl text-center">
           <div
-            className="
-              backdrop-blur-md bg-white/5
-              border border-white/10
-              rounded-2xl shadow-2xl
-              p-12
-            "
+            style={{
+              background: '#FFFFFF',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '16px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.08)',
+              padding: '48px'
+            }}
           >
             <div className="text-6xl mb-6">🚫</div>
-            <h2 className="text-3xl font-light text-white mb-4">
+            <h2
+              style={{
+                fontSize: '28px',
+                fontWeight: 600,
+                color: '#1F2937',
+                marginBottom: '16px'
+              }}
+            >
               分销员未激活
             </h2>
-            <p className="text-white/60 mb-8">
+            <p style={{ color: '#6B7280', marginBottom: '32px' }}>
               您的分销员账号未激活或已被禁用。
               <br />
               如有疑问，请联系客服。
             </p>
             <button
               onClick={() => router.push('/workspace')}
-              className="
-                px-6 py-3
-                rounded-lg
-                border border-cyan-400/50
-                bg-cyan-500/10
-                text-cyan-300
-                font-medium
-                transition-all duration-300
-                hover:bg-cyan-400/20 hover:border-cyan-300
-              "
+              style={{
+                padding: '12px 32px',
+                borderRadius: '24px',
+                border: '1.5px solid var(--border-primary)',
+                background: '#FFFFFF',
+                color: '#92400E',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#92400E';
+                e.currentTarget.style.background = '#F9FAFB';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-primary)';
+                e.currentTarget.style.background = '#FFFFFF';
+              }}
             >
               返回工作台
             </button>
@@ -183,16 +206,18 @@ export default function DistributionDashboardPage() {
 
   return (
     <div
-      className="
-        min-h-screen
-        bg-gradient-to-br from-slate-900 via-blue-950 to-emerald-950
-        py-12 px-4
-      "
+      className="min-h-screen py-12 px-4"
+      style={{ background: '#F9FAFB' }}
     >
       <div className="container mx-auto max-w-7xl">
         {/* 标题 */}
-        <h1 className="text-4xl font-light text-white mb-8">
-          分销中心
+        <h1 style={{
+          fontSize: '32px',
+          fontWeight: 600,
+          color: '#1F2937',
+          marginBottom: '32px'
+        }}>
+          💰 分销中心
         </h1>
 
         {/* 分销员身份卡片 */}

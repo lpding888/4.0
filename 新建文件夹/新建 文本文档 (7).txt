@@ -1,0 +1,1574 @@
+下面是一份**可以直接交给你的 AI 团队执行**的完整实施规划与任务卡清单。我按照「移动端架构师 + 产品负责人」的口径，先给出**技术架构与功能模块的详细设计**，再给出**8–10 周实施路线与风险应对**，最后输出**按部门分组的 40+ 个 JSON 任务卡**（每张卡含 18 个字段与面向 Claude Code 的可执行提示词）。
+
+---
+
+## 第一部分：App 技术架构详细设计（精简成“足够做”的 重点版）
+
+> 目标：在 **8–10 周** 内，用 **React Native（RN）** 将现有 Web 能力（Next.js + Express + MySQL + Redis + Pipeline）搬上移动端，并原生强化相机/拍照、离线衣柜、推送与本地体验；前后端一把梭：**同一账号/同一权限/同一计费**，最大化代码复用、最小化重复开发与平台分叉。
+
+### 1. 技术栈最终决策
+
+**最终选择：React Native（Bare CLI 模式）+ TypeScript**
+
+* **理由**
+
+  1. 与 Web 端 React 技术栈一致，可在 `packages/shared` 复用**API 调用、数据模型、校验、业务规则、动态配置渲染器**（form\_schemas/pipeline\_schemas/feature\_definitions）。
+  2. 相机、图像编辑、Canvas、批处理队列、推送、支付（微信/支付宝）等 **“强端能力”可用原生模块** 补齐；Bare 模式比 Expo 更易落地国内 SDK（极光、微信/支付宝、淘宝/京东 Deep Link 等）。
+  3. **热更新 + 灰度**可采用 CodePush/AppCenter 或自建 OTA，配合 Feature Flag 实验；RN 更新速度满足你们“AI 辅助快迭代”的节奏。
+
+**混合策略**
+
+* 80% 业务用 RN（JS 层），图像编辑、相机、推送、支付等用 **原生 Bridge**。
+* 组件库采用 **自建轻量组件 + NativeWind（Tailwind RN）**，共享设计 Token（从 Web 的 Ant Design 主题变量导出 tokens.json），保证跨端一致。
+
+**若选原生（不建议）**
+
+* iOS/Android 双端团队成本会直接 x2；统一体验、上新节奏、动态配置渲染难度高，不符合“1 人 8 周”的目标。
+* 仅在：后期遇到极限性能瓶颈（如 120fps 交互、特效视频实时合成）再做局部原生化。
+
+### 2. Monorepo 与目录结构
+
+使用 **Turborepo** 或 **Nx**：
+
+```
+repo/
+├── packages/
+│   ├── shared/                 # 业务复用核心（TS）
+│   │   ├── api/                # axios 实例&SDK（和 Web 共享）
+│   │   ├── models/             # DTO/Types（zod 校验）
+│   │   ├── store/              # 状态管理（Zustand slices，可跨 Web/RN 共享纯逻辑）
+│   │   ├── utils/              # 工具（时间/货币/颜色/校验/埋点）
+│   │   ├── config/             # 动态配置：form_schemas/pipeline_schemas/feature_definitions
+│   │   └── reco/               # 推荐与搭配规则（可被 Web/RN 复用）
+│   ├── design-tokens/          # 设计 Tokens（与 Web 的 AntD 主题同步）
+│   ├── mobile-bridges/         # RN 原生桥接（Camera/Canvas/Push/Pay）
+│   └── ecom-union/             # 联盟聚合 SDK（转链/Deep Link/打点）
+├── apps/
+│   ├── web/                    # 已有 Next.js Web
+│   └── app/                    # React Native App
+│       ├── ios/                # iOS 原生工程
+│       ├── android/            # Android 原生工程
+│       └── src/
+│           ├── screens/        # 页面（Home/Workbench/Closet/Feed/Profile/Pay/Orders）
+│           ├── components/     # 基础与业务组件（卡片、表单渲染器、图像编辑器）
+│           ├── services/       # 端专属服务（push、deep-link、upload、local-db）
+│           ├── stores/         # RN 端 UI/本地状态（Zustand—薄层）
+│           ├── navigation/     # React Navigation（底部 Tab + Stack）
+│           ├── hooks/          # 端专属 hooks（权限、网络、相机）
+│           ├── utils/          # 端专属工具（文件、权限、节流）
+│           ├── assets/         # 图片/字体
+│           ├── app.json        # 环境配置
+│           └── index.tsx
+└── .github/workflows/          # CI（Lint/Test/Build）、Fastlane
+```
+
+### 3. 核心技术选型（落到库与实现细节）
+
+* **状态管理**：**Zustand**（轻量、易共享）。
+
+  * `packages/shared/store` 放置业务 Slice（账号、会员、配额、任务队列、衣柜 domain），RN 端仅包一层 UI store（导航态、相机权限等）。
+* **表单/配置渲染**：自建 **SchemaForm**，读取 `packages/shared/config/form_schemas` 动态渲染（输入控件映射：Text/Image/Slider/ColorPicker/Switch/Select）。
+* **导航**：**React Navigation v6**（BottomTabs + Native Stack）。
+* **UI**：**NativeWind + 自建组件**（Card/List/Tag/Badge/Modal/Toast/Skeleton），设计 Token 从 `packages/design-tokens` 注入。
+* **网络**：**axios**（拦截器：BaseURL/Token/重试/幂等 Key）；断网重试策略 + 指数退避。
+* **本地存储**：
+
+  * **MMKV**：会话、轻量 KV（token、flags）。
+  * **SQLite（react-native-quick-sqlite 或 react-native-sqlite-storage）**：衣柜/搭配/穿搭记录、离线任务队列。
+* **图片选择 & 相机**：
+
+  * 选择：**react-native-image-picker**（相册、批选）。
+  * 相机：**react-native-vision-camera**（更现代，性能/权限更好）。
+* **图像编辑/画笔**：**@shopify/react-native-skia**（高性能 Canvas，涂抹/蒙版/路径平滑/撤销栈）。
+* **推送**：**极光 JPush**（国内主力）+ FCM（海外），统一封装 `services/push` 并上报到后端 `/push/register`。
+* **实时进度**：**socket.io-client** 或原生 WebSocket；后端保留 SSE 兜底（CDN/代理场景）。
+* **支付**：
+
+  * Android：**微信支付 / 支付宝 SDK**。
+  * iOS：**建议 IAP（B2C 会员）** + 微信/支付宝仅用于 B2B（可能仍需合规评审）；任务卡会给出 **Plan A/Plan B**。
+* **文件上传**：**COS 直传（预签名多段上传）**
+
+  * RN 端切片并发（3–5 并发），超时重试，成功后回调 `CompleteMultipartUpload`。
+  * 图片压缩：客户端先压（长边、质量），再上传。
+* **埋点**：后端已有埋点可延用；客户端统一 `track(event, props)`，推荐接入 **PostHog/自建埋点**。
+* **CI/CD**：GitHub Actions + Fastlane；TestFlight & Android 内测通道；CodePush 灰度。
+
+### 4. 与 Web 后端对接策略
+
+* **API 复用**：直接调用现有 Express REST；必要新增：
+
+  * `/auth/sms/send`、`/auth/sms/login`（手机号验证码）
+  * `/auth/apple/login`、`/auth/wechat/login`
+  * `/uploads/presign`（返回 COS 预签名/STS）
+  * `/push/register`（绑定 userId + device + token）
+  * `/closet/sync`（增量同步：`sinceVersion`）
+  * `/ecom/track/click`、`/ecom/track/conv`
+* **认证**：与 Web 一致 **JWT**，支持 `refresh_token`；移动端持久化在 MMKV，加 `kid` 与 `exp` 校验；拦截 401→刷新。
+* **上传**：后端发起 MultiPart 预签名，RN 并发 PUT 分片 + MD5/ETag 校验，失败自动重传；大图先压缩。
+* **离线**：衣柜/搭配/穿搭记录走 SQLite，本地 `version`/`updatedAt`；后台定时或手动拉增量，同步策略\*\*“LWW + 冲突提示”\*\*。
+
+---
+
+## 第二部分：App 功能模块详细设计（关键用例驱动）
+
+### 5. 认证与会员（通用）
+
+* **手机号 + 验证码**：最短路径。验证码输入自动识别（iOS SMS Autofill、Android SMS Retriever API）。
+* **第三方登录**：Apple（iOS 必须）、微信（UnionID 绑定）。
+* **同一账号体系**：与 Web `users` 表共享；登录后拉取 `membership, quota, orders`。
+* **会员中心**：显示套餐、配额、到期日、订单；入口到“购买/续费”；Android 使用微信/支付宝；iOS 建议 IAP（合规）。
+* **安全**：频控（短信）、验证码黑名单、设备指纹（可选）。
+
+### 6. 服装 AI 功能（B2B 商用）
+
+**承载方式**：**“配置驱动的工具壳 + Pipeline 下发”**
+
+* RN 端读取 `feature_definitions` 与 `form_schemas`，动态渲染工具参数表单与说明。
+* 工具列表初期包含：**抠图、消除笔、人台换装、模特换脸、智能扩图**（均已在 Web 有实现）。
+* 操作流程：**选图/拍照 →（可选）编辑/涂抹 → 提交任务 → 队列显示进度（实时/轮询）→ 查看结果 → 下载/分享/收藏**。
+* **批处理**：多图批量提交；UI 显示并发中的任务、已完成数量与平均耗时。
+* **实时进度**：任务状态：`QUEUED/RUNNING/RETRYING/SUCCEEDED/FAILED`，失败展示“重试/降级策略”。
+* **历史与收藏**：本地 + 云端；支持再次编辑/再次生成。
+
+**关键交互技术点**：
+
+* 消除笔：Skia 路径/蒙版；笔宽、硬度、羽化、撤销/重做；端上预览→服务端精准合成。
+* 批处理吞吐：前端限制并发/速率，服务端按队列策略分发（你们已具备 Pipeline）。
+
+### 7. 智能衣柜（B2C 高频）
+
+* **衣物管理**：拍照/选图→端上压缩→上传→后端识别（18 大类 + 颜色/风格）→回写标签到本地 SQLite；可手动纠错。
+* **搭配推荐**：
+
+  * 规则（场合/天气/季节/颜色互补） + Embedding 相似（CLIP）排序；
+  * 今日三套卡片（可左右滑/收藏/不喜欢）；
+  * 支持“基于这件上衣找下装/鞋/包”一键补全。
+* **穿搭记录**：日历 + 打卡；统计“近 30 天最常穿 TopN、闲置预警”；打点入库，驱动导流和复购。
+* **本地优先**：SQLite 为主；网络恢复后触发增量同步；对话式解决冲突（以更新时间戳为准 + 手动合并）。
+
+### 8. 电商导流（探索）
+
+* **推荐入口**：
+
+  1. 智能补齐：某套搭配缺“某类单品”（比如“咖色乐福鞋”）→ 推荐三个联盟商品；
+  2. 相似推荐：衣柜某件衣服找“相似/高性价比替代”。
+* **展示卡**：图/价/券/平台标识/销量口碑摘要；标记“推广”合规文案；点击经后端 `/ecom/redirect?pid=...` 统一转链并跳转 **Deep Link** 到淘宝/京东/拼多多/抖音。
+* **数据闭环**：点击打点、订单回传（联盟日报/报表对账由后端做）；移动端只负责点击来源标识与会话关联。
+
+---
+
+## 第三部分：实施路线图（8–10 周）与里程碑
+
+> 默认 1 人 AI 团队 + 设计协作（按需），所有模块持续交付，采用 **Feature Flag 灰度**。每周输出可用版本。
+
+**Phase 1（Week 1–2）｜基础搭建 + 登录会员**
+
+* 产出：RN 项目、导航、主题 Token、axios、Zustand、短信/微信/Apple 登录、会员中心只读。
+* 里程碑：能登录、看到会员/配额、能收推送（基础）。
+
+**Phase 2（Week 3–4）｜AI 工具 MVP**
+
+* 产出：相册/相机、图片预览、抠图/消除笔/换装/换脸/扩图的**配置驱动页面**、任务列表、实时进度。
+* 里程碑：5 个 AI 工具均可跑通，支持单图与小批量。
+
+**Phase 3（Week 5–6）｜智能衣柜**
+
+* 产出：衣柜（新增/编辑/删除/搜索/分类）、日历记录、搭配推荐（规则版）、SQLite & 增量同步。
+* 里程碑：离线可用；回网能同步；有今日三套推荐与统计。
+
+**Phase 4（Week 7–8）｜支付/上架/质量保证**
+
+* 产出：Android 微信/支付宝支付；iOS IAP（或临时 H5 支付 + 风险兜底）；E2E 测试；商店上架物料。
+* 里程碑：TestFlight/内测包上线；Crash<1%，启动<2.5s，掉帧<5%。
+
+**Phase 5（Week 9–10，可选）｜电商导流**
+
+* 产出：推荐位、Deep Link、点击打点、联盟转链（后端聚合）。
+* 里程碑：可追踪点击转化；首批内容验证 CTR/CVR。
+
+---
+
+## 第四部分：技术风险与应对（要点）
+
+1. **RN 版本兼容**：锁定 **0.74.x**，记录「verified 依赖版本矩阵」；CI 跑 Lint/TS/Jest/Detox。
+2. **iOS 审核与支付合规**：B2C 会员用 IAP（Plan A），B2B 配额/企业方案走 Web 支付（Plan B）；文案/元数据避免诱导外部支付。
+3. **离线冲突**：SQLite 记录 `updatedAt/version`；默认 LWW，发现双端编辑同一条→弹出「合并选择」。
+4. **大文件上传失败**：直传 COS，多段+重试+断点续传，端上先压缩；失败后回退中转上传（限流）。
+5. **推送到达率**：极光 + 厂商通道（可选），上报 token 与 OS 版本，服务端存多 token 并做优先级策略。
+6. **图像编辑性能**：Skia GPU 管线；大图仅显示缩略，编辑蒙版尺寸与原图映射；导出时再用原图合成。
+
+---
+
+# 第五部分：任务卡（JSON，按部门分组 | 44 张）
+
+> 字段共 **18 个**：
+> `taskId, department, module, title, phase, estimatedHours, priority, dependencies, needsCoordination, description, technicalRequirements, acceptanceCriteria, codeLocations, testStrategy, aiPromptSuggestion, riskLevel, status, tags`
+
+> 说明：
+>
+> * `phase` 对应路线图阶段（Phase 1\~5）。
+> * `priority`: P0(必须), P1(重要), P2(可延后)。
+> * `needsCoordination`: 需要协作方（Backend/Design/OPS/Legal/Alliance）。
+> * `status` 初始为 `Planned`。
+> * `codeLocations` 使用前述 Monorepo 结构。
+> * **aiPromptSuggestion** 为可直接喂给 Claude Code 的可执行提示词。
+
+---
+
+```json
+{
+  "ReactNativeFoundation": [
+    {
+      "taskId": "APP-RN-001",
+      "department": "React Native基础搭建",
+      "module": "Project Init",
+      "title": "初始化 RN Bare 项目与 Monorepo",
+      "phase": "Phase 1",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": [],
+      "needsCoordination": ["OPS"],
+      "description": "使用 React Native CLI 初始化 app 工程，配置 Turborepo monorepo，将 packages/shared 与 apps/app 建立工作空间。接入 TypeScript、路径别名、绝对导入、commitlint。",
+      "technicalRequirements": [
+        "RN 0.74.x + TypeScript",
+        "Turborepo/Nx 工作空间",
+        "tsconfig path alias: @shared/*, @app/*",
+        "Husky + lint-staged + commitlint"
+      ],
+      "acceptanceCriteria": [
+        "yarn install 成功，iOS/Android 均可编译启动空白页",
+        "workspace 能引用 packages/shared 的占位包",
+        "CI 能跑 lint 与 ts-check"
+      ],
+      "codeLocations": [
+        "apps/app/",
+        "packages/shared/"
+      ],
+      "testStrategy": "CI 检查（tsc --noEmit, eslint），本地真机运行 Smoke Test。",
+      "aiPromptSuggestion": "在 repo 根使用 Turborepo 创建 monorepo。新建 packages/shared（导出一个占位函数）与 apps/app（RN bare 项目）。配置 TypeScript、ESLint/Prettier、commitlint。确保 iOS/Android 可以启动。创建 README 说明开发环境。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["scaffolding","monorepo","typescript"]
+    },
+    {
+      "taskId": "APP-RN-002",
+      "department": "React Native基础搭建",
+      "module": "Navigation",
+      "title": "集成 React Navigation（BottomTabs + Native Stack）",
+      "phase": "Phase 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Design"],
+      "description": "搭建底部五栏（首页/创作-工作台/衣柜/广场/我的）与二级 Stack。初始化路由守卫（未登录跳转登录）。",
+      "technicalRequirements": [
+        "react-navigation v6",
+        "react-native-gesture-handler/react-native-reanimated",
+        "深色模式/安全区适配"
+      ],
+      "acceptanceCriteria": [
+        "五个 Tab 可切换，二级页面可 push/pop",
+        "未登录访问受限页自动跳转登录",
+        "Android Back 行为与期望一致"
+      ],
+      "codeLocations": [
+        "apps/app/src/navigation/*",
+        "apps/app/src/screens/*"
+      ],
+      "testStrategy": "轻量 E2E（Detox）验证导航流；单测守卫逻辑。",
+      "aiPromptSuggestion": "在 apps/app 中安装 react-navigation 相关依赖。创建 BottomTabNavigator（Home/Workbench/Closet/Feed/Profile）+ NativeStack。实现 AuthGuard Hook：从 @shared/store/auth 读取登录态，未登录时将受限页面 redirect 到 /Login。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["navigation","routing","auth-guard"]
+    },
+    {
+      "taskId": "APP-RN-003",
+      "department": "React Native基础搭建",
+      "module": "Theming",
+      "title": "设计 Token 与 NativeWind 集成",
+      "phase": "Phase 1",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Design"],
+      "description": "从 Web 的 AntD 主题导出 tokens.json，落地 NativeWind（Tailwind RN）与自建基础组件（Button/Card/Tag/Divider/Skeleton/Toast）。",
+      "technicalRequirements": [
+        "packages/design-tokens 导出 JSON",
+        "NativeWind + className",
+        "基础组件支持暗色模式"
+      ],
+      "acceptanceCriteria": [
+        "全局可用 className，色板/间距与 Web 一致",
+        "Button/Card 在 3 个页面复用无 UI 破损",
+        "Toast/Skeleton 可用"
+      ],
+      "codeLocations": [
+        "packages/design-tokens/",
+        "apps/app/src/components/ui/*"
+      ],
+      "testStrategy": "快照测试组件渲染；真机审美验收。",
+      "aiPromptSuggestion": "创建 packages/design-tokens，将 Web 的主题变量抽取为 tokens.json。在 app 端集成 NativeWind，根据 tokens 生成 tailwind.config。实现 Button/Card/Tag/Skeleton/Toast，提供示例 Story（可本地 screen 演示）。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["ui","tokens","nativewind"]
+    },
+    {
+      "taskId": "APP-RN-004",
+      "department": "React Native基础搭建",
+      "module": "Network",
+      "title": "axios 客户端与错误/重试拦截器",
+      "phase": "Phase 1",
+      "estimatedHours": 5,
+      "priority": "P0",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend"],
+      "description": "封装 axios 实例（BaseURL/超时/重试/取消），与 shared/api 对齐。实现 Token 注入与 401 刷新流程。",
+      "technicalRequirements": [
+        "axios-retry 指数退避",
+        "取消重复请求（相同幂等键）",
+        "401 → refresh_token → 重放一次"
+      ],
+      "acceptanceCriteria": [
+        "Token 注入与刷新成功",
+        "网络错误时用户得到明显提示与重试",
+        "可开关调试日志"
+      ],
+      "codeLocations": [
+        "packages/shared/api/*",
+        "apps/app/src/services/network/*"
+      ],
+      "testStrategy": "Jest 针对拦截器与刷新逻辑单测（mock axios）。",
+      "aiPromptSuggestion": "在 packages/shared/api 建立 createHttpClient.ts，导出带拦截器的 axios 实例。支持 baseURL、headers、重试、取消、401 刷新。apps/app 直接使用该实例。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["axios","auth","retry"]
+    },
+    {
+      "taskId": "APP-RN-005",
+      "department": "React Native基础搭建",
+      "module": "State",
+      "title": "Zustand 通用状态（账号/会员/配额/任务）",
+      "phase": "Phase 1",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004"],
+      "needsCoordination": ["Backend"],
+      "description": "在 packages/shared/store 定义通用 slices（auth, membership, quota, jobs），RN 端薄封装 UI store（theme, nav）。",
+      "technicalRequirements": [
+        "Zustand + immer",
+        "持久化：MMKV（仅限必要字段）",
+        "订阅选择器优化避免重渲染"
+      ],
+      "acceptanceCriteria": [
+        "登录后能看到会员/配额实时刷新",
+        "任务进度在多页面共享一致"
+      ],
+      "codeLocations": [
+        "packages/shared/store/*",
+        "apps/app/src/stores/*"
+      ],
+      "testStrategy": "Jest 对 reducers 与 selectors 单测。",
+      "aiPromptSuggestion": "在 shared/store 建立 authStore、membershipStore、jobStore，导出 hooks。RN 端再建 uiStore（app-only）。注意选择器优化和 shallow 比较。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["zustand","state","mmkv"]
+    },
+    {
+      "taskId": "APP-RN-006",
+      "department": "React Native基础搭建",
+      "module": "Push",
+      "title": "极光推送 + FCM 封装与后端注册",
+      "phase": "Phase 1",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend","OPS"],
+      "description": "集成极光（国内）与 FCM（海外），统一 push 服务；启动时上报 token 及设备信息到 /push/register。",
+      "technicalRequirements": [
+        "JPush RN SDK + 厂商通道（可选）",
+        "FCM RN SDK",
+        "通知分类与静默推送"
+      ],
+      "acceptanceCriteria": [
+        "前后台均可到达通知并正确跳转",
+        "用户可在设置页开启/关闭某类通知",
+        "token 与 userId 绑定成功"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/push/*",
+        "apps/app/src/screens/settings/Notifications.tsx"
+      ],
+      "testStrategy": "真机测试多机型；模拟后台到达率与点击跳转。",
+      "aiPromptSuggestion": "封装 push.ts：init、getToken、onMessage、registerToken。调用后端 /push/register 绑定。实现设置页开关（保存在 MMKV）。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["push","jpush","fcm"]
+    },
+    {
+      "taskId": "APP-RN-007",
+      "department": "React Native基础搭建",
+      "module": "Upload",
+      "title": "COS 预签名多段直传（含压缩与断点）",
+      "phase": "Phase 2",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004"],
+      "needsCoordination": ["Backend","OPS"],
+      "description": "实现大文件直传：后端预签名，多段 PUT 并发、失败重试、断点续传；上传前图片压缩（长边/质量）。",
+      "technicalRequirements": [
+        "后端提供 init/complete 接口与分片签名",
+        "RN 端分片 5–8MB，3–5 并发",
+        "记录已完成分片，支持重启续传"
+      ],
+      "acceptanceCriteria": [
+        "100MB 图像可靠上传，失败后可续传",
+        "成功返回 ETag，后端合并成功",
+        "上传进度可视化"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/upload/*",
+        "packages/shared/api/uploads.ts"
+      ],
+      "testStrategy": "模拟弱网/断网重试；集成测试与后端对接。",
+      "aiPromptSuggestion": "实现 uploadManager：init→split→PUT parts→complete，存 local checkpoint（MMKV/SQLite）。提供 hook useUpload(files) 返回进度与控制。",
+      "riskLevel": "High",
+      "status": "Planned",
+      "tags": ["upload","cos","multipart"]
+    }
+  ],
+  "AuthMembership": [
+    {
+      "taskId": "APP-AUTH-001",
+      "department": "用户认证模块",
+      "module": "Login",
+      "title": "手机号+验证码登录",
+      "phase": "Phase 1",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004","APP-RN-005"],
+      "needsCoordination": ["Backend","Design"],
+      "description": "实现手机号输入、发送验证码、验证码自动填充、登录成功后拉取用户/会员/配额。",
+      "technicalRequirements": [
+        "iOS SMS AutoFill、Android SMS Retriever",
+        "频控与错误提示",
+        "登录成功写入 MMKV（access/refresh）"
+      ],
+      "acceptanceCriteria": [
+        "正常/异常流完整（手机号非法、验证码错误）",
+        "登录后 Home 能看到会员信息",
+        "退出登录清理所有会话数据"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/auth/Login.tsx",
+        "packages/shared/api/auth.ts",
+        "packages/shared/store/auth.ts"
+      ],
+      "testStrategy": "Jest 单测验证状态流；E2E（Detox）走通完整登录路径。",
+      "aiPromptSuggestion": "编写 Login.tsx：手机号/验证码输入、发送与倒计时、自动填充；调用 shared/api/auth：sendSms, loginWithSms；成功后写入 authStore，跳转首页。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["auth","sms","mmkv"]
+    },
+    {
+      "taskId": "APP-AUTH-002",
+      "department": "用户认证模块",
+      "module": "SocialLogin",
+      "title": "Apple 登录（iOS 必须）",
+      "phase": "Phase 1",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend","OPS"],
+      "description": "接入 Sign in with Apple，获取 identityToken，与后端交换 JWT。",
+      "technicalRequirements": [
+        "react-native-apple-authentication",
+        "后端校验 Apple token 并签发 JWT"
+      ],
+      "acceptanceCriteria": [
+        "iOS 真机可登录并绑定账号",
+        "与短信登录账号打通（同一 userId）"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/auth/AppleLogin.tsx",
+        "packages/shared/api/auth.ts"
+      ],
+      "testStrategy": "真机登录测试；后端联调。",
+      "aiPromptSuggestion": "在 AppleLogin.tsx 调用苹果登录模块拿 identityToken，传给 /auth/apple/login 获取 JWT，合并到 authStore。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["apple","oauth","jwt"]
+    },
+    {
+      "taskId": "APP-AUTH-003",
+      "department": "用户认证模块",
+      "module": "SocialLogin",
+      "title": "微信登录（UnionID 绑定）",
+      "phase": "Phase 1",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend","OPS"],
+      "description": "集成微信登录，拿 code 经后端换取 unionId/openId，完成绑定/登录流程。",
+      "technicalRequirements": [
+        "微信开放平台 SDK",
+        "后端回收 code→unionId→JWT"
+      ],
+      "acceptanceCriteria": [
+        "微信授权→后端→登录成功",
+        "与手机号账号能绑定同一 user"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/auth/WeChatLogin.tsx",
+        "packages/shared/api/auth.ts"
+      ],
+      "testStrategy": "真机联调；异常场景（拒绝授权/取消）。",
+      "aiPromptSuggestion": "集成微信登录，获取 code 调后端 /auth/wechat/login，成功写入 authStore。若返回 needBind=true，引导手机号绑定。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["wechat","oauth","binding"]
+    },
+    {
+      "taskId": "APP-AUTH-004",
+      "department": "用户认证模块",
+      "module": "Membership",
+      "title": "会员中心（套餐/配额/订单）",
+      "phase": "Phase 1",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-RN-005"],
+      "needsCoordination": ["Backend","Design"],
+      "description": "实现会员信息展示、配额余额、订单列表。支持刷新与错误态。",
+      "technicalRequirements": [
+        "调用 /membership/detail, /orders/list",
+        "UI 卡片化、骨架屏"
+      ],
+      "acceptanceCriteria": [
+        "加载态/空态/错误态完整",
+        "配额变化能实时反映"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/profile/Membership.tsx",
+        "packages/shared/api/membership.ts"
+      ],
+      "testStrategy": "组件快照 + 集成联调。",
+      "aiPromptSuggestion": "实现 Membership 页面：读取 shared/api/membership 与 orders 接口渲染。使用 Skeleton/Empty 状态处理加载和无数据。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["membership","quota","orders"]
+    },
+    {
+      "taskId": "APP-AUTH-005",
+      "department": "用户认证模块",
+      "module": "Session",
+      "title": "JWT 刷新与网络失败兜底",
+      "phase": "Phase 1",
+      "estimatedHours": 5,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004","APP-AUTH-001"],
+      "needsCoordination": ["Backend"],
+      "description": "实现静默刷新、过期退出、后台回到前台时 token 检查；网络错误时的降级体验。",
+      "technicalRequirements": [
+        "axios 拦截器 + refresh_token",
+        "AppState 监听前后台切换"
+      ],
+      "acceptanceCriteria": [
+        "token 过期自动刷新一次成功",
+        "刷新失败自动登出并引导登录",
+        "弱网提示与重试按钮"
+      ],
+      "codeLocations": [
+        "packages/shared/api/httpClient.ts",
+        "apps/app/src/hooks/useAuthGuard.ts"
+      ],
+      "testStrategy": "Jest 模拟 401/刷新成功/失败；E2E 弱网流。",
+      "aiPromptSuggestion": "完善 axios 刷新流程：401→refresh→重放。实现 useAuthGuard：AppState change 时校验 token 的 exp；失败则登出。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["jwt","refresh","appstate"]
+    }
+  ],
+  "AIFeatures": [
+    {
+      "taskId": "APP-AI-001",
+      "department": "服装AI功能模块",
+      "module": "Media",
+      "title": "相册/相机接入（批量选图 + VisionCamera）",
+      "phase": "Phase 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-RN-001","APP-RN-007"],
+      "needsCoordination": ["Design"],
+      "description": "实现批量选图、相机拍摄、权限处理、基础裁剪与压缩；统一返回 {uri,width,height,size,exif}。",
+      "technicalRequirements": [
+        "react-native-image-picker",
+        "react-native-vision-camera",
+        "图片压缩（质量/长边）"
+      ],
+      "acceptanceCriteria": [
+        "多选图与拍照成功写入预览队列",
+        "无权限时合理引导设置"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/media/*",
+        "apps/app/src/components/media/ImagePickerButton.tsx"
+      ],
+      "testStrategy": "真机权限测试；大图压缩对比体积。",
+      "aiPromptSuggestion": "封装 pickImages, takePhoto，统一元数据。集成权限请求与失败提示。输出缩略图供列表使用。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["camera","gallery","compression"]
+    },
+    {
+      "taskId": "APP-AI-002",
+      "department": "服装AI功能模块",
+      "module": "Preview",
+      "title": "图片预览与轻编辑（裁剪/旋转/标注）",
+      "phase": "Phase 2",
+      "estimatedHours": 10,
+      "priority": "P1",
+      "dependencies": ["APP-AI-001"],
+      "needsCoordination": ["Design"],
+      "description": "支持多图预览，基础裁剪（比例预设）、旋转、添加标注（文字/箭头）。编辑记录存本地。",
+      "technicalRequirements": [
+        "Skia 画布",
+        "非破坏式编辑（保留原图）"
+      ],
+      "acceptanceCriteria": [
+        "编辑操作可撤销/重做",
+        "导出图像正确"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/media/PreviewEditor.tsx"
+      ],
+      "testStrategy": "功能点手测；导出正确性校验。",
+      "aiPromptSuggestion": "使用 Skia 构建可缩放画布，支持裁剪框与旋转，记录操作栈，实现导出合成。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["editor","skia","ux"]
+    },
+    {
+      "taskId": "APP-AI-003",
+      "department": "服装AI功能模块",
+      "module": "Matting",
+      "title": "智能抠图工具页（配置渲染 + 提交 Pipeline）",
+      "phase": "Phase 2",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004","APP-AI-001"],
+      "needsCoordination": ["Backend"],
+      "description": "读取 form_schemas 渲染抠图参数表单；提交任务到后端 Pipeline；显示任务状态与结果。",
+      "technicalRequirements": [
+        "SchemaForm 渲染器",
+        "提交前上传原图（COS 直传）",
+        "创建任务接口 payload 对齐 Web"
+      ],
+      "acceptanceCriteria": [
+        "可单图提交并在队列中看到进度",
+        "成功后可下载/分享/收藏"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/tools/Matting.tsx",
+        "packages/shared/config/form_schemas/*",
+        "packages/shared/api/pipeline.ts"
+      ],
+      "testStrategy": "联调接口 + UI 冒烟测试。",
+      "aiPromptSuggestion": "实现 Matting 页面：SchemaForm 渲染 + 选图 + 上传 + createJob。监听任务 socket 进度，完成后展示结果卡。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["matting","schema","pipeline"]
+    },
+    {
+      "taskId": "APP-AI-004",
+      "department": "服装AI功能模块",
+      "module": "Inpaint",
+      "title": "消除笔（Skia 画笔 + 蒙版上传）",
+      "phase": "Phase 2",
+      "estimatedHours": 12,
+      "priority": "P0",
+      "dependencies": ["APP-AI-001","APP-AI-002"],
+      "needsCoordination": ["Backend"],
+      "description": "实现涂抹消除：画笔、硬度、羽化、撤销/重做；生成蒙版并连同原图提交 Pipeline。",
+      "technicalRequirements": [
+        "Skia Path/Mask",
+        "蒙版与原图尺寸映射",
+        "导出 PNG8/Alpha"
+      ],
+      "acceptanceCriteria": [
+        "用户可顺滑涂抹并预览蒙版",
+        "服务端返回的消除结果对齐预期"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/tools/Inpaint.tsx",
+        "apps/app/src/components/skia/*"
+      ],
+      "testStrategy": "边缘用例（小笔刷/大笔刷/锯齿）验证；联调。",
+      "aiPromptSuggestion": "构建 Skia 画布，支持笔刷参数、撤销栈、路径平滑。导出时生成与原图同尺寸的蒙版 PNG 并提交 createJob。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["inpaint","skia","mask"]
+    },
+    {
+      "taskId": "APP-AI-005",
+      "department": "服装AI功能模块",
+      "module": "TryOn",
+      "title": "人台换装（选服装 + 人台，配置化）",
+      "phase": "Phase 2",
+      "estimatedHours": 10,
+      "priority": "P1",
+      "dependencies": ["APP-AI-001","APP-RN-007"],
+      "needsCoordination": ["Backend","Design"],
+      "description": "选择衣服与人台图，基于 schema 配置生成，支持批量，结果可导出 12 分镜。",
+      "technicalRequirements": [
+        "批量任务创建（队列显示）",
+        "合成参数与 Web 对齐"
+      ],
+      "acceptanceCriteria": [
+        "单图/批量可用",
+        "12 分镜结果可预览与下载"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/tools/TryOn.tsx"
+      ],
+      "testStrategy": "批量 20 张稳定执行；失败重试生效。",
+      "aiPromptSuggestion": "创建 TryOn 工具页：服装/人台选取、参数表单、批量提交、进度展示、结果瀑布流。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["tryon","batch","pipeline"]
+    },
+    {
+      "taskId": "APP-AI-006",
+      "department": "服装AI功能模块",
+      "module": "FaceSwap",
+      "title": "模特换脸（人脸选择与隐私提醒）",
+      "phase": "Phase 2",
+      "estimatedHours": 10,
+      "priority": "P1",
+      "dependencies": ["APP-AI-001"],
+      "needsCoordination": ["Backend","Legal"],
+      "description": "实现人脸区域选择/自动检测；隐私合规提示（授权/不可用于他人肖像）；提交 Pipeline。",
+      "technicalRequirements": [
+        "人脸检测（端侧或服务端）",
+        "合规弹窗与日志留存"
+      ],
+      "acceptanceCriteria": [
+        "检测失败时可手动框选",
+        "授权记录存储并可导出"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/tools/FaceSwap.tsx"
+      ],
+      "testStrategy": "多肤色/多角度样本测试；合规流程走通。",
+      "aiPromptSuggestion": "实现换脸 UI：检测框显示与可编辑；校验用户已阅读授权。提交源脸/目标图参数到 createJob。",
+      "riskLevel": "High",
+      "status": "Planned",
+      "tags": ["faceswap","privacy","consent"]
+    },
+    {
+      "taskId": "APP-AI-007",
+      "department": "服装AI功能模块",
+      "module": "Outpaint",
+      "title": "智能扩图（方向/比例/构图引导）",
+      "phase": "Phase 2",
+      "estimatedHours": 8,
+      "priority": "P2",
+      "dependencies": ["APP-AI-001"],
+      "needsCoordination": ["Backend"],
+      "description": "选择扩展方向与比例，配合提示词/风格模板生成更大画幅。",
+      "technicalRequirements": [
+        "SchemaForm 参数化",
+        "边界融合与构图预览"
+      ],
+      "acceptanceCriteria": [
+        "1:1→3:4/9:16 扩图成功",
+        "边界平滑无明显断裂"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/tools/Outpaint.tsx"
+      ],
+      "testStrategy": "多比例扩图对齐度测试。",
+      "aiPromptSuggestion": "Outpaint 页面：方向、比例、风格模板下拉；提交任务并显示进度与结果前后对比。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["outpaint","aspect","prompt"]
+    },
+    {
+      "taskId": "APP-AI-008",
+      "department": "服装AI功能模块",
+      "module": "Jobs",
+      "title": "任务列表（状态/筛选/批量操作）",
+      "phase": "Phase 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": ["APP-RN-005"],
+      "needsCoordination": ["Backend"],
+      "description": "展示任务列表，筛选（工具类型/状态/时间），支持批量重试/删除，长列表虚拟化。",
+      "technicalRequirements": [
+        "FlashList/RecyclerListView",
+        "socket.io + 轮询兜底"
+      ],
+      "acceptanceCriteria": [
+        "1k+ 任务滚动流畅",
+        "状态实时刷新"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/jobs/JobList.tsx"
+      ],
+      "testStrategy": "虚拟大数据集性能测试。",
+      "aiPromptSuggestion": "实现 JobList 使用 FlashList。订阅 socket 进度，失败任务批量操作按钮。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["jobs","list","realtime"]
+    },
+    {
+      "taskId": "APP-AI-009",
+      "department": "服装AI功能模块",
+      "module": "JobDetail",
+      "title": "任务详情（结果预览/下载/分享/收藏）",
+      "phase": "Phase 2",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": ["APP-AI-008"],
+      "needsCoordination": ["Design"],
+      "description": "查看任务输入/输出、生成参数；结果图支持下载、分享（系统分享/生成海报）、收藏。",
+      "technicalRequirements": [
+        "本地保存到相册（权限）",
+        "分享卡片（带品牌水印，可开关）"
+      ],
+      "acceptanceCriteria": [
+        "原图/处理后对比可滑动查看",
+        "保存/分享成功并可追踪"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/jobs/JobDetail.tsx"
+      ],
+      "testStrategy": "保存权限与失败提示；分享渠道测试。",
+      "aiPromptSuggestion": "创建 JobDetail：展示参数与前后对比（滑杆）。封装保存到相册与分享为组件。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["detail","share","compare"]
+    },
+    {
+      "taskId": "APP-AI-010",
+      "department": "服装AI功能模块",
+      "module": "Realtime",
+      "title": "WebSocket 实时进度（含断线重连）",
+      "phase": "Phase 2",
+      "estimatedHours": 5,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004","APP-AI-008"],
+      "needsCoordination": ["Backend"],
+      "description": "建立 socket 客户端，订阅任务进度，断线重连，前台/后台切换保持状态一致。",
+      "technicalRequirements": [
+        "socket.io-client",
+        "指数退避重连",
+        "AppState 监听"
+      ],
+      "acceptanceCriteria": [
+        "切后台 5 分钟再回前台仍能恢复",
+        "离线期间进度补齐"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/realtime/*"
+      ],
+      "testStrategy": "模拟断网、杀后台恢复流程。",
+      "aiPromptSuggestion": "封装 RealtimeService：connect/subscribe/unsubscribe，内部处理重连。jobStore 接收事件并更新。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["websocket","reconnect","appstate"]
+    }
+  ],
+  "SmartCloset": [
+    {
+      "taskId": "APP-CLOSET-001",
+      "department": "智能衣柜模块",
+      "module": "ClosetHome",
+      "title": "衣柜首页（统计/分类入口/快捷添加）",
+      "phase": "Phase 3",
+      "estimatedHours": 6,
+      "priority": "P0",
+      "dependencies": ["APP-AI-001","APP-RN-005"],
+      "needsCoordination": ["Design"],
+      "description": "展示总件数、分类占比、最近添加；提供“拍照添加/相册导入/扫码品牌”快捷入口。",
+      "technicalRequirements": [
+        "SQLite 聚合查询",
+        "快速入口悬浮按钮"
+      ],
+      "acceptanceCriteria": [
+        "统计正确、分类跳转可用",
+        "空衣柜有引导态"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/ClosetHome.tsx",
+        "apps/app/src/services/local-db/*"
+      ],
+      "testStrategy": "本地假数据回归；UI 验收。",
+      "aiPromptSuggestion": "实现 ClosetHome：读取本地 DB 统计与分类，提供添加快捷入口，空态展示教学。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["closet","dashboard","sqlite"]
+    },
+    {
+      "taskId": "APP-CLOSET-002",
+      "department": "智能衣柜模块",
+      "module": "AddItem",
+      "title": "添加衣物（拍照→识别→落库）",
+      "phase": "Phase 3",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-AI-001","APP-RN-007"],
+      "needsCoordination": ["Backend"],
+      "description": "用户拍照/选图，上传至后端识别 18 大类+颜色/风格，返回标签后存入 SQLite，可手动修正。",
+      "technicalRequirements": [
+        "批量添加（上限 20）",
+        "识别失败的兜底手动录入"
+      ],
+      "acceptanceCriteria": [
+        "添加一件衣物不超过 10 秒（含识别）",
+        "批量添加可边走边存"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/AddItem.tsx",
+        "packages/shared/api/recognition.ts"
+      ],
+      "testStrategy": "不同品类样本识别精度评测；失败回退体验。",
+      "aiPromptSuggestion": "构建 AddItem：调用 media 服务获取图，先上传，再调用 /recognize 得到标签，写入 SQLite；允许手动编辑并保存。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["recognition","batch","sqlite"]
+    },
+    {
+      "taskId": "APP-CLOSET-003",
+      "department": "智能衣柜模块",
+      "module": "ItemDetail",
+      "title": "衣物详情（查看/编辑/归档/删除）",
+      "phase": "Phase 3",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": ["APP-CLOSET-002"],
+      "needsCoordination": ["Design"],
+      "description": "支持修改品牌/颜色/风格/场合标签，归档/删除；历史穿搭引用计数更新。",
+      "technicalRequirements": [
+        "SQLite 事务",
+        "标签多选与校验"
+      ],
+      "acceptanceCriteria": [
+        "编辑后本地与云端可同步",
+        "删除有二次确认与软删除"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/ItemDetail.tsx"
+      ],
+      "testStrategy": "事务回滚测试；同步后对比一致性。",
+      "aiPromptSuggestion": "实现详情页：读取 SQLite 项，表单编辑后事务提交。软删除加 deletedAt 字段。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["crud","transactions","tags"]
+    },
+    {
+      "taskId": "APP-CLOSET-004",
+      "department": "智能衣柜模块",
+      "module": "List",
+      "title": "衣物列表（筛选/排序/搜索）",
+      "phase": "Phase 3",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-CLOSET-002"],
+      "needsCoordination": ["Design"],
+      "description": "分类/颜色/风格/场合筛选，关键字搜索，最近使用排序；大列表虚拟化。",
+      "technicalRequirements": [
+        "SQLite 组合查询",
+        "FlashList 虚拟化"
+      ],
+      "acceptanceCriteria": [
+        "1k+ 衣物滚动流畅",
+        "筛选 200ms 内响应"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/ItemList.tsx"
+      ],
+      "testStrategy": "压测大数据集；交互响应时延统计。",
+      "aiPromptSuggestion": "实现列表组件：构造查询 SQL，使用 FlashList 渲染，顶部筛选条可折叠。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["list","filter","performance"]
+    },
+    {
+      "taskId": "APP-CLOSET-005",
+      "department": "智能衣柜模块",
+      "module": "Stats",
+      "title": "衣柜统计（总览/占比/趋势）",
+      "phase": "Phase 3",
+      "estimatedHours": 6,
+      "priority": "P2",
+      "dependencies": ["APP-CLOSET-004"],
+      "needsCoordination": ["Design"],
+      "description": "以图表显示类别占比、季节分布、近 30 天新增；用于引导导流推荐。",
+      "technicalRequirements": [
+        "轻量图表（SVG）",
+        "本地聚合"
+      ],
+      "acceptanceCriteria": [
+        "三个核心图表可交互查看",
+        "空数据下有引导说明"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/Stats.tsx"
+      ],
+      "testStrategy": "快照测试图表渲染。",
+      "aiPromptSuggestion": "实现 Stats 页：读取 SQLite 聚合数据，使用轻量 SVG 图表组件绘制饼图/条形图。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["stats","charts","insights"]
+    },
+    {
+      "taskId": "APP-CLOSET-006",
+      "department": "智能衣柜模块",
+      "module": "Outfits",
+      "title": "搭配推荐（规则+相似度排序）",
+      "phase": "Phase 3",
+      "estimatedHours": 12,
+      "priority": "P0",
+      "dependencies": ["APP-CLOSET-004"],
+      "needsCoordination": ["Backend","Design"],
+      "description": "根据场合/天气/季节/颜色互补做规则生成，再用 Embedding 相似度排序；每次生成三套卡片，支持滑动反馈（喜欢/不喜欢）。",
+      "technicalRequirements": [
+        "packages/shared/reco/ 复用规则",
+        "相似度排序（本地/服务端）",
+        "反馈写入偏好"
+      ],
+      "acceptanceCriteria": [
+        "三套卡片质量稳定，反馈能影响下次结果",
+        "天气接口异常时能回退到通用推荐"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/Recommend.tsx",
+        "packages/shared/reco/*"
+      ],
+      "testStrategy": "A/B 观察点击率；单测规则组合。",
+      "aiPromptSuggestion": "实现 Recommend：拉取天气与场景，调用 shared/reco 生成候选，排序后渲染卡片；喜欢/不喜欢记录到偏好表。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["recommendation","rules","ranking"]
+    },
+    {
+      "taskId": "APP-CLOSET-007",
+      "department": "智能衣柜模块",
+      "module": "OutfitEditor",
+      "title": "搭配编辑（拖拽组合/保存）",
+      "phase": "Phase 3",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": ["APP-CLOSET-004"],
+      "needsCoordination": ["Design"],
+      "description": "从衣物池拖拽组合成一套，保存为 Outfits；可关联场合与备注。",
+      "technicalRequirements": [
+        "拖拽库（reanimated + gesture）",
+        "本地保存关系表"
+      ],
+      "acceptanceCriteria": [
+        "拖拽手感顺滑",
+        "保存后出现在日历与推荐候选中"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/OutfitEditor.tsx"
+      ],
+      "testStrategy": "交互可用性手测；关系一致性检查。",
+      "aiPromptSuggestion": "创建 OutfitEditor：左右区域（衣物池/画布），拖拽添加/移除；保存到 outfits、outfit_items 两表。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["dragdrop","outfit","ux"]
+    },
+    {
+      "taskId": "APP-CLOSET-008",
+      "department": "智能衣柜模块",
+      "module": "Diary",
+      "title": "穿搭记录（日历/打卡/图片）",
+      "phase": "Phase 3",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-CLOSET-006"],
+      "needsCoordination": ["Design"],
+      "description": "每日选择一套（或拍照）记录到日历，显示当日天气、心情；持久化本地并同步云端。",
+      "technicalRequirements": [
+        "SQLite 三表：diary/outfits/diary_photos",
+        "增量同步"
+      ],
+      "acceptanceCriteria": [
+        "日历滚动流畅",
+        "编辑/删除有正确同步"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/Diary.tsx"
+      ],
+      "testStrategy": "日期边界测试；同步后一致性验证。",
+      "aiPromptSuggestion": "实现 Diary：月视图 + 日详情，支持选择已保存 outfit 或拍照上传；写入本地并打标待同步。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["calendar","diary","sync"]
+    },
+    {
+      "taskId": "APP-CLOSET-009",
+      "department": "智能衣柜模块",
+      "module": "Analytics",
+      "title": "穿搭分析（TopN/闲置提醒）",
+      "phase": "Phase 3",
+      "estimatedHours": 6,
+      "priority": "P2",
+      "dependencies": ["APP-CLOSET-008"],
+      "needsCoordination": [],
+      "description": "统计近 30 天最常穿件数、未穿超 60 天的闲置提醒，推送回访。",
+      "technicalRequirements": [
+        "本地 SQL 聚合",
+        "push 消息触发（可选）"
+      ],
+      "acceptanceCriteria": [
+        "榜单/提醒准确",
+        "已处理的提醒不会重复弹出"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/Analytics.tsx"
+      ],
+      "testStrategy": "SQL 聚合结果核验；推送节流。",
+      "aiPromptSuggestion": "编写分析逻辑：生成 TopN 与 idle 列表；提供“忽略本季”开关；可触发一次性推送。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["analytics","retention","push"]
+    },
+    {
+      "taskId": "APP-CLOSET-010",
+      "department": "智能衣柜模块",
+      "module": "LocalDB",
+      "title": "SQLite 建模与 DAO 层",
+      "phase": "Phase 3",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend"],
+      "description": "定义本地表结构：items/outfits/outfit_items/diary/preferences/sync_versions，封装 DAO 与迁移脚本。",
+      "technicalRequirements": [
+        "react-native-quick-sqlite 或 sqlite-storage",
+        "版本迁移（semver）"
+      ],
+      "acceptanceCriteria": [
+        "创建/升级/回滚成功",
+        "DAO 覆盖 CRUD 与批量"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/local-db/*"
+      ],
+      "testStrategy": "Jest 对 DAO 层单测，迁移脚本回放。",
+      "aiPromptSuggestion": "编写 schema.sql 与迁移系统（记录当前 version）。实现各表 DAO（CURD、批量、事务）。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["sqlite","dao","migration"]
+    },
+    {
+      "taskId": "APP-CLOSET-011",
+      "department": "智能衣柜模块",
+      "module": "Sync",
+      "title": "云端同步（LWW + 冲突提示）",
+      "phase": "Phase 3",
+      "estimatedHours": 12,
+      "priority": "P0",
+      "dependencies": ["APP-CLOSET-010"],
+      "needsCoordination": ["Backend"],
+      "description": "实现增量同步协议：本地 pending → 上行；/closet/sync 拉增量；冲突采用 LWW，必要时弹窗提示合并。",
+      "technicalRequirements": [
+        "sinceVersion + changeset",
+        "失败重试与断点续传"
+      ],
+      "acceptanceCriteria": [
+        "离线修改后上线可正确合并",
+        "冲突弹窗可手动选择版本"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/sync/*",
+        "packages/shared/api/closet.ts"
+      ],
+      "testStrategy": "模拟离线/多端同时编辑；一致性校验。",
+      "aiPromptSuggestion": "实现 SyncEngine：pull(since)/push(pending)。对照 updatedAt/version 做 LWW；冲突列表提供 UI 处理。",
+      "riskLevel": "High",
+      "status": "Planned",
+      "tags": ["sync","conflict","offline"]
+    },
+    {
+      "taskId": "APP-CLOSET-012",
+      "department": "智能衣柜模块",
+      "module": "Export",
+      "title": "数据备份导出（云端）",
+      "phase": "Phase 3",
+      "estimatedHours": 5,
+      "priority": "P2",
+      "dependencies": ["APP-CLOSET-011"],
+      "needsCoordination": ["Backend"],
+      "description": "将本地数据库导出加密包，上传云端以备份；支持恢复。",
+      "technicalRequirements": [
+        "AES 对称加密",
+        "COS 存储，链接有效期控制"
+      ],
+      "acceptanceCriteria": [
+        "导出/恢复成功并校验完整性",
+        "异常失败时有回滚"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/closet/Backup.tsx"
+      ],
+      "testStrategy": "导入导出多轮测试；安全性评估。",
+      "aiPromptSuggestion": "实现 backup/restore：将 SQLite 文件导出加密上传，记录备份点；恢复前先本地备份当前数据。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["backup","security","cos"]
+    }
+  ],
+  "PaymentOrders": [
+    {
+      "taskId": "APP-PAY-001",
+      "department": "支付与订单模块",
+      "module": "SDK",
+      "title": "微信/支付宝 SDK 集成（Android 首发）",
+      "phase": "Phase 4",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-RN-001"],
+      "needsCoordination": ["Backend","OPS","Legal"],
+      "description": "接入微信/支付宝支付，拉起支付、回调校验、失败重试；iOS 仅调试，不在上架版本暴露入口（避免审核风险）。",
+      "technicalRequirements": [
+        "微信/支付宝 RN 插件或原生桥",
+        "H5 兜底（仅 Android）"
+      ],
+      "acceptanceCriteria": [
+        "Android 可完成支付并回写订单",
+        "iOS 构建可通过，隐藏入口"
+      ],
+      "codeLocations": [
+        "packages/mobile-bridges/pay/*",
+        "apps/app/src/screens/pay/*",
+        "packages/shared/api/pay.ts"
+      ],
+      "testStrategy": "沙箱环境联调；失败用例覆盖。",
+      "aiPromptSuggestion": "编写 PayBridge：init→pay→callback；在 Android 首发。iOS 暂保留调试，但隐藏 UI。所有结果回调到 /pay/notify。",
+      "riskLevel": "High",
+      "status": "Planned",
+      "tags": ["payment","wechatpay","alipay"]
+    },
+    {
+      "taskId": "APP-PAY-002",
+      "department": "支付与订单模块",
+      "module": "IAP",
+      "title": "iOS IAP 会员（Plan A）",
+      "phase": "Phase 4",
+      "estimatedHours": 12,
+      "priority": "P0",
+      "dependencies": ["APP-AUTH-004"],
+      "needsCoordination": ["Backend","OPS","Legal"],
+      "description": "实现 iOS In-App Purchase 订阅 SKU（B2C 会员），收据校验、订阅状态同步，前端识别平台差异展示。",
+      "technicalRequirements": [
+        "react-native-iap",
+        "服务器收据校验与订阅状态回调"
+      ],
+      "acceptanceCriteria": [
+        "iOS 审核前通过沙箱测试",
+        "会员中心能展示 IAP 状态并续订/恢复"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/pay/IAP.tsx",
+        "packages/shared/api/iap.ts"
+      ],
+      "testStrategy": "苹果沙箱测试用例；异常退款/过期用例。",
+      "aiPromptSuggestion": "实现 IAP 购买/恢复流程。后端提供 verifyReceipt 与 webhook 同步订阅状态。会员中心根据平台显示不同购买入口。",
+      "riskLevel": "High",
+      "status": "Planned",
+      "tags": ["iap","subscription","ios"]
+    },
+    {
+      "taskId": "APP-PAY-003",
+      "department": "支付与订单模块",
+      "module": "Checkout",
+      "title": "套餐购买页（套餐→支付→结果）",
+      "phase": "Phase 4",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-AUTH-004","APP-PAY-001","APP-PAY-002"],
+      "needsCoordination": ["Design","Backend"],
+      "description": "通用购买页：展示套餐与优惠，Android 走微信/支付宝；iOS 走 IAP（或引导 Web 支付仅 B2B）。",
+      "technicalRequirements": [
+        "平台区分入口",
+        "订单创建→支付→回写状态"
+      ],
+      "acceptanceCriteria": [
+        "支付成功后会员/配额实时增加",
+        "失败/取消有明确提示与可重试"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/pay/Checkout.tsx"
+      ],
+      "testStrategy": "全链路联调；边界状态覆盖。",
+      "aiPromptSuggestion": "构建 Checkout：读取套餐列表，点击后创建订单，按平台发起支付，监听回调后刷新 membershipStore。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["checkout","orders","platform"]
+    },
+    {
+      "taskId": "APP-PAY-004",
+      "department": "支付与订单模块",
+      "module": "Orders",
+      "title": "订单列表/详情",
+      "phase": "Phase 4",
+      "estimatedHours": 5,
+      "priority": "P1",
+      "dependencies": ["APP-PAY-003"],
+      "needsCoordination": ["Backend"],
+      "description": "展示历史订单、筛选、详情（金额/时间/支付方式/状态）。",
+      "technicalRequirements": [
+        "分页加载",
+        "空/错误态"
+      ],
+      "acceptanceCriteria": [
+        "订单状态与后端一致",
+        "点击可进入详情页"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/orders/OrderList.tsx",
+        "apps/app/src/screens/orders/OrderDetail.tsx"
+      ],
+      "testStrategy": "列表分页与详情联调。",
+      "aiPromptSuggestion": "实现订单列表与详情页，调用 /orders/list 与 /orders/{id}。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["orders","history","pagination"]
+    }
+  ],
+  "EcommerceReferral": [
+    {
+      "taskId": "APP-ECOM-001",
+      "department": "电商导流模块",
+      "module": "Recommend",
+      "title": "商品推荐页（基于衣柜缺口/风格）",
+      "phase": "Phase 5",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": ["APP-CLOSET-006","APP-CLOSET-010"],
+      "needsCoordination": ["Backend","Alliance","Design"],
+      "description": "根据衣柜缺口（颜色/场合/品类）与风格偏好生成商品推荐列表。",
+      "technicalRequirements": [
+        "调用后端聚合联盟接口",
+        "卡片展示券/价/平台标识"
+      ],
+      "acceptanceCriteria": [
+        "列表加载 < 1.2s",
+        "卡片点击打点成功"
+      ],
+      "codeLocations": [
+        "apps/app/src/screens/ecom/RecommendGoods.tsx",
+        "packages/ecom-union/*"
+      ],
+      "testStrategy": "CTR 监测；接口超时回退。",
+      "aiPromptSuggestion": "实现 RecommendGoods：读取本地衣柜统计，调用 /ecom/reco 获取商品，渲染卡片（价格/券/平台），点击调用 /ecom/track/click。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["recommendation","ecom","union"]
+    },
+    {
+      "taskId": "APP-ECOM-002",
+      "department": "电商导流模块",
+      "module": "DeepLink",
+      "title": "淘宝/京东 Deep Link 跳转与回退",
+      "phase": "Phase 5",
+      "estimatedHours": 6,
+      "priority": "P1",
+      "dependencies": ["APP-ECOM-001"],
+      "needsCoordination": ["Backend","Alliance"],
+      "description": "统一通过后端转链生成 Deep Link 并尝试唤起对应 App；失败降级 H5。",
+      "technicalRequirements": [
+        "Linking.openURL",
+        "超时降级 H5 打开"
+      ],
+      "acceptanceCriteria": [
+        "主流机型可唤起 TB/JD App",
+        "失败有降级与提示"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/deeplink/*"
+      ],
+      "testStrategy": "多机型唤起测试；链路埋点。",
+      "aiPromptSuggestion": "封装 openEcomLink(url)：优先唤起 TB/JD，超时 1500ms 切 H5；无论成功/失败都上报 /ecom/track/click。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["deeplink","taobao","jd"]
+    },
+    {
+      "taskId": "APP-ECOM-003",
+      "department": "电商导流模块",
+      "module": "Tracking",
+      "title": "点击与转化追踪（客户端侧）",
+      "phase": "Phase 5",
+      "estimatedHours": 4,
+      "priority": "P0",
+      "dependencies": ["APP-ECOM-002"],
+      "needsCoordination": ["Backend","Alliance"],
+      "description": "实现点击打点、携带 session/campaign 信息；转化由后端与联盟报表对账，客户端仅负责 click。",
+      "technicalRequirements": [
+        "匿名会话 ID、用户 ID",
+        "失败重试与缓存上报"
+      ],
+      "acceptanceCriteria": [
+        "click 命中率 > 99%",
+        "离线点击可在恢复网络后上报"
+      ],
+      "codeLocations": [
+        "apps/app/src/services/track/*"
+      ],
+      "testStrategy": "弱网重试与缓存验证。",
+      "aiPromptSuggestion": "实现 trackClick(entity, meta)：写入本地队列，联网后批量上报。携带 userId/sessionId/ref。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["tracking","analytics","cps"]
+    }
+  ],
+  "QAandRelease": [
+    {
+      "taskId": "APP-QA-001",
+      "department": "测试与优化",
+      "module": "Unit",
+      "title": "核心逻辑单元测试（Store/Sync/Upload）",
+      "phase": "Phase 4",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-RN-004","APP-CLOSET-011","APP-RN-007"],
+      "needsCoordination": [],
+      "description": "为 store、同步引擎、上传管理器编写 Jest 单测与覆盖率报告。",
+      "technicalRequirements": [
+        "Jest + @testing-library/react-native",
+        "覆盖率门槛 70%"
+      ],
+      "acceptanceCriteria": [
+        "CI 出具覆盖率报告",
+        "关键分支覆盖到位"
+      ],
+      "codeLocations": [
+        "apps/app/__tests__/*",
+        "packages/shared/*"
+      ],
+      "testStrategy": "单测为主；集成少量渲染测试。",
+      "aiPromptSuggestion": "为 authStore/jobStore/syncEngine/uploadManager 编写单测，mock axios 与文件系统，确保异常路径覆盖。",
+      "riskLevel": "Low",
+      "status": "Planned",
+      "tags": ["jest","coverage","unit-test"]
+    },
+    {
+      "taskId": "APP-QA-002",
+      "department": "测试与优化",
+      "module": "E2E",
+      "title": "关键路径 E2E（登录→生成→保存→分享）",
+      "phase": "Phase 4",
+      "estimatedHours": 10,
+      "priority": "P0",
+      "dependencies": ["APP-AUTH-001","APP-AI-003","APP-AI-009"],
+      "needsCoordination": ["Backend"],
+      "description": "使用 Detox 编写端到端：登录→抠图生成→查看详情→保存/分享。",
+      "technicalRequirements": [
+        "Detox 配置 iOS/Android",
+        "mock 或沙箱后端"
+      ],
+      "acceptanceCriteria": [
+        "CI 可执行 E2E 套件",
+        "构建时间控制在 20 分钟内"
+      ],
+      "codeLocations": [
+        "apps/app/e2e/*"
+      ],
+      "testStrategy": "冒烟级 E2E + 核心用例。",
+      "aiPromptSuggestion": "配置 Detox，编写核心用例脚本；对后端使用测试环境或 mock server。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["detox","e2e","pipeline"]
+    },
+    {
+      "taskId": "APP-QA-003",
+      "department": "测试与优化",
+      "module": "Perf",
+      "title": "性能优化（启动/列表/帧率）",
+      "phase": "Phase 4",
+      "estimatedHours": 8,
+      "priority": "P1",
+      "dependencies": ["APP-AI-008","APP-CLOSET-004"],
+      "needsCoordination": [],
+      "description": "优化启动时间（<2.5s）、大列表（任务/衣柜）掉帧率<5%，图片懒加载、预取缩略图、reanimated 避免主线程阻塞。",
+      "technicalRequirements": [
+        "Hermes 引擎",
+        "启用 inline require、禁用 dev logs"
+      ],
+      "acceptanceCriteria": [
+        "冷启动 <2.5s（中端机）",
+        "滚动帧率 > 55fps"
+      ],
+      "codeLocations": [
+        "apps/app/src/*"
+      ],
+      "testStrategy": "Profile 工具 + 真机测速对比。",
+      "aiPromptSuggestion": "启用 Hermes、inline requires，审计 re-renders，列表使用 FlashList，图片用 FastImage + blurhash 占位。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["performance","hermes","fastimage"]
+    },
+    {
+      "taskId": "APP-QA-004",
+      "department": "测试与优化",
+      "module": "Release",
+      "title": "上架与灰度（TestFlight/内测/CodePush）",
+      "phase": "Phase 4",
+      "estimatedHours": 8,
+      "priority": "P0",
+      "dependencies": ["APP-QA-001","APP-QA-002"],
+      "needsCoordination": ["OPS","Legal"],
+      "description": "配置 Fastlane 打包、TestFlight 与 Android 内测通道；集成 CodePush 灰度与回滚。",
+      "technicalRequirements": [
+        "Fastlane + GitHub Actions",
+        "App Center CodePush",
+        "版本渠道管理"
+      ],
+      "acceptanceCriteria": [
+        "TestFlight/内测包可用",
+        "CodePush 可 10% 灰度并支持一键回滚"
+      ],
+      "codeLocations": [
+        "apps/app/fastlane/*",
+        ".github/workflows/*"
+      ],
+      "testStrategy": "灰度发布演练；回滚演练。",
+      "aiPromptSuggestion": "配置 fastlane lane（beta/release）。集成 CodePush，提供 CLI 脚本发布、回滚。编写发行 README。",
+      "riskLevel": "Medium",
+      "status": "Planned",
+      "tags": ["release","fastlane","codepush"]
+    }
+  ]
+}
+```
+
+---
+
+## 第六部分：交付与协作清单（简表）
+
+* **设计**：首周确定 4 个关键页面的低保真（登录、工具壳、衣柜首页、任务列表），第 2 周输出组件规范与 tokens。
+* **后端改造**：短信登录、Apple/微信登录；COS 预签名多段；/push/register；/closet/sync；/ecom 转链与点击。
+* **合规**：iOS IAP 策略与文案；“推广”标识与隐私弹窗；肖像/换脸授权留痕。
+* **OPS**：证书、包名、推送/支付 SDK 注册，TestFlight/内测通道，CodePush key。
+* **数据**：PostHog（或自建）埋点字典：登录、创建任务、任务成功、保存/分享、添加衣物、推荐点击、导流点击。
+
+---
+
+## 第七部分：如何使用这些任务卡
+
+1. 将本答案中的 JSON 保存为 `tasks/mobile_plan.json`。
+2. 逐条把 `aiPromptSuggestion` 输入给 Claude Code（或批量自动化）——**每张卡即一个“可执行指令”**。
+3. 每晚产出 `build-YYYYMMDD` 内测包；每周一发布灰度。
+4. 跑通 **Phase 1\~4** 后再拉起 **Phase 5** 的电商导流。
+
+---
+
+### 结语
+
+* 以上方案最大化复用你们的 **Web 动态配置与 Pipeline 引擎**，用 RN 将高频“拍衣/生成/搭配/日记”装进手机，**B2B 与 B2C 同账号同钱包同数据层**，沉淀为「衣橱 + 工具 + 导流」飞轮。
+* 任务卡遵循“**先壳后核，先离线后在线，先 Android 后 iOS 审核**”的最短路线，且每一张卡都包含了 **技术要求、验收标准与 Claude Code 提示词**，可以直接开干。
+
+需要我把这些任务卡转为 **看板（CSV/Notion 导入）** 或生成 **按周甘特图** 与 **埋点字典（YAML）** 吗？我可以马上给出可下载的文件版。

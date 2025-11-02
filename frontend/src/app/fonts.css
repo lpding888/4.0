@@ -1,0 +1,60 @@
+/* ============================================
+   HarmonyOS Sans 字体系统 - 华为开源免费商用
+   ============================================ */
+
+/**
+ * 字体来源：https://developer.harmonyos.com/cn/design/resource/
+ * 许可证：OFL 1.1 (SIL Open Font License)
+ * 艹！这个字体免费商用，不怕版权纠纷
+ */
+
+@font-face {
+  font-family: 'HarmonyOS Sans';
+  src: url('https://res.vmallres.com/pimages/uomcdn/CN/pms/202108/gbom/6900000000011020295/428_428_8FEF893A21F211EC88150000D852D09A.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans';
+  src: url('https://res.vmallres.com/pimages/uomcdn/CN/pms/202108/gbom/6900000000011020296/428_428_8FEF9ACA21F211ECB4F30000D852D09A.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans';
+  src: url('https://res.vmallres.com/pimages/uomcdn/CN/pms/202108/gbom/6900000000011020297/428_428_8FEF9F2621F211EC962E0000D852D09A.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================
+   英文数字优化 - Inter字体（系统自带）
+   ============================================ */
+
+/**
+ * 艹！英文和数字用Inter字体更专业
+ * HarmonyOS Sans作为中文fallback
+ */
+body {
+  font-family:
+    'HarmonyOS Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Roboto',
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans',
+    sans-serif;
+}
+
+/* 数字显示优化（表格、金额等） */
+.font-tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}

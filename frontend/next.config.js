@@ -7,6 +7,15 @@ const nextConfig = {
       exclude: ['error', 'warn'], // 保留console.error和console.warn
     } : false,
   },
+  // 艹！Ant Design按需加载，tree-shaking优化
+  modularizeImports: {
+    'antd': {
+      transform: 'antd/es/{{member}}',
+    },
+    '@ant-design/icons': {
+      transform: '@ant-design/icons/{{member}}',
+    },
+  },
   images: {
     domains: [
       'ai-photo-prod-1379020062.picgz.myqcloud.com',

@@ -24,6 +24,30 @@ module.exports = {
     }
   },
 
+  // 艹，测试环境配置，用于跑单元测试和集成测试
+  test: {
+    client: 'mysql2',
+    connection: {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD,
+      database: 'test_ai_photo', // 使用独立的测试数据库
+      charset: 'utf8mb4'
+    },
+    pool: {
+      min: 2,
+      max: 5
+    },
+    migrations: {
+      directory: './src/db/migrations',
+      tableName: 'knex_migrations'
+    },
+    seeds: {
+      directory: './src/db/seeds'
+    }
+  },
+
   production: {
     client: 'mysql2',
     connection: {

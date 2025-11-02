@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    // 基础配置
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "moduleResolution": "node",
+
+    // 输出配置
+    "outDir": "./dist",
+    "rootDir": "./src",
+
+    // 严格模式（艹，这些检查能避免很多SB错误！）
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+
+    // 模块解析
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+
+    // 源码映射（用于调试）
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // 其他配置
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "knexfile.js",
+    "jest.config.js",
+    "jest.unit.config.js"
+  ]
+}

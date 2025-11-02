@@ -1,0 +1,334 @@
+{
+  "meta": {
+    "fileName": "01-base-architecture.json",
+    "platform": "miniprogram",
+    "category": "基础架构",
+    "taskCount": 6,
+    "totalEstimatedHours": 38,
+    "generatedBy": "Product Planner (AI老王)",
+    "generatedAt": "2025-11-01",
+    "version": "1.0"
+  },
+  "tasks": [
+    {
+      "taskId": "MOBILE-MP-001",
+      "title": "Taro脚手架搭建 + Monorepo配置",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-SHARED-001"],
+      "description": "使用Taro CLI初始化微信小程序项目，配置pnpm Monorepo结构，集成TypeScript 5、ESLint、Prettier、Husky等基础工具链。确保项目结构清晰、工具链完善、支持多端编译。",
+      "technicalRequirements": [
+        "使用Taro CLI 3.6+创建项目模板",
+        "配置pnpm workspace，支持packages/miniprogram、packages/shared-config等子包",
+        "集成TypeScript 5 + strict模式",
+        "配置ESLint（Airbnb规范）+ Prettier（统一代码风格）",
+        "集成Husky + lint-staged（提交前代码检查）",
+        "配置微信开发者工具自动预览",
+        "设置环境变量管理（.env.development、.env.production）",
+        "配置source map（开发环境开启，生产环境关闭）"
+      ],
+      "acceptanceCriteria": [
+        "Taro项目可正常启动（pnpm dev:weapp）",
+        "微信开发者工具可正常预览",
+        "TypeScript编译无错误",
+        "ESLint检查通过",
+        "Git提交时自动运行lint-staged",
+        "项目结构符合Monorepo规范",
+        "文档完整（README.md包含启动、构建、发布流程）"
+      ],
+      "deliverables": [
+        "packages/miniprogram/project.config.json",
+        "packages/miniprogram/tsconfig.json",
+        "packages/miniprogram/.eslintrc.js",
+        "packages/miniprogram/.prettierrc",
+        "packages/miniprogram/config/index.js",
+        "packages/miniprogram/config/dev.js",
+        "packages/miniprogram/config/prod.js",
+        "packages/miniprogram/src/app.config.ts",
+        "packages/miniprogram/src/app.tsx",
+        "pnpm-workspace.yaml",
+        ".husky/pre-commit",
+        "packages/miniprogram/README.md"
+      ],
+      "needsCoordination": [
+        "Shared-Types: 引用共享类型定义包（@ai-wardrobe/shared-config）"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通Taro框架和微信小程序开发。你的任务是搭建一个生产级的Taro项目脚手架，确保工具链完善、代码规范严格、支持Monorepo结构。",
+        "user": "请基于Taro CLI初始化微信小程序项目，并完成以下配置：\n\n1. **初始化项目**\n   - 使用`npx @tarojs/cli init miniprogram`创建项目\n   - 选择React + TypeScript模板\n   - 配置pnpm workspace（根目录pnpm-workspace.yaml）\n\n2. **配置TypeScript**\n   - 启用strict模式\n   - 配置路径别名（@/ → src/）\n   - 引用shared-config类型（@ai-wardrobe/shared-config）\n\n3. **配置ESLint + Prettier**\n   - 使用Airbnb规范\n   - 集成@typescript-eslint插件\n   - 配置Prettier与ESLint兼容\n\n4. **配置Husky**\n   - 安装husky + lint-staged\n   - 提交前运行ESLint + TypeScript类型检查\n\n5. **配置环境变量**\n   - 创建.env.development（开发环境API地址）\n   - 创建.env.production（生产环境API地址）\n   - 在config/index.js中读取环境变量\n\n6. **配置微信开发者工具**\n   - project.config.json配置appid、miniprogramRoot等\n   - 开启ES6转ES5、增强编译\n\n7. **编写README**\n   - 项目介绍\n   - 启动命令（pnpm dev:weapp）\n   - 构建命令（pnpm build:weapp）\n   - 发布流程\n\n参考GPT-5方案中的Taro配置部分（packages/miniprogram/config/index.js示例）。\n\n**验收标准：**\n- 运行`pnpm dev:weapp`可正常启动\n- 微信开发者工具可预览\n- 提交代码时自动运行lint检查"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["项目结构", "工具链配置", "文档完整性"]
+      },
+      "qaPolicy": {
+        "requiresQA": false,
+        "testingScope": []
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-002",
+      "title": "分包策略配置 + 懒加载优化",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-MP-001"],
+      "description": "配置微信小程序分包加载策略，将衣橱、商业版、我的等模块拆分为独立分包，优化主包体积（目标<700KB），支持懒加载和预下载。",
+      "technicalRequirements": [
+        "使用微信小程序subPackages配置分包",
+        "主包仅包含首页、登录、TabBar、配置解析器",
+        "衣橱模块独立分包（pages/wardrobe/*）",
+        "商业版模块独立分包（pages/business/*）",
+        "我的模块独立分包（pages/profile/*）",
+        "配置preloadRule预下载规则",
+        "主包体积<700KB（压缩后）",
+        "分包体积合理（每个<1MB）"
+      ],
+      "acceptanceCriteria": [
+        "主包体积<700KB（使用微信开发者工具检查）",
+        "分包配置正确，运行无报错",
+        "切换TabBar时分包自动加载",
+        "预下载规则生效（network面板可见）",
+        "首屏渲染速度<1.5s（真机测试）",
+        "文档完整（说明分包策略和优化思路）"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/app.config.ts（subPackages配置）",
+        "packages/miniprogram/src/app.config.ts（preloadRule配置）",
+        "packages/miniprogram/docs/subpackages-strategy.md"
+      ],
+      "needsCoordination": [],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通微信小程序分包加载和性能优化。你的任务是配置合理的分包策略，确保主包体积<700KB，分包加载流畅。",
+        "user": "请在app.config.ts中配置分包策略：\n\n1. **主包内容**\n   - pages/index（首页）\n   - pages/login（登录页）\n   - 配置解析器（runtime/ConfigParser.ts）\n   - TabBar组件（components/CustomTabBar）\n\n2. **分包配置**\n   ```typescript\n   subPackages: [\n     {\n       root: 'pages/wardrobe',\n       pages: [\n         'list/index',      // 衣橱列表\n         'add/index',       // 添加衣服\n         'detail/index',    // 衣服详情\n         'outfits/index'    // 搭配推荐\n       ]\n     },\n     {\n       root: 'pages/business',\n       pages: [\n         'dashboard/index', // 工作台\n         'task/index',      // 任务发起\n         'result/index'     // 结果查看\n       ]\n     },\n     {\n       root: 'pages/profile',\n       pages: [\n         'index/index',     // 我的页面\n         'settings/index'   // 设置页面\n       ]\n     }\n   ]\n   ```\n\n3. **预下载规则**\n   ```typescript\n   preloadRule: {\n     'pages/index/index': {\n       network: 'all',\n       packages: ['pages/wardrobe'] // 首页预加载衣橱分包\n     }\n   }\n   ```\n\n4. **优化主包体积**\n   - 移除未使用的npm包\n   - 图标使用iconfont（不要用图片）\n   - 公共组件按需引入\n\n5. **编写文档**\n   - 说明分包策略\n   - 记录主包/分包体积\n   - 优化建议\n\n参考GPT-5方案中的分包配置示例。\n\n**验收标准：**\n- 主包<700KB\n- 分包加载正常\n- 预下载生效"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["分包配置", "体积优化"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机测试首屏速度", "分包加载流畅性"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-003",
+      "title": "配置驱动动态渲染器实现",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 10,
+      "dependencies": ["MOBILE-SHARED-002", "MOBILE-MP-001"],
+      "description": "实现配置驱动的动态渲染器，支持根据MiniAppConfig数据结构动态渲染页面、组件、TabBar等。核心是DynamicRenderer组件，能够递归渲染ComponentNode树，支持组件白名单验证、权限控制、事件绑定。",
+      "technicalRequirements": [
+        "实现DynamicRenderer递归渲染ComponentNode",
+        "组件注册表（ComponentRegistry）白名单验证",
+        "支持动态props传递和事件绑定",
+        "权限控制（根据permissions配置显示/隐藏组件）",
+        "错误边界处理（渲染失败不影响其他组件）",
+        "支持占位符替换（{username}、{count}等）",
+        "性能优化（useMemo缓存渲染结果）",
+        "支持三种mode（business、wardrobe-male、wardrobe-female）"
+      ],
+      "acceptanceCriteria": [
+        "DynamicRenderer可正确渲染ComponentNode树",
+        "组件白名单验证生效（非法组件报错）",
+        "权限控制正常（无权限时隐藏组件）",
+        "事件绑定正常（onClick、onChange等）",
+        "占位符替换正确（从context获取数据）",
+        "性能达标（渲染1000个节点<500ms）",
+        "三种mode渲染结果正确",
+        "单元测试覆盖率≥80%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/runtime/DynamicRenderer.tsx",
+        "packages/miniprogram/src/runtime/ComponentRegistry.ts",
+        "packages/miniprogram/src/runtime/PermissionChecker.ts",
+        "packages/miniprogram/src/runtime/PlaceholderResolver.ts",
+        "packages/miniprogram/src/runtime/__tests__/DynamicRenderer.test.tsx",
+        "packages/miniprogram/docs/dynamic-renderer.md"
+      ],
+      "needsCoordination": [
+        "Shared-Types: 引用ComponentNode、MiniAppConfig类型",
+        "Shared-Components: 注册白名单组件"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通React动态渲染和配置驱动架构。你的任务是实现一个高性能、类型安全的动态渲染器，支持递归渲染、权限控制、事件绑定等核心功能。",
+        "user": "请实现配置驱动的DynamicRenderer组件：\n\n**核心功能：**\n\n1. **递归渲染ComponentNode树**\n```typescript\ninterface DynamicRendererProps {\n  node: ComponentNode;\n  context: Record<string, any>; // 用于占位符替换\n}\n\nconst DynamicRenderer: React.FC<DynamicRendererProps> = ({ node, context }) => {\n  // 1. 组件白名单验证\n  const Component = ComponentRegistry.get(node.component);\n  if (!Component) {\n    console.error(`Component not in whitelist: ${node.component}`);\n    return null;\n  }\n\n  // 2. 权限检查\n  if (node.requiredPermission && !PermissionChecker.check(node.requiredPermission)) {\n    return null;\n  }\n\n  // 3. 占位符替换\n  const resolvedProps = PlaceholderResolver.resolve(node.props, context);\n\n  // 4. 递归渲染children\n  const children = node.children?.map((child, index) => (\n    <DynamicRenderer key={index} node={child} context={context} />\n  ));\n\n  // 5. 渲染组件\n  return <Component {...resolvedProps}>{children}</Component>;\n};\n```\n\n2. **组件注册表（白名单）**\n```typescript\nclass ComponentRegistry {\n  private static registry = new Map<string, React.ComponentType<any>>();\n\n  static register(name: string, component: React.ComponentType<any>) {\n    this.registry.set(name, component);\n  }\n\n  static get(name: string) {\n    return this.registry.get(name);\n  }\n}\n\n// 注册白名单组件\nComponentRegistry.register('View', View);\nComponentRegistry.register('Text', Text);\nComponentRegistry.register('Button', Button);\nComponentRegistry.register('Image', Image);\n// ... 注册其他Taro组件\n```\n\n3. **权限检查器**\n```typescript\nclass PermissionChecker {\n  static check(permission: string): boolean {\n    const userPermissions = useUserStore(state => state.permissions);\n    return userPermissions.includes(permission);\n  }\n}\n```\n\n4. **占位符解析器**\n```typescript\nclass PlaceholderResolver {\n  static resolve(props: Record<string, any>, context: Record<string, any>) {\n    const resolved = {};\n    for (const [key, value] of Object.entries(props)) {\n      if (typeof value === 'string' && value.startsWith('{') && value.endsWith('}')) {\n        const varName = value.slice(1, -1);\n        resolved[key] = context[varName] ?? value;\n      } else {\n        resolved[key] = value;\n      }\n    }\n    return resolved;\n  }\n}\n```\n\n5. **性能优化**\n- 使用useMemo缓存渲染结果\n- 避免不必要的re-render\n\n6. **单元测试**\n- 测试白名单验证\n- 测试权限控制\n- 测试占位符替换\n- 测试递归渲染\n\n参考GPT-5方案中的DynamicRenderer实现（第2节）。\n\n**验收标准：**\n- 渲染正确\n- 白名单生效\n- 权限控制正常\n- 性能达标\n- 测试覆盖率≥80%"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["代码质量", "性能优化", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["单元测试", "性能测试"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-004",
+      "title": "配置热更新机制（ETag + 30s轮询）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 8,
+      "dependencies": ["MOBILE-SHARED-005", "MOBILE-MP-003"],
+      "description": "实现配置热更新机制，通过ETag协商缓存和30秒轮询检测配置更新。当后端配置变化时，前端自动拉取最新配置并重新渲染页面，支持静默更新和提示更新两种模式。",
+      "technicalRequirements": [
+        "实现ConfigUpdater服务，负责轮询和更新逻辑",
+        "使用ETag协商缓存（If-None-Match请求头）",
+        "30秒轮询间隔（可配置）",
+        "支持静默更新（后台自动应用）",
+        "支持提示更新（弹窗提示用户刷新）",
+        "更新失败重试机制（最多3次）",
+        "本地缓存最新配置（防止网络故障）",
+        "支持手动触发更新（下拉刷新）"
+      ],
+      "acceptanceCriteria": [
+        "ETag协商缓存正常（304响应不重复下载）",
+        "30秒轮询生效（network面板可见）",
+        "配置更新后页面自动刷新",
+        "静默更新模式正常（无感知更新）",
+        "提示更新模式正常（弹窗提示）",
+        "网络故障时使用本地缓存",
+        "手动下拉刷新正常",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/services/ConfigUpdater.ts",
+        "packages/miniprogram/src/hooks/useConfigUpdater.ts",
+        "packages/miniprogram/src/utils/storage.ts（本地缓存）",
+        "packages/miniprogram/src/services/__tests__/ConfigUpdater.test.ts",
+        "packages/miniprogram/docs/config-hot-reload.md"
+      ],
+      "needsCoordination": [
+        "Backend: 确保配置API支持ETag响应头",
+        "API-Client: 封装ETag请求逻辑"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通前端热更新机制和缓存策略。你的任务是实现一个高效、可靠的配置热更新服务，支持ETag协商缓存和轮询更新。",
+        "user": "请实现配置热更新机制：\n\n**核心功能：**\n\n1. **ConfigUpdater服务**\n```typescript\nclass ConfigUpdater {\n  private etag: string | null = null;\n  private timer: NodeJS.Timeout | null = null;\n  private retryCount = 0;\n  private maxRetries = 3;\n\n  // 启动轮询\n  start(interval = 30000) {\n    this.timer = setInterval(() => this.checkUpdate(), interval);\n  }\n\n  // 停止轮询\n  stop() {\n    if (this.timer) {\n      clearInterval(this.timer);\n      this.timer = null;\n    }\n  }\n\n  // 检查更新\n  async checkUpdate() {\n    try {\n      const response = await apiClient.get('/api/config', {\n        headers: {\n          'If-None-Match': this.etag || ''\n        }\n      });\n\n      // 304 Not Modified - 配置未变化\n      if (response.status === 304) {\n        console.log('Config not modified');\n        return;\n      }\n\n      // 200 OK - 配置已更新\n      if (response.status === 200) {\n        const newEtag = response.headers['etag'];\n        const newConfig = response.data;\n\n        // 保存新配置\n        await storage.set('miniapp_config', newConfig);\n        await storage.set('miniapp_config_etag', newEtag);\n\n        this.etag = newEtag;\n        this.retryCount = 0;\n\n        // 触发更新\n        this.applyUpdate(newConfig);\n      }\n    } catch (error) {\n      console.error('Config update failed:', error);\n      this.handleError();\n    }\n  }\n\n  // 应用更新\n  private applyUpdate(config: MiniAppConfig) {\n    // 静默更新模式\n    if (config.updateMode === 'silent') {\n      window.location.reload();\n    }\n    // 提示更新模式\n    else {\n      Taro.showModal({\n        title: '配置已更新',\n        content: '检测到新版本，是否立即刷新？',\n        success: (res) => {\n          if (res.confirm) {\n            window.location.reload();\n          }\n        }\n      });\n    }\n  }\n\n  // 错误处理\n  private handleError() {\n    this.retryCount++;\n    if (this.retryCount >= this.maxRetries) {\n      console.error('Max retries reached, using cached config');\n      this.loadCachedConfig();\n    }\n  }\n\n  // 加载缓存配置\n  private async loadCachedConfig() {\n    const cachedConfig = await storage.get('miniapp_config');\n    if (cachedConfig) {\n      console.log('Using cached config');\n      // 使用缓存配置\n    }\n  }\n}\n```\n\n2. **React Hook封装**\n```typescript\nexport function useConfigUpdater() {\n  useEffect(() => {\n    const updater = new ConfigUpdater();\n    updater.start(30000); // 30秒轮询\n\n    return () => updater.stop();\n  }, []);\n}\n```\n\n3. **本地缓存工具**\n```typescript\nclass Storage {\n  async get(key: string) {\n    return Taro.getStorageSync(key);\n  }\n\n  async set(key: string, value: any) {\n    Taro.setStorageSync(key, value);\n  }\n}\n\nexport const storage = new Storage();\n```\n\n4. **手动触发更新**\n```typescript\n// 在页面中添加下拉刷新\nuseEffect(() => {\n  Taro.onPullDownRefresh(async () => {\n    await configUpdater.checkUpdate();\n    Taro.stopPullDownRefresh();\n  });\n}, []);\n```\n\n5. **单元测试**\n- 测试ETag协商缓存\n- 测试轮询机制\n- 测试更新失败重试\n- 测试缓存降级\n\n参考GPT-5方案中的配置热更新实现（第2节）。\n\n**验收标准：**\n- ETag缓存生效\n- 轮询正常\n- 更新自动应用\n- 失败降级缓存"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["缓存策略", "错误处理", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["单元测试", "真机测试轮询"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-005",
+      "title": "自定义TabBar组件（动态菜单）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 6,
+      "dependencies": ["MOBILE-SHARED-001", "MOBILE-MP-003"],
+      "description": "实现自定义TabBar组件，支持根据配置动态渲染菜单项、权限控制、选中状态管理、图标切换等。三种mode（business、wardrobe-male、wardrobe-female）显示不同的TabBar菜单。",
+      "technicalRequirements": [
+        "使用Taro自定义TabBar API",
+        "根据MiniAppConfig.tabBar配置渲染菜单",
+        "权限控制（根据requiredPermission显示/隐藏菜单）",
+        "选中状态管理（activeKey）",
+        "图标切换（icon / selectedIcon）",
+        "角标显示（badge数字）",
+        "主题适配（从ThemeConfig获取颜色）",
+        "支持三种mode切换"
+      ],
+      "acceptanceCriteria": [
+        "TabBar根据配置正确渲染",
+        "权限控制正常（无权限菜单隐藏）",
+        "选中状态切换正常",
+        "图标切换流畅",
+        "角标数字显示正确",
+        "主题颜色正确应用",
+        "三种mode渲染结果正确",
+        "单元测试覆盖率≥70%"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/components/CustomTabBar/index.tsx",
+        "packages/miniprogram/src/components/CustomTabBar/index.module.scss",
+        "packages/miniprogram/src/components/CustomTabBar/__tests__/index.test.tsx",
+        "packages/miniprogram/docs/custom-tabbar.md"
+      ],
+      "needsCoordination": [
+        "Shared-Types: 引用TabBarItem类型",
+        "Theme-System: 引用主题颜色"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家,精通Taro自定义TabBar和动态渲染。你的任务是实现一个灵活、美观的自定义TabBar组件，支持配置驱动和权限控制。",
+        "user": "请实现自定义TabBar组件：\n\n**核心功能：**\n\n1. **CustomTabBar组件**\n```typescript\nimport { View, Image, Text } from '@tarojs/components';\nimport Taro from '@tarojs/taro';\nimport { useConfigStore } from '@/stores/config';\nimport { useUserStore } from '@/stores/user';\nimport { PermissionChecker } from '@/runtime/PermissionChecker';\nimport styles from './index.module.scss';\n\nconst CustomTabBar: React.FC = () => {\n  const config = useConfigStore(state => state.config);\n  const theme = useConfigStore(state => state.theme);\n  const [activeKey, setActiveKey] = useState('home');\n\n  // 过滤有权限的菜单项\n  const visibleItems = config.tabBar.filter(item => {\n    if (!item.enabled) return false;\n    if (item.requiredPermission && !PermissionChecker.check(item.requiredPermission)) {\n      return false;\n    }\n    return true;\n  });\n\n  const handleTabClick = (item: TabBarItem) => {\n    setActiveKey(item.key);\n    Taro.switchTab({ url: item.path });\n  };\n\n  return (\n    <View className={styles.tabbar} style={{ backgroundColor: theme.colors.background }}>\n      {visibleItems.map(item => (\n        <View\n          key={item.key}\n          className={styles.tabItem}\n          onClick={() => handleTabClick(item)}\n        >\n          <Image\n            className={styles.icon}\n            src={activeKey === item.key ? item.selectedIcon : item.icon}\n          />\n          <Text\n            className={styles.text}\n            style={{\n              color: activeKey === item.key ? theme.colors.primary : theme.colors.textSecondary\n            }}\n          >\n            {item.text}\n          </Text>\n          {item.badge && (\n            <View className={styles.badge}>\n              <Text className={styles.badgeText}>{item.badge}</Text>\n            </View>\n          )}\n        </View>\n      ))}\n    </View>\n  );\n};\n\nexport default CustomTabBar;\n```\n\n2. **样式**\n```scss\n.tabbar {\n  display: flex;\n  position: fixed;\n  bottom: 0;\n  left: 0;\n  right: 0;\n  height: 100px;\n  border-top: 1px solid #eee;\n  z-index: 1000;\n}\n\n.tabItem {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  position: relative;\n}\n\n.icon {\n  width: 48px;\n  height: 48px;\n}\n\n.text {\n  font-size: 20px;\n  margin-top: 8px;\n}\n\n.badge {\n  position: absolute;\n  top: 0;\n  right: 20px;\n  background: red;\n  border-radius: 20px;\n  padding: 0 8px;\n  min-width: 32px;\n  height: 32px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.badgeText {\n  color: white;\n  font-size: 18px;\n}\n```\n\n3. **配置示例**\n```typescript\ntabBar: [\n  {\n    key: 'home',\n    text: '首页',\n    icon: '/assets/icons/home.png',\n    selectedIcon: '/assets/icons/home-active.png',\n    path: '/pages/index/index',\n    enabled: true\n  },\n  {\n    key: 'wardrobe',\n    text: '衣橱',\n    icon: '/assets/icons/wardrobe.png',\n    selectedIcon: '/assets/icons/wardrobe-active.png',\n    path: '/pages/wardrobe/list/index',\n    enabled: true,\n    requiredPermission: 'wardrobe.view'\n  },\n  {\n    key: 'business',\n    text: '工作台',\n    icon: '/assets/icons/business.png',\n    selectedIcon: '/assets/icons/business-active.png',\n    path: '/pages/business/dashboard/index',\n    enabled: true,\n    requiredPermission: 'business.view'\n  },\n  {\n    key: 'profile',\n    text: '我的',\n    icon: '/assets/icons/profile.png',\n    selectedIcon: '/assets/icons/profile-active.png',\n    path: '/pages/profile/index/index',\n    enabled: true\n  }\n]\n```\n\n4. **单元测试**\n- 测试权限过滤\n- 测试选中状态\n- 测试角标显示\n\n参考GPT-5方案中的自定义TabBar实现（第3节）。\n\n**验收标准：**\n- 渲染正确\n- 权限控制生效\n- 选中状态正常\n- 主题适配正确"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["组件质量", "样式规范", "测试覆盖率"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["单元测试", "真机测试交互"]
+      },
+      "status": "Ready"
+    },
+    {
+      "taskId": "MOBILE-MP-006",
+      "title": "主题系统集成（Design Tokens + CSS变量）",
+      "department": "Frontend",
+      "priority": "P0",
+      "estimatedHours": 4,
+      "dependencies": ["MOBILE-SHARED-004", "MOBILE-MP-001"],
+      "description": "集成主题系统，支持根据MiniAppConfig.theme配置动态切换主题颜色、字体、间距等样式变量。使用CSS变量（--primary-color等）实现主题切换，支持三种mode的主题预设。",
+      "technicalRequirements": [
+        "定义Design Tokens（颜色、字体、间距、圆角、阴影）",
+        "使用CSS变量实现主题切换",
+        "支持三种mode主题预设（business、wardrobe-male、wardrobe-female）",
+        "主题切换无闪烁（预加载）",
+        "支持自定义主题（cssVars覆盖）",
+        "暗黑模式支持（可选）",
+        "主题持久化（本地缓存）"
+      ],
+      "acceptanceCriteria": [
+        "主题切换正常（颜色、字体、间距生效）",
+        "三种mode主题正确应用",
+        "自定义主题覆盖生效",
+        "切换无闪烁",
+        "主题持久化正常",
+        "文档完整（Design Tokens说明）"
+      ],
+      "deliverables": [
+        "packages/miniprogram/src/styles/tokens.scss（Design Tokens定义）",
+        "packages/miniprogram/src/styles/themes/business.scss",
+        "packages/miniprogram/src/styles/themes/wardrobe-male.scss",
+        "packages/miniprogram/src/styles/themes/wardrobe-female.scss",
+        "packages/miniprogram/src/hooks/useTheme.ts",
+        "packages/miniprogram/docs/design-tokens.md"
+      ],
+      "needsCoordination": [
+        "Shared-Types: 引用ThemeConfig类型",
+        "UI设计师: 提供三种mode的设计规范"
+      ],
+      "aiPromptSuggestion": {
+        "system": "你是Frontend Dev专家，精通CSS变量和主题系统设计。你的任务是实现一个灵活、高性能的主题系统，支持动态切换和自定义覆盖。",
+        "user": "请实现主题系统：\n\n**核心功能：**\n\n1. **Design Tokens定义（tokens.scss）**\n```scss\n// 颜色\n--color-primary: #1890ff;\n--color-success: #52c41a;\n--color-warning: #faad14;\n--color-error: #f5222d;\n--color-text-primary: #000000;\n--color-text-secondary: #666666;\n--color-text-tertiary: #999999;\n--color-background: #ffffff;\n--color-background-secondary: #f5f5f5;\n--color-border: #d9d9d9;\n\n// 字体\n--font-size-xs: 20px;\n--font-size-sm: 24px;\n--font-size-md: 28px;\n--font-size-lg: 32px;\n--font-size-xl: 36px;\n--font-weight-regular: 400;\n--font-weight-medium: 500;\n--font-weight-bold: 700;\n\n// 间距\n--spacing-xs: 8px;\n--spacing-sm: 16px;\n--spacing-md: 24px;\n--spacing-lg: 32px;\n--spacing-xl: 48px;\n\n// 圆角\n--border-radius-sm: 4px;\n--border-radius-md: 8px;\n--border-radius-lg: 16px;\n\n// 阴影\n--shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);\n--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.15);\n--shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);\n```\n\n2. **主题预设**\n\n```scss\n// business.scss（商业版主题 - 蓝色系）\n:root[data-theme=\"business\"] {\n  --color-primary: #1890ff;\n  --color-background: #ffffff;\n  --color-text-primary: #000000;\n}\n\n// wardrobe-male.scss（男装衣橱 - 深色系）\n:root[data-theme=\"wardrobe-male\"] {\n  --color-primary: #2f54eb;\n  --color-background: #f0f2f5;\n  --color-text-primary: #262626;\n}\n\n// wardrobe-female.scss（女装衣橱 - 粉色系）\n:root[data-theme=\"wardrobe-female\"] {\n  --color-primary: #eb2f96;\n  --color-background: #fff0f6;\n  --color-text-primary: #262626;\n}\n```\n\n3. **useTheme Hook**\n```typescript\nimport { useEffect } from 'react';\nimport { useConfigStore } from '@/stores/config';\n\nexport function useTheme() {\n  const theme = useConfigStore(state => state.theme);\n  const mode = useConfigStore(state => state.config.mode);\n\n  useEffect(() => {\n    // 设置主题属性\n    document.documentElement.setAttribute('data-theme', mode);\n\n    // 应用自定义CSS变量\n    if (theme.cssVars) {\n      Object.entries(theme.cssVars).forEach(([key, value]) => {\n        document.documentElement.style.setProperty(`--${key}`, value);\n      });\n    }\n\n    // 持久化主题\n    Taro.setStorageSync('theme_mode', mode);\n  }, [theme, mode]);\n}\n```\n\n4. **在app.tsx中使用**\n```typescript\nimport { useTheme } from '@/hooks/useTheme';\n\nfunction App() {\n  useTheme(); // 初始化主题\n\n  return (\n    <View className=\"app\">\n      {/* ... */}\n    </View>\n  );\n}\n```\n\n5. **组件中使用CSS变量**\n```scss\n.button {\n  background-color: var(--color-primary);\n  color: var(--color-background);\n  border-radius: var(--border-radius-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  font-size: var(--font-size-md);\n  box-shadow: var(--shadow-sm);\n}\n```\n\n参考GPT-5方案中的主题系统实现（第3节）。\n\n**验收标准：**\n- 主题切换正常\n- 三种mode正确\n- CSS变量生效\n- 持久化正常"
+      },
+      "reviewPolicy": {
+        "requiresReview": true,
+        "reviewers": ["Reviewer"],
+        "reviewScope": ["Design Tokens规范", "主题实现"]
+      },
+      "qaPolicy": {
+        "requiresQA": true,
+        "testingScope": ["真机测试主题切换"]
+      },
+      "status": "Ready"
+    }
+  ]
+}

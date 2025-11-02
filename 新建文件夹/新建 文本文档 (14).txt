@@ -1,0 +1,2083 @@
+可以，加上 **MCP（Model Context Protocol）**、**知识库（RAG）**，并把 **Claude Skills** 纳入同一套可视化 CMS 的“可配置能力层”。下面给你一份**增量架构补丁（Patch Plan）**，在不推翻你现有自研方案的前提下，扩展三块新能力：**MCP 集成**、**知识库/检索增强（RAG）**、**Claude Skills 管理与发布**。末尾我附上**新增任务卡（Task Cards）**，可直接丢给 Claude Code / Cursor 执行。
+
+> 参考事实：
+> • **MCP** 是 Anthropic 推出的开放标准，用来把 AI 应用与外部系统/工具以统一协议互联（有官方 TS SDK 与范例服务器/客户端）。([anthropic.com][1])
+> • **Claude Skills** 是“以文件夹为单位”的技能包（说明/脚本/资源），Claude 按需加载，可在 Claude 应用、Claude Code、API 与 Agent SDK 中使用与发布。([anthropic.com][2])
+> • 轻量向量库可选 **LanceDB**（Node/JS 原生、嵌入式）、**Qdrant**（1GB RAM 也能跑，适配你的 4G 机器）、或 **Redis 向量检索**/**SQLite‑VSS**（本地扩展）。([npmjs.com][3])
+
+---
+
+## A. 增量架构补丁（MCP + RAG + Skills）
+
+### 总体思路
+
+在原“自研 CMS + Pipeline 引擎 + Provider 白名单”的架构上，新增三块“第一公民”模块：
+
+1. **MCP 集成**
+
+   * **运行时**：新增 `MCP_TOOL_CALL` 步骤类型（在 Pipeline 中像调用 Provider 一样“调用 MCP 工具”）。
+   * **管理端**：`/admin/mcp` 维护 **MCP 服务器连接**（传输/鉴权/允许的 tools 列表），提供 **“工具发现/健康检查/试调用”**。
+   * **对外**：提供一个**只读 MCP Server** 暴露你平台的资源（如 feature 列表、Pipeline 试跑、知识库检索），便于 Claude/其他 MCP 客户端在 IDE/桌面端“安全使用你的后台”。（官方鼓励双向生态：既当 client 也当 server。([anthropic.com][1])）
+
+2. **知识库（RAG）**
+
+   * **索引存储**：默认 **LanceDB（嵌入式/本地文件目录）**，开箱即用，**不加新服务进程**；可选 **Qdrant**（Docker 独立服务，资源允许时再开）、**Redis VSS**（若你现 Redis 支持模块）或 **SQLite‑VSS**（极轻）。([npmjs.com][3])
+   * **嵌入生成**：走你现有 **Provider 体系**（新增 `EMBEDDINGS` 泛化 Provider；或用 `GENERIC_HTTP` 指向任意 Embedding API），**维度/模型**与存储解耦。
+   * **RAG 步骤**：新增 `KB_RETRIEVE`（相似检索）、`RAG_COMPOSE_PROMPT`（将检索上下文拼装入 Prompt 模板）；可并入现有 Prompt 中心预览。
+
+3. **Claude Skills**
+
+   * 在 CMS 内新增 **技能包管理**：定义 `skill.json`（或 manifest 元数据）、`instructions.md`、`resources/*`、`scripts/*`；一键打包 zip；**可选**对接 Claude 的发布接口/Console（若开启 API/Agent SDK 权限）。([anthropic.com][2])
+   * **协同**：技能包里放“如何连接你自研的 MCP 服务器并调用工具”的说明与脚本，**让 Claude 在桌面端/IDE 直接用你的后端**。
+
+> 这样，你的“可配置能力层”多了三条统一扩展路径：
+> • **Provider**（你自己托管/第三方 API）
+> • **MCP 工具**（生态服务器开放的工具/资源/提示）
+> • **知识库**（RAG 取数 + Prompt 拼装）
+> 三者都通过 **Pipeline 节点**表现出来，管理员仍然是“拖拽连线+填参数”的体验。
+
+---
+
+## B. 详细技术方案
+
+### B1. MCP 集成
+
+**用例**
+
+* 在流程中直接“调用一个 MCP 工具”（如 `get_forecast`、`vector_search`、`render_excel` 等）。
+* 在 Claude / Cursor / Claude Desktop 里，挂载“你的自研 MCP 服务器”，实现：列出 feature、触发某个 pipeline 的 **测试运行**、查询你的知识库等。([Model Context Protocol][4])
+
+**数据结构**
+
+* 新表 `mcp_endpoints`（管理端配置）
+
+```sql
+CREATE TABLE mcp_endpoints (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  transport ENUM('stdio','http','ws','ssh') DEFAULT 'http',
+  base_url VARCHAR(500),             -- http/ws 的地址；stdio/ssh 用命令/主机信息
+  command VARCHAR(255),              -- 对应 stdio 本地命令
+  arguments JSON NULL,               -- 命令参数或连接参数
+  auth JSON NULL,                    -- {type:'bearer'|'basic'|'header'|..., token:'***'}
+  allowed_tools JSON NULL,           -- 白名单：仅允许这些tool
+  status ENUM('enabled','disabled') DEFAULT 'enabled',
+  last_health_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_mcp_status ON mcp_endpoints(status);
+```
+
+* Pipeline 新节点类型 `MCP_TOOL_CALL`
+
+```json
+{
+  "id": "nM1",
+  "type": "MCP_TOOL_CALL",
+  "label": "调用外部工具",
+  "mcpEndpointId": 12,
+  "toolName": "get_forecast",
+  "args": { "city": "{{form.city}}", "days": 3 },
+  "timeoutMs": 15000,
+  "retry": { "max": 1 },
+  "out": { "weather": "{{result}}" }
+}
+```
+
+**后端实现**
+
+* 采用官方 **TypeScript SDK**（`@modelcontextprotocol/sdk`）封装一个 `McpClient`，支持 **tools 列表/调用**，并强制 **白名单工具**与**参数校验**。([npmjs.com][5])
+* `MCP_TOOL_CALL` 执行器：与 Provider 执行器并列，代码风格与 `GENERIC_HTTP` 保持一致。
+* 健康检查：调用 `tools/list` 成功即通过；失败记录到 `last_health_at`。
+
+**对外 MCP Server（只读）**
+
+* 用 TS SDK 起一个 **“cms‑readonly” MCP 服务器**，暴露：
+
+  * `list_features`（读 `feature_definitions`）
+  * `test_pipeline`（安全沙盒试跑，只在 admin 角色或专用 token）
+  * `kb_retrieve`（知识库检索工具）
+* 开发调试可用 **MCP Inspector / Claude Desktop** 对接验证工具清单与调用。([hackteam.io][6])
+
+**安全要点**
+
+* `allowed_tools` 白名单 + **参数白名单**（Zod 约束）。
+* 对 **stdio** 传输仅允许你自己打包并受控的二进制/脚本；建议生产使用 **HTTP/WS** + 认证。
+* 所有调用进入统一审计日志（tool、args 摘要、latency、status）。
+
+---
+
+### B2. 知识库（RAG）
+
+**存储与选型**
+
+* **默认**：**LanceDB（Node/JS 原生 SDK）**，落地到 `data/lancedb` 目录，4G 内存足以支撑中小规模（向量驻磁盘，内存按查询页缓存）。([npmjs.com][3])
+* **可选**：
+
+  * **Qdrant**（Rust，Docker 单进程），官方讨论表明 **1GB RAM 就能跑**，你 4G 完全可用；也有免费云集群选项。([GitHub][7])
+  * **Redis Vector**（若能装 RediSearch/企业版/云 Redis Vector），Node 教程齐全。([Redis][8])
+  * **SQLite‑VSS**（FAISS 扩展，极轻）；适合单机小规模。([GitHub][9])
+
+**抽象接口**
+
+```ts
+export interface VectorStore {
+  upsert(collection: string, items: {id:string, text:string, meta:any, vector:number[]}[]): Promise<void>;
+  query(collection: string, vector:number[], topK:number, filter?:Record<string,any>): Promise<{id:string, text:string, score:number, meta:any}[]>;
+  deleteByIds(collection:string, ids:string[]): Promise<void>;
+  createCollection(name:string, dim:number, metric?:"cosine"|"l2"): Promise<void>;
+}
+```
+
+* 提供 `lancedbStore`, `qdrantStore`, `redisStore`, `sqliteVssStore` 四个实现，**运行时只选一个**（`system_configs.kv: rag.store=“lancedb”`）。
+
+**数据表（元数据）**
+
+```sql
+CREATE TABLE kb_collections (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) UNIQUE,
+  dim INT NOT NULL,
+  metric ENUM('cosine','l2') DEFAULT 'cosine',
+  status ENUM('active','inactive') DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE kb_sources (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  collection_id INT NOT NULL,
+  type ENUM('file','cos_bucket','web','manual') NOT NULL,
+  locator VARCHAR(500),           -- COS 路径/URL/说明
+  parser ENUM('auto','markdown','html','pdf','txt') DEFAULT 'auto',
+  chunk_size INT DEFAULT 800,
+  chunk_overlap INT DEFAULT 150,
+  status ENUM('ready','indexing','error') DEFAULT 'ready',
+  last_indexed_at DATETIME,
+  FOREIGN KEY (collection_id) REFERENCES kb_collections(id)
+);
+
+CREATE TABLE kb_docs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  source_id INT NOT NULL,
+  doc_key VARCHAR(255) NOT NULL,  -- 去重键，如文件hash+页码或URL
+  title VARCHAR(255), 
+  lang VARCHAR(16),
+  meta JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_doc (source_id, doc_key),
+  FOREIGN KEY (source_id) REFERENCES kb_sources(id)
+);
+
+CREATE TABLE kb_chunks (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  doc_id BIGINT NOT NULL,
+  chunk_index INT NOT NULL,
+  text MEDIUMTEXT NOT NULL,
+  meta JSON,
+  embedding_status ENUM('none','queued','done','error') DEFAULT 'none',
+  embedding_error TEXT,
+  FOREIGN KEY (doc_id) REFERENCES kb_docs(id),
+  INDEX idx_doc (doc_id),
+  INDEX idx_embed (embedding_status)
+);
+```
+
+> **向量本体**不进 MySQL（除 SQLite‑VSS 方案），而是交由所选 VectorStore；MySQL 仅管“**元数据与编目**”。
+
+**嵌入生成（通过 Provider）**
+
+* 在 `provider_endpoints` 新增一个 **`EMBEDDINGS` 逻辑 Provider** 或复用 `GENERIC_HTTP`：
+
+  * `req_template` 指向 Embedding API（例如 `POST /embeddings`），请求体是 `[{id,text}]` 批量。
+  * 返回写向量数组（维度 `dim` 存在 `kb_collections`）。
+
+**检索与拼装**
+
+* 新增步骤：
+
+  * `KB_RETRIEVE`：`{collection, query:"{{form.xxx}}", topK:5, filters:{lang:'zh'}} → out:{contexts:[{text,score,meta}]}`
+  * `RAG_COMPOSE_PROMPT`：将 `contexts` 注入模板占位（例如 `{{#each contexts}}{{text}}\n---\n{{/each}}`），返回 `finalPrompt`。
+* 前端 Prompt 编辑器里，提供“**插入 RAG 片段**”的 Snippet 与**渲染预览**。
+
+**摄取（Ingestion）**
+
+* `/admin/kb`：
+
+  * **上传文件**（走 COS，解析 Markdown/HTML/PDF 文本，中文按「标点+句长」混切），
+  * **Bucket 扫描**（定时任务），
+  * **URL 抓取**（谨慎、白名单域名），
+  * **手工文本**。
+* 作业队列：读 `kb_sources`→ 解析 → 切块 → 调用 `EMBEDDINGS` → 调用 `VectorStore.upsert` → 标记 `done`。
+* 统计面板：每分钟/小时索引数、TopK 响应时间、命中率。
+
+---
+
+### B3. Claude Skills
+
+**概念映射**
+
+* Skills 是“文件夹技能包”，包含说明、脚本与资源，Claude **按需加载**；可在 Claude 应用、Claude Code、API/Agent SDK 统一使用与分发。([anthropic.com][2])
+
+**我们在 CMS 中做什么**
+
+* 新增 **“Skills 管理”**：
+
+  * 基本元数据：`name`, `slug`, `version`, `description`, `scopes`（用途/场景标签）。
+  * 资源：`instructions.md`（长说明/品牌规范）、`prompts/*.hbs`（模板）、`scripts/*`（可选，代码执行涉及安全审阅）、`assets/*`。
+  * 变量：可引用 `system_configs`/`feature_definitions` 中的键值（打包时渲染）。
+  * 一键 **打包 Zip**；**可选** 调用 **API/Console** 发布（如果开通了对应接口；否则下载后手动导入 Claude 控制台）。([Tom's Guide][10])
+* **最佳实践**：
+
+  * 在技能 README 中写清 **如何连接你的 MCP Server**（如填写 `.mcp.json` / “工具白名单”）。
+  * 提供两个官方样例：
+
+    1. *Operate‑CMS‑via‑MCP*：列出/查询/试跑流程；
+    2. *RAG‑Writer*：从你的知识库检索并按品牌文案模板改写。
+
+---
+
+## C. 与现有系统的集成点
+
+1. **Pipeline 新节点类型**：`MCP_TOOL_CALL`、`KB_RETRIEVE`、`RAG_COMPOSE_PROMPT`（与 `PROVIDER` 并列）。
+2. **管理端新路由**：`/admin/mcp`、`/admin/kb`、`/admin/skills`。
+3. **缓存/快照/失效**：仍沿用你已有“**写快照→Redis 发布 cfg\:invalidate→读路径多级缓存**”策略，新增的 KB/Skills/MCP 配置同样入快照。
+4. **权限**：
+
+   * MCP 连接可见性仅限 `admin`；
+   * Skills 有“草稿/发布”状态；
+   * KB 源有“只读/可编辑”与“白名单域名”策略。
+
+---
+
+## D. 关键伪代码
+
+**MCP 客户端调用（流程节点执行器）**
+
+```ts
+import { Client } from '@modelcontextprotocol/sdk'; // 官方 TS SDK
+
+export async function execMcpToolCall(step, ctx) {
+  const ep = await repo.getMcpEndpoint(step.mcpEndpointId);
+  const client = await createClient(ep); // http/ws/stdio 封装
+  try {
+    // 白名单检查
+    if (!ep.allowed_tools.includes(step.toolName)) throw new Error('tool not allowed');
+    // 参数取值 & 校验
+    const args = materialize(step.args, ctx.vars); // {{ }} 替换
+    const res = await client.tools.call(step.toolName, args, { timeout: step.timeoutMs });
+    return { ok: true, result: res };
+  } catch (e) {
+    return { ok: false, error: { code: 'MCP_ERR', message: String(e) } };
+  } finally {
+    await client.close();
+  }
+}
+```
+
+**RAG 检索**
+
+```ts
+const store = getVectorStore(); // lancedb/qdrant/redis/sqliteVss
+const embed = await embeddingProvider.embed([query]); // 由 Provider 或 GenericHTTP 调用
+const hits = await store.query(collection, embed[0], topK, filter);
+return { contexts: hits.map(h => ({ text: h.text, score: h.score, meta: h.meta })) };
+```
+
+**打包 Claude Skill**
+
+```ts
+// assemble folder: /tmp/skills/{slug}-{version}/
+// write instructions.md / prompts/*.hbs / assets/*
+// render placeholders via system configs
+// zip → COS or local download
+```
+
+---
+
+## E. 增量风险与应对
+
+* **MCP 安全**：只白名单工具；禁用任意命令执行；生产使用 HTTP/WS + Token；所有调用审计。（官方协议为 JSON‑RPC/双向通道，SDK 已封装。([Model Context Protocol][11])）
+* **向量存储资源**：默认 LanceDB（嵌入式）最省运维；若量大再切 Qdrant（1GB 也能跑），或 Redis VSS/SQLite‑VSS 作为轻量替代。([GitHub][7])
+* **Skills 执行代码**：默认只放**说明/模板/静态资源**；脚本类需走**审阅与沙箱**（或交由 Claude 的受控“代码执行”能力/Agent SDK 环境）。([Tom's Guide][10])
+* **法务**：继续仅使用 Form.io/React Flow/Monaco 的 MIT 侧；MCP SDK/示例为开源许可；Skills 包含第三方脚本时保留 LICENSE。
+
+---
+
+## F. 新增数据库与缓存扩展（节选）
+
+* `mcp_endpoints`（见上）
+* `kb_collections/kb_sources/kb_docs/kb_chunks`（见上）
+* `skills` / `skill_versions`
+
+```sql
+CREATE TABLE skills (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  slug VARCHAR(100) UNIQUE NOT NULL,
+  description TEXT,
+  status ENUM('draft','published') DEFAULT 'draft',
+  current_version INT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE skill_versions (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  skill_id INT NOT NULL,
+  version INT NOT NULL,
+  manifest JSON,                -- skill.json/metadata
+  files LONGTEXT,               -- 打包前文件清单（相对路径+哈希）
+  archive_url VARCHAR(500),     -- 打包ZIP存放地址（COS）
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (skill_id) REFERENCES skills(id),
+  UNIQUE KEY uniq_skill_ver (skill_id, version)
+);
+```
+
+* 所有写入均伴随 **config\_snapshots** 与 **Redis 失效**。
+
+---
+
+## G. 新增任务卡（MCP / 知识库 / Skills）（共 24 张）
+
+> 说明：以下为 **新增** 任务卡（与你之前那 45 张并列）。仍按 4–12 小时/卡，标注依赖、优先级，MVP 建议先做 **P0**（12 张）。
+
+### G1. MCP（8 张）
+
+```json
+{
+  "taskId": "CMS-MCP-001",
+  "module": "MCP",
+  "title": "引入官方 TS SDK 并封装 McpClient",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-001","CMS-501"],
+  "description": "集成 @modelcontextprotocol/sdk，封装 http/ws/stdio 三种连接方式的 McpClient：tools/list、tools/call、health。",
+  "technicalRequirements": [
+    "支持超时、鉴权（Bearer/Header）",
+    "tools 白名单过滤",
+    "连接关闭与资源回收"
+  ],
+  "acceptanceCriteria": [
+    "能从一个示例 MCP 服务器拉取工具列表并成功调用",
+    "异常时返回统一错误结构并记录日志"
+  ],
+  "codeLocations": [
+    "backend/src/mcp/mcp-client.ts"
+  ],
+  "testStrategy": [
+    "UT：超时/鉴权失败/非法tool",
+    "IT：对接示例 MCP Server"
+  ],
+  "aiPromptSuggestion": "使用 @modelcontextprotocol/sdk 实现 mcp-client.ts，支持 http/ws/stdio 三种 transport；封装 tools/list 与 tools/call；写 UT/IT。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-002",
+  "module": "MCP",
+  "title": "新增 mcp_endpoints 表与 CRUD API",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "创建 mcp_endpoints 表，提供 /admin/mcp 的增加/编辑/禁用/测试连接接口，写入时生成快照并广播失效。",
+  "technicalRequirements": [
+    "字段含 transport/base_url/command/arguments/auth/allowed_tools",
+    "测试连接：调用 tools/list"
+  ],
+  "acceptanceCriteria": [
+    "CRUD 与测试连接通过",
+    "非法配置能给出明确错误"
+  ],
+  "codeLocations": [
+    "backend/migrations/xxxx_create_mcp_endpoints.ts",
+    "backend/src/routes/admin/mcp.route.ts"
+  ],
+  "testStrategy": [
+    "IT：supertest 覆盖 CRUD/测试连接"
+  ],
+  "aiPromptSuggestion": "编写 mcp_endpoints 的 Knex migration 与 /admin/mcp 路由，包含测试连接。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-003",
+  "module": "MCP",
+  "title": "Pipeline 新增 MCP_TOOL_CALL 执行器",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-MCP-001","CMS-203","CMS-204"],
+  "description": "实现 MCP_TOOL_CALL 步骤：变量渲染、白名单检查、调用工具、超时/重试、结果写出。",
+  "technicalRequirements": [
+    "与 Provider 执行器一致的重试/超时行为",
+    "结构化错误与 Step 日志"
+  ],
+  "acceptanceCriteria": [
+    "可在流程中插入 MCP 工具并顺利执行",
+    "试跑器能展示耗时与返回数据"
+  ],
+  "codeLocations": [
+    "backend/src/pipeline/steps/mcp-tool-call.ts"
+  ],
+  "testStrategy": [
+    "IT：与示例工具的端到端试跑"
+  ],
+  "aiPromptSuggestion": "实现 MCP_TOOL_CALL 节点执行器，按模板变量渲染 args，调用 MCP 工具并输出到 state。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-004",
+  "module": "MCP",
+  "title": "Admin 前端：MCP 连接管理与工具发现",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-MCP-002"],
+  "description": "Next.js /admin/mcp：列表、创建/编辑抽屉、工具发现（显示 server 返回的 tools），一键测试。",
+  "technicalRequirements": [
+    "AntD Table/Form/Drawer",
+    "掩码显示敏感字段"
+  ],
+  "acceptanceCriteria": [
+    "能新增一个 MCP 连接并看到工具列表",
+    "测试连接在1s内回显结果"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/mcp/page.tsx"
+  ],
+  "testStrategy": [
+    "RTL：基本交互"
+  ],
+  "aiPromptSuggestion": "实现 /admin/mcp 前端，完成 CRUD 与工具发现展示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-005",
+  "module": "MCP",
+  "title": "自研只读 MCP Server（cms-readonly）",
+  "phase": "Week 3",
+  "estimatedHours": 8,
+  "priority": "P1",
+  "dependencies": ["CMS-205","CMS-RAG-006"],
+  "description": "基于 TS SDK 起一个只读 MCP Server，暴露 list_features/test_pipeline/kb_retrieve，带 Token 鉴权与速率限制。",
+  "technicalRequirements": [
+    "配置文件化端口/密钥",
+    "工具描述含参数 Zod 校验"
+  ],
+  "acceptanceCriteria": [
+    "在 Claude Desktop/MCP Inspector 可连接并调用",
+    "调用日志可在后台查看"
+  ],
+  "codeLocations": [
+    "backend/src/mcp/server/index.ts"
+  ],
+  "testStrategy": [
+    "手测 + UT：参数校验"
+  ],
+  "aiPromptSuggestion": "实现一个最小 MCP 服务器，提供3个只读工具并做 Token 鉴权。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-006",
+  "module": "MCP",
+  "title": "MCP 工具参数模板与变量选择器整合",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-207","CMS-MCP-004"],
+  "description": "在节点侧边栏为 MCP_TOOL_CALL 的 args 字段接入变量选择器与 Schema 校验。",
+  "technicalRequirements": [
+    "根据 tools 的参数 Schema 动态生成表单",
+    "未定义变量即时标红"
+  ],
+  "acceptanceCriteria": [
+    "配置体验与 Provider 节点一致",
+    "保存前校验完整"
+  ],
+  "codeLocations": [
+    "frontend/components/flow/NodeInspector.tsx"
+  ],
+  "testStrategy": [
+    "RTL：参数校验"
+  ],
+  "aiPromptSuggestion": "为 MCP 工具调用面板接入动态表单与变量选择器，按 tool schema 校验。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-007",
+  "module": "MCP",
+  "title": "MCP 调用审计与速率限制",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-MCP-003"],
+  "description": "为 MCP 调用增加每分钟限流与审计表，记录 tool/args 摘要/latency/status。",
+  "technicalRequirements": [
+    "Redis 计数限流",
+    "审计查询接口"
+  ],
+  "acceptanceCriteria": [
+    "限流命中时返回明确错误码",
+    "审计可按时间段导出"
+  ],
+  "codeLocations": [
+    "backend/src/mcp/audit.ts"
+  ],
+  "testStrategy": [
+    "UT：限流阈值"
+  ],
+  "aiPromptSuggestion": "实现 MCP 调用审计与简单限流。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-MCP-008",
+  "module": "MCP",
+  "title": "文档与示例：如何在 Claude/Code/IDE 连接你的 MCP",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-MCP-005"],
+  "description": "编写 docs：在 Claude Desktop/Claude Code/VS Code 安装 MCP 客户端并连接你的只读 MCP Server 的步骤。",
+  "technicalRequirements": [
+    "提供 .mcp.json 样例",
+    "常见错误排查"
+  ],
+  "acceptanceCriteria": [
+    "新同学按文档可独立接入",
+    "截图与脚本齐全"
+  ],
+  "codeLocations": [
+    "docs/mcp/README.md"
+  ],
+  "testStrategy": [
+    "走文档复现"
+  ],
+  "aiPromptSuggestion": "写使用文档与配置样例，指导如何连接与测试 MCP Server。"
+}
+```
+
+---
+
+### G2. 知识库 / RAG（10 张）
+
+```json
+{
+  "taskId": "CMS-RAG-001",
+  "module": "知识库",
+  "title": "抽象 VectorStore 接口与 LanceDB 实现（默认）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "定义向量存储接口并实现 lancedbStore，数据目录 /data/lancedb，可创建集合/插入/查询/删除。",
+  "technicalRequirements": [
+    "支持 cosine/l2",
+    "批量 upsert 与分页查询"
+  ],
+  "acceptanceCriteria": [
+    "创建集合/插入/TopK 查询通过",
+    "1000 条样本查询 < 50ms（本机）"
+  ],
+  "codeLocations": [
+    "backend/src/rag/vectorstore/index.ts",
+    "backend/src/rag/vectorstore/lancedb.ts"
+  ],
+  "testStrategy": [
+    "UT：增删查改，性能基线"
+  ],
+  "aiPromptSuggestion": "实现 VectorStore 抽象与 LanceDB 默认实现，写 UT 并输出简单性能日志。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-002",
+  "module": "知识库",
+  "title": "可选存储：Qdrant 适配器",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P1",
+  "dependencies": ["CMS-RAG-001"],
+  "description": "提供 qdrantStore（可选），读环境变量连接本地/云 Qdrant。",
+  "technicalRequirements": [
+    "API 兼容 VectorStore 接口",
+    "连接健康检查"
+  ],
+  "acceptanceCriteria": [
+    "集合/插入/查询通过",
+    "Docker 本地一键跑通"
+  ],
+  "codeLocations": [
+    "backend/src/rag/vectorstore/qdrant.ts"
+  ],
+  "testStrategy": [
+    "IT：对接本地 Qdrant 容器"
+  ],
+  "aiPromptSuggestion": "实现 Qdrant 适配器，确保接口一致，可在 Docker 本地验证。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-003",
+  "module": "知识库",
+  "title": "Embeddings Provider（泛化）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-003","CMS-006"],
+  "description": "以 GENERIC_HTTP 封装 embeddings 调用（批量），从 system_configs 读取模型配置与维度。",
+  "technicalRequirements": [
+    "批量 32 条/次",
+    "失败重试与降级日志"
+  ],
+  "acceptanceCriteria": [
+    "返回长度=输入条数且维度一致",
+    "异常时有明确错误码"
+  ],
+  "codeLocations": [
+    "backend/src/rag/embeddings.ts"
+  ],
+  "testStrategy": [
+    "UT：批量/错误分支"
+  ],
+  "aiPromptSuggestion": "实现通用 Embeddings 调用器：从配置读取 endpoint/headers，支持批量与重试。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-004",
+  "module": "知识库",
+  "title": "文本切块与解析器（Markdown/HTML/PDF/中文标点）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "实现解析与切块管线：自动检测格式，抽取正文，按字数与标点切块（chunk_size/overlap 可配）。",
+  "technicalRequirements": [
+    "中文断句优先标点、英文优先句号",
+    "去噪（脚本/导航）"
+  ],
+  "acceptanceCriteria": [
+    "常见格式解析正常",
+    "切块统计与示例预览可用"
+  ],
+  "codeLocations": [
+    "backend/src/rag/ingest/parser.ts",
+    "backend/src/rag/ingest/chunker.ts"
+  ],
+  "testStrategy": [
+    "UT：多格式样本"
+  ],
+  "aiPromptSuggestion": "实现解析+切块模块，支持多格式输入和中英文混排，写 UT。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-005",
+  "module": "知识库",
+  "title": "KB 元数据表与摄取队列",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-RAG-004","CMS-RAG-003","CMS-RAG-001"],
+  "description": "创建 kb_* 表并实现摄取队列：解析→切块→嵌入→向量库 upsert→状态回写。",
+  "technicalRequirements": [
+    "并发与失败重试",
+    "可重入（断点续扫）"
+  ],
+  "acceptanceCriteria": [
+    "100 文档入库稳定完成",
+    "失败任务可重试成功"
+  ],
+  "codeLocations": [
+    "backend/migrations/xxxx_create_kb_tables.ts",
+    "backend/src/rag/ingest/worker.ts"
+  ],
+  "testStrategy": [
+    "IT：端到端入库"
+  ],
+  "aiPromptSuggestion": "实现 kb 元数据表与摄取 worker，串起解析/切块/嵌入/入库全流程。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-006",
+  "module": "知识库",
+  "title": "检索 API 与 Pipeline 节点 KB_RETRIEVE",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-RAG-001","CMS-RAG-003"],
+  "description": "实现 /admin/kb/query 与 Pipeline 节点 KB_RETRIEVE：输入 query/filters/topK，输出 contexts。",
+  "technicalRequirements": [
+    "embedding 缓存（LRU/Redis）",
+    "去重/同源合并"
+  ],
+  "acceptanceCriteria": [
+    "TopK 检索 < 150ms（中小数据）",
+    "重复片段合并有效"
+  ],
+  "codeLocations": [
+    "backend/src/routes/admin/kb.route.ts",
+    "backend/src/pipeline/steps/kb-retrieve.ts"
+  ],
+  "testStrategy": [
+    "IT：检索性能与正确性"
+  ],
+  "aiPromptSuggestion": "实现 KB_RETRIEVE 节点与查询接口，支持过滤与缓存。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-007",
+  "module": "知识库",
+  "title": "RAG_COMPOSE_PROMPT 节点与 Prompt 预览集成",
+  "phase": "Week 2",
+  "estimatedHours": 4,
+  "priority": "P0",
+  "dependencies": ["CMS-303","CMS-RAG-006"],
+  "description": "把检索结果以 Handlebars 模板注入（受限 helper），输出 finalPrompt，并在前端可预览。",
+  "technicalRequirements": [
+    "{{#each contexts}}...{{/each}} 片段",
+    "token 预算提示"
+  ],
+  "acceptanceCriteria": [
+    "预览中可看到拼装后的完整 Prompt",
+    "超长时给出截断提示"
+  ],
+  "codeLocations": [
+    "backend/src/pipeline/steps/rag-compose.ts",
+    "frontend/components/prompt/RagPreview.tsx"
+  ],
+  "testStrategy": [
+    "UT：模板变量渲染"
+  ],
+  "aiPromptSuggestion": "实现 RAG_COMPOSE_PROMPT 节点与前端预览，支持上下文列表注入与截断提示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-008",
+  "module": "知识库",
+  "title": "Admin：KB 管理页（集合/来源/摄取）",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-RAG-005"],
+  "description": "实现 /admin/kb：集合/来源 CRUD，文件上传到 COS，摄取任务触发与进度展示，入库统计。",
+  "technicalRequirements": [
+    "AntD 表格/进度条",
+    "批量导入导出"
+  ],
+  "acceptanceCriteria": [
+    "能完成一个来源的解析与入库全链路",
+    "进度与失败重试可视化"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/kb/page.tsx"
+  ],
+  "testStrategy": [
+    "手测 + 局部 RTL"
+  ],
+  "aiPromptSuggestion": "实现 KB 管理前端：集合/来源/摄取与进度可视化，支持 COS 上传。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-009",
+  "module": "知识库",
+  "title": "可选：Redis VSS 适配器或 SQLite‑VSS 适配器",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P2",
+  "dependencies": ["CMS-RAG-001"],
+  "description": "实现 redisStore 或 sqliteVssStore 两选一，作为极轻替代方案。",
+  "technicalRequirements": [
+    "接口一致",
+    "能力告警（如不支持过滤）"
+  ],
+  "acceptanceCriteria": [
+    "一键切换 store 生效",
+    "性能在小数据集内可接受"
+  ],
+  "codeLocations": [
+    "backend/src/rag/vectorstore/redis.ts",
+    "backend/src/rag/vectorstore/sqlitevss.ts"
+  ],
+  "testStrategy": [
+    "UT：基本 CRUD/TopK"
+  ],
+  "aiPromptSuggestion": "实现 Redis/SQLite‑VSS 的 VectorStore 适配器（二选一即可）。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-RAG-010",
+  "module": "知识库",
+  "title": "检索质量评测（简单版）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P2",
+  "dependencies": ["CMS-RAG-006","CMS-505"],
+  "description": "实现一个小评测脚本：给定问答对，计算 TopK 覆盖率/MRR/时间，形成基线。",
+  "technicalRequirements": [
+    "CSV/JSON 输入",
+    "输出可视化表格"
+  ],
+  "acceptanceCriteria": [
+    "生成覆盖率/MRR/Latency 报告",
+    "便于对比不同 store/参数"
+  ],
+  "codeLocations": [
+    "backend/scripts/rag-eval.ts"
+  ],
+  "testStrategy": [
+    "IT：三组样例"
+  ],
+  "aiPromptSuggestion": "编写 rag-eval.ts：对指定问答对评测 TopK 覆盖、MRR 与时间，输出报告。"
+}
+```
+
+---
+
+### G3. Claude Skills（6 张）
+
+```json
+{
+  "taskId": "CMS-SK-001",
+  "module": "Skills",
+  "title": "Skills 元数据与版本表",
+  "phase": "Week 2",
+  "estimatedHours": 4,
+  "priority": "P0",
+  "dependencies": [],
+  "description": "创建 skills/skill_versions 两表，管理技能的元数据、版本与打包产物地址。",
+  "technicalRequirements": [
+    "slug 唯一",
+    "版本自增 + 快照"
+  ],
+  "acceptanceCriteria": [
+    "能新增/发布/回滚技能版本",
+    "快照写入与失效广播"
+  ],
+  "codeLocations": [
+    "backend/migrations/xxxx_create_skills_tables.ts",
+    "backend/src/repositories/skills.repo.ts"
+  ],
+  "testStrategy": [
+    "UT：版本唯一性"
+  ],
+  "aiPromptSuggestion": "为 Skills 建表与基础仓储，支持版本管理与快照。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-SK-002",
+  "module": "Skills",
+  "title": "技能包目录构建与打包（Zip）",
+  "phase": "Week 2",
+  "estimatedHours": 6,
+  "priority": "P0",
+  "dependencies": ["CMS-SK-001"],
+  "description": "在服务器上按规范生成技能包目录（instructions.md/prompts/*.hbs/assets/*/skill.json），渲染变量后打包 Zip，上传 COS。",
+  "technicalRequirements": [
+    "占位渲染（系统变量）",
+    "sha256 校验与清单"
+  ],
+  "acceptanceCriteria": [
+    "能下载 zip 并在本地解包查看",
+    "Manifest/清单完整"
+  ],
+  "codeLocations": [
+    "backend/src/skills/packager.ts"
+  ],
+  "testStrategy": [
+    "UT：渲染/打包/清单生成"
+  ],
+  "aiPromptSuggestion": "实现技能包打包器：渲染→打包→上传→返回下载链接与校验。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-SK-003",
+  "module": "Skills",
+  "title": "Admin：Skills 管理页面与编辑器",
+  "phase": "Week 2",
+  "estimatedHours": 8,
+  "priority": "P0",
+  "dependencies": ["CMS-SK-001","CMS-SK-002"],
+  "description": "Next.js /admin/skills：创建/编辑/版本列表/一键打包下载，instructions.md 支持 Markdown 编辑器，prompts 采用 Monaco。",
+  "technicalRequirements": [
+    "Monaco/Markdown 编辑",
+    "版本对比（diff）"
+  ],
+  "acceptanceCriteria": [
+    "创建→编辑→打包全链路可用",
+    "版本对比清晰"
+  ],
+  "codeLocations": [
+    "frontend/app/admin/skills/page.tsx",
+    "frontend/components/skills/SkillEditor.tsx"
+  ],
+  "testStrategy": [
+    "RTL：表单交互"
+  ],
+  "aiPromptSuggestion": "实现 Skills 管理前端：元数据+说明+模板编辑，一键打包与下载。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-SK-004",
+  "module": "Skills",
+  "title": "可选：发布到 Claude（API/Console Connector）",
+  "phase": "Week 3",
+  "estimatedHours": 6,
+  "priority": "P1",
+  "dependencies": ["CMS-SK-002"],
+  "description": "实现一个可配置的发布连接器：若提供 Claude 的发布 API/Agent SDK 凭证，则可一键推送技能包；否则仅提供下载与手动导入说明。",
+  "technicalRequirements": [
+    "基于 Token 的鉴权",
+    "失败重试与错误提示"
+  ],
+  "acceptanceCriteria": [
+    "提供发布成功/失败反馈",
+    "无配置时隐藏该功能"
+  ],
+  "codeLocations": [
+    "backend/src/skills/publishers/anthropic.ts",
+    "frontend/app/admin/skills/publish.tsx"
+  ],
+  "testStrategy": [
+    "IT：假桩接口模拟"
+  ],
+  "aiPromptSuggestion": "实现一个可插拔发布连接器接口，先做 Anthropic 伪实现，UI 按配置显示。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-SK-005",
+  "module": "Skills",
+  "title": "官方样例技能：Operate‑CMS‑via‑MCP",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-MCP-005","CMS-SK-002"],
+  "description": "内置一个样例技能，指导 Claude 连接你的 MCP Server 并列出/试跑流程。",
+  "technicalRequirements": [
+    "README：含 .mcp.json 样例",
+    "prompts：常见操作语句模板"
+  ],
+  "acceptanceCriteria": [
+    "在 Claude Code/桌面端按文档可用",
+    "能完成列出/试跑"
+  ],
+  "codeLocations": [
+    "skills/examples/operate-cms"
+  ],
+  "testStrategy": [
+    "手测：跟随说明操作"
+  ],
+  "aiPromptSuggestion": "创建一个示例技能包：引导连接 MCP 并执行常见 CMS 操作。"
+}
+```
+
+```json
+{
+  "taskId": "CMS-SK-006",
+  "module": "Skills",
+  "title": "官方样例技能：RAG‑Writer（接入你的知识库）",
+  "phase": "Week 3",
+  "estimatedHours": 4,
+  "priority": "P1",
+  "dependencies": ["CMS-RAG-006","CMS-SK-002"],
+  "description": "内置一个 RAG 生成类技能：描述如何调用你的 kb_retrieve 工具，并按品牌模板输出。",
+  "technicalRequirements": [
+    "prompts：含风格/品牌约束",
+    "示例变量"
+  ],
+  "acceptanceCriteria": [
+    "使用示例文档可生成合格草稿",
+    "说明文档可复现"
+  ],
+  "codeLocations": [
+    "skills/examples/rag-writer"
+  ],
+  "testStrategy": [
+    "手测：按示例跑通"
+  ],
+  "aiPromptSuggestion": "创建一个示例技能：结合 kb_retrieve 生成品牌文案初稿。"
+}
+```
+
+---
+
+## H. 与原路线图的衔接
+
+* **MVP（两周）**：建议把 MCP / RAG / Skills 的 **P0 任务**排入 **Week 2 下半**（在你原“流程编辑器/Provider/Prompt/内容 CRUD”闭环跑通后插入）。
+
+  * 必做：`CMS-MCP-001/002/003/004`、`CMS-RAG-001/003/004/005/006/007/008`、`CMS-SK-001/002/003`
+  * 这样第 2 周末你就能在流程里**拿到 RAG 上下文**、在管理端**新建 MCP 连接并调用工具**、并**打包一个 Skills** 给 Claude 使用。
+* **Week 3**：做 P1（只读 MCP Server、Qdrant 适配、样例 Skills、评测与指标）。
+* **Week 4（可选缓冲）**：完善限流/审计、发布连接器、更多存储适配器与评测。
+
+---
+
+### 小结
+
+* \*\*能否加上？\*\*可以，而且和你“**自研 + 配置驱动 + 轻服务**”的方向天然契合：
+
+  * **MCP**：把外部工具/数据源统一为“可发现、可调用”的 **工具层**，流程里当成节点使用；同时你也输出一个**只读 MCP Server**给 Claude/IDE 用。([anthropic.com][1])
+  * **知识库（RAG）**：默认 **LanceDB** 无需新进程，4G 机器友好；量大再换 Qdrant/Redis/SQLite‑VSS，全部隐藏在 `VectorStore` 抽象之下。([npmjs.com][3])
+  * **Claude Skills**：在 CMS 中图形化管理/打包，搭配 MCP 与 RAG，形成“**技能 + 工具 + 配置**”的闭环，Claude 能按需加载并执行。([anthropic.com][2])
+
+如果你愿意，我可以把 **`mcp-client.ts`、`lancedb.ts`、`kb-retrieve.ts`、`skill packager`** 的基础骨架代码（TypeScript）以及 **Knex migration 样例**写成首批文件，便于你一键粘贴到对应 `codeLocations`，然后用 AI 继续自动补全。
+太好了！下面我把你要的**首批文件骨架**一次性给全：
+
+* `mcp-client.ts`（MCP 客户端封装）
+* `lancedb.ts`（向量库默认实现：LanceDB）
+* `kb-retrieve.ts`（Pipeline 步骤：知识库检索）
+* `packager.ts`（Skill 打包器）
+* **Knex Migrations**（`mcp_endpoints`、`kb_*`、`skills_*`、`config_snapshots`、`provider_endpoints` 增量字段）
+* 另外附：**VectorStore 接口与工厂**、**受限 Handlebars 渲染工具**等最小依赖骨架，保证粘贴后能被 AI 快速补全。
+
+> **使用方式**：直接把代码粘贴到对应路径（见每段代码上方“路径”），然后把这条消息整体丢给 Claude Code / Cursor（或逐文件丢），让它自动补全 `TODO` 部分并生成对应的单测与安装命令。
+> **说明**：骨架尽量用**强类型 + 注释 + TODO 标记**，方便 AI 理解你的意图并补齐实现。
+
+---
+
+## 0) 依赖与约定（一次性说明）
+
+**建议安装的依赖（先贴给 AI 让它帮你自动安装与校验）**：
+
+```bash
+# 后端通用
+pnpm add zod handlebars archiver fast-glob ioredis
+pnpm add -D @types/node @types/archiver @types/fast-glob @types/ioredis
+
+# MCP（官方 SDK；若包名有更新，让 AI 帮你确认）
+pnpm add @modelcontextprotocol/sdk
+
+# 向量库（默认 LanceDB；若你改用 Qdrant/Redis/SQLite-VSS，再让 AI 生成对应适配器）
+pnpm add @lancedb/lancedb            # 如安装名不符，请让 AI 修正导入
+# 也可：pnpm add qdrant-node         # 可选
+# 也可：pnpm add redis               # 可选，用于 Redis VSS（若可用）
+
+# Knex + MySQL
+pnpm add knex mysql2
+pnpm add -D @types/knex
+```
+
+**TypeScript 约定**：
+
+* 假设 `backend/tsconfig.json` 已启用 `"moduleResolution": "node"`, `"esModuleInterop": true`, `"module": "commonjs"`（或 ESM，任选其一，AI 会配合修正导入风格）。
+* 若后端目前是 JS 项目，也可以先用 `ts-node/register` 方式只对新模块启用 TS（让 AI 帮你把 `npm scripts` 补好）。
+
+---
+
+## 1) MCP 客户端骨架
+
+**路径**：`backend/src/mcp/mcp-client.ts`
+
+```ts
+/* eslint-disable no-console */
+import { z } from "zod";
+
+/**
+ * MCP（Model Context Protocol）客户端封装骨架
+ * 目标：
+ *  - 统一支持 http / ws / stdio 三种 transport（先实现 http/ws, stdio 留 TODO）
+ *  - 提供 listTools / callTool / health API
+ *  - 支持 Bearer/Header 鉴权、超时、白名单工具校验
+ *
+ * 依赖建议：@modelcontextprotocol/sdk
+ * 如 SDK API 变更，请让 AI 自动对接官方示例修正。
+ */
+
+export type Transport = "http" | "ws" | "stdio";
+
+export const McpAuthSchema = z
+  .object({
+    type: z.enum(["none", "bearer", "basic", "header"]).default("none"),
+    token: z.string().optional(),
+    headerName: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+  })
+  .default({ type: "none" });
+
+export const McpEndpointSchema = z.object({
+  id: z.number().optional(),
+  name: z.string(),
+  transport: z.custom<Transport>().default("http"),
+  base_url: z.string().url().optional(), // http/ws
+  command: z.string().optional(), // stdio command
+  arguments: z.any().optional(),
+  auth: McpAuthSchema,
+  allowed_tools: z.array(z.string()).default([]),
+  timeoutMs: z.number().int().positive().default(15000),
+});
+
+export type McpEndpoint = z.infer<typeof McpEndpointSchema>;
+
+export type ToolDescription = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown; // zod/json-schema
+};
+
+export interface McpClient {
+  listTools(): Promise<ToolDescription[]>;
+  callTool(
+    toolName: string,
+    args: Record<string, any>,
+    timeoutMs?: number
+  ): Promise<any>;
+  health(): Promise<{ ok: boolean; message?: string }>;
+  close(): Promise<void>;
+}
+
+/** 通用错误 */
+export class McpError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+/** 工具白名单过滤 */
+function assertAllowedTool(ep: McpEndpoint, toolName: string) {
+  if (ep.allowed_tools.length && !ep.allowed_tools.includes(toolName)) {
+    throw new McpError(
+      "MCP_TOOL_NOT_ALLOWED",
+      `Tool "${toolName}" not in allowed list`
+    );
+  }
+}
+
+/** 构造鉴权头 */
+function buildAuthHeaders(auth: McpEndpoint["auth"]): Record<string, string> {
+  if (!auth || auth.type === "none") return {};
+  if (auth.type === "bearer" && auth.token) {
+    return { Authorization: `Bearer ${auth.token}` };
+  }
+  if (auth.type === "basic" && auth.username && auth.password) {
+    const b64 = Buffer.from(`${auth.username}:${auth.password}`).toString(
+      "base64"
+    );
+    return { Authorization: `Basic ${b64}` };
+  }
+  if (auth.type === "header" && auth.headerName && auth.token) {
+    return { [auth.headerName]: auth.token };
+  }
+  return {};
+}
+
+/** 简单的 fetch 封装（你可替换为 node-fetch/undici） */
+async function httpJson<T>(
+  url: string,
+  method: "GET" | "POST",
+  body: any,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "content-type": "application/json", ...headers },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new McpError(
+        "MCP_HTTP_ERROR",
+        `HTTP ${res.status} ${res.statusText}: ${txt}`
+      );
+    }
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * HTTP 版 MCP 客户端
+ * 备注：真实 MCP 为双向 JSON-RPC，你可以：
+ *   1) 直接用官方 SDK 的 HTTP/WS 客户端；
+ *   2) 或后端暴露了 REST 风格“工具列出/调用”代理，这里就按 REST 走。
+ * 本骨架默认 REST 代理路径：
+ *   GET  {base_url}/tools
+ *   POST {base_url}/tools/{toolName}/call   body: { args }
+ * 让 AI 根据你的实际服务自动调整。
+ */
+class HttpMcpClient implements McpClient {
+  constructor(private ep: McpEndpoint) {}
+  async listTools() {
+    const tools = await httpJson<ToolDescription[]>(
+      `${this.ep.base_url}/tools`,
+      "GET",
+      undefined,
+      buildAuthHeaders(this.ep.auth),
+      this.ep.timeoutMs
+    );
+    return tools;
+  }
+  async callTool(toolName: string, args: Record<string, any>, timeout?: number) {
+    assertAllowedTool(this.ep, toolName);
+    const res = await httpJson<any>(
+      `${this.ep.base_url}/tools/${encodeURIComponent(toolName)}/call`,
+      "POST",
+      { args },
+      buildAuthHeaders(this.ep.auth),
+      timeout ?? this.ep.timeoutMs
+    );
+    return res;
+  }
+  async health() {
+    try {
+      await this.listTools();
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, message: String(e?.message || e) };
+    }
+  }
+  async close() {
+    // no-op for HTTP
+  }
+}
+
+/**
+ * WS / STDIO 客户端占位（TODO）
+ * 实际项目中建议直接用 @modelcontextprotocol/sdk 里的 Client，
+ * 让 AI 根据 SDK 示例把下面两个类替换为真实实现。
+ */
+class WsMcpClient implements McpClient {
+  constructor(private ep: McpEndpoint) {}
+  async listTools() {
+    throw new McpError("MCP_WS_TODO", "WS client TODO: integrate MCP SDK");
+  }
+  async callTool() {
+    throw new McpError("MCP_WS_TODO", "WS client TODO: integrate MCP SDK");
+  }
+  async health() {
+    return { ok: false, message: "WS client not implemented yet" };
+  }
+  async close() {}
+}
+
+class StdioMcpClient implements McpClient {
+  constructor(private ep: McpEndpoint) {}
+  async listTools() {
+    throw new McpError(
+      "MCP_STDIO_TODO",
+      "STDIO client TODO: integrate MCP SDK (spawn child process)"
+    );
+  }
+  async callTool() {
+    throw new McpError("MCP_STDIO_TODO", "STDIO client TODO");
+  }
+  async health() {
+    return { ok: false, message: "STDIO client not implemented yet" };
+  }
+  async close() {}
+}
+
+/** 工厂方法：根据 transport 返回对应客户端 */
+export async function createMcpClient(ep: McpEndpoint): Promise<McpClient> {
+  const cfg = McpEndpointSchema.parse(ep);
+  if (cfg.transport === "http") {
+    if (!cfg.base_url) throw new McpError("MCP_URL_REQUIRED", "base_url required");
+    return new HttpMcpClient(cfg);
+  }
+  if (cfg.transport === "ws") {
+    if (!cfg.base_url) throw new McpError("MCP_URL_REQUIRED", "base_url required");
+    return new WsMcpClient(cfg);
+  }
+  if (cfg.transport === "stdio") {
+    if (!cfg.command) {
+      throw new McpError("MCP_CMD_REQUIRED", "command required for stdio transport");
+    }
+    return new StdioMcpClient(cfg);
+  }
+  throw new McpError("MCP_TRANSPORT_UNSUPPORTED", `Unsupported: ${cfg.transport}`);
+}
+```
+
+---
+
+## 2) VectorStore 接口与 LanceDB 实现
+
+### 2.1 接口
+
+**路径**：`backend/src/rag/vectorstore/index.ts`
+
+```ts
+export type DistanceMetric = "cosine" | "l2";
+
+export interface VectorItem {
+  id: string;
+  text: string;
+  meta?: Record<string, any>;
+  vector: number[]; // 长度 = 集合 dim
+}
+
+export interface QueryHit {
+  id: string;
+  text: string;
+  score: number; // 相似度或距离（统一为 “越大越相似”，由适配器标准化）
+  meta?: Record<string, any>;
+}
+
+export interface VectorStore {
+  createCollection(
+    name: string,
+    dim: number,
+    metric?: DistanceMetric
+  ): Promise<void>;
+
+  upsert(collection: string, items: VectorItem[]): Promise<void>;
+
+  query(
+    collection: string,
+    vector: number[],
+    topK: number,
+    filter?: Record<string, any>
+  ): Promise<QueryHit[]>;
+
+  deleteByIds(collection: string, ids: string[]): Promise<void>;
+}
+```
+
+### 2.2 LanceDB 适配器骨架
+
+**路径**：`backend/src/rag/vectorstore/lancedb.ts`
+
+```ts
+/* eslint-disable no-console */
+import type { VectorStore, VectorItem, QueryHit, DistanceMetric } from "./index";
+import { promises as fs } from "fs";
+import path from "path";
+
+/**
+ * LanceDB 适配器骨架
+ * 依赖建议：@lancedb/lancedb
+ * TODO: 让 AI 根据官方 Node SDK 示例替换 TODO 部分（connect/open/create/query）
+ */
+
+// 占位导入（AI 会根据实际包名修正）
+let lancedb: any = null;
+async function lazyLoadLanceDB() {
+  if (lancedb) return lancedb;
+  try {
+    // 常见导入：import { connect } from "@lancedb/lancedb";
+    // 为兼容性，采用动态导入并把 connect 暴露给后续调用。
+    // @ts-ignore
+    lancedb = await import("@lancedb/lancedb");
+    return lancedb;
+  } catch (e) {
+    throw new Error(
+      "LanceDB SDK not installed. Run `pnpm add @lancedb/lancedb` or adjust import."
+    );
+  }
+}
+
+export class LanceDbStore implements VectorStore {
+  private baseDir: string;
+
+  constructor(options?: { dir?: string }) {
+    this.baseDir = options?.dir ?? path.resolve(process.cwd(), "data/lancedb");
+  }
+
+  private async ensureDir() {
+    await fs.mkdir(this.baseDir, { recursive: true });
+  }
+
+  private async getDb() {
+    await this.ensureDir();
+    const { connect } = await lazyLoadLanceDB();
+    // 常见：const db = await connect(this.baseDir);
+    // TODO: 如果 API 不同，让 AI 自动修正
+    const db = await connect(this.baseDir);
+    return db;
+  }
+
+  async createCollection(name: string, dim: number, metric: DistanceMetric = "cosine") {
+    const db = await this.getDb();
+    // TODO: 创建表/集合并声明 schema（id/text/meta/vector）
+    // 伪代码：
+    // await db.createTable(name, {
+    //   schema: {
+    //     id: "string",
+    //     text: "string",
+    //     meta: "object",
+    //     vector: { type: "vector", dim, metric }
+    //   }
+    // });
+  }
+
+  async upsert(collection: string, items: VectorItem[]) {
+    const db = await this.getDb();
+    // TODO: 打开集合并执行 upsert/batchInsert
+    // 伪代码：
+    // const tbl = await db.openTable(collection);
+    // await tbl.upsert(items);
+  }
+
+  async query(
+    collection: string,
+    vector: number[],
+    topK: number,
+    filter?: Record<string, any>
+  ): Promise<QueryHit[]> {
+    const db = await this.getDb();
+    // TODO: 打开集合并执行向量查询；将返回结果标准化为 QueryHit[]
+    // 伪代码：
+    // const tbl = await db.openTable(collection);
+    // const res = await tbl.search(vector, { topK, filter });
+    // LanceDB 可能返回 { items: [{ id, text, meta, score/distance }] }
+    const rows: any[] = []; // TODO: 替换为真实查询结果
+    return rows.map((r) => ({
+      id: String(r.id),
+      text: String(r.text ?? ""),
+      score: Number(r.score ?? 0), // 若为距离，转换为相似度：score = 1/(1+distance) 或 1 - norm(distance)
+      meta: r.meta ?? {},
+    }));
+  }
+
+  async deleteByIds(collection: string, ids: string[]) {
+    const db = await this.getDb();
+    // TODO: 打开集合并按 id 删除
+    // 伪代码：
+    // const tbl = await db.openTable(collection);
+    // await tbl.deleteWhere({ id: { $in: ids } });
+  }
+}
+```
+
+> 若你准备并行支持 Qdrant/Redis/SQLite‑VSS，复制这个适配器骨架改名为 `qdrant.ts` / `redis.ts` / `sqlitevss.ts`，把 TODO 区块交给 AI 对接各自 SDK。
+
+---
+
+## 3) Pipeline 步骤：知识库检索
+
+**路径**：`backend/src/pipeline/steps/kb-retrieve.ts`
+
+```ts
+import { z } from "zod";
+import type { VectorStore } from "../../rag/vectorstore";
+import type { ExecResult } from "../../providers/types"; // 若尚未有，可把下面 ExecResult 临时拷贝过去
+import crypto from "crypto";
+
+/** 备用类型（若你还没 providers/types.ts） */
+// export type ExecResult = { ok: boolean; result?: any; error?: { code: string; message: string; details?: any } };
+
+export const KbRetrieveStepSchema = z.object({
+  id: z.string(),
+  type: z.literal("KB_RETRIEVE"),
+  label: z.string().optional(),
+  collection: z.string(),
+  query: z.string(),           // 可是模板占位后的最终查询文本
+  topK: z.number().int().positive().default(5),
+  filter: z.record(z.any()).optional(),
+  cacheTtlSec: z.number().int().nonnegative().default(300),
+});
+
+export type KbRetrieveStep = z.infer<typeof KbRetrieveStepSchema>;
+
+export interface PipelineContext {
+  logger: { debug: (...a: any[]) => void; info: (...a: any[]) => void; warn: (...a: any[]) => void; error: (...a: any[]) => void };
+  kv: { get: (k: string) => Promise<string | null>; set: (k: string, v: string, ttlSec?: number) => Promise<void> };
+  vectorStore: VectorStore;
+  embedder: { embed: (texts: string[]) => Promise<number[][]>; dim: number };
+}
+
+/** 统一的 key 生成，避免 query 较长 */
+function cacheKey(collection: string, query: string, topK: number, filter?: Record<string, any>) {
+  const h = crypto.createHash("sha1").update(JSON.stringify({ collection, query, topK, filter })).digest("hex");
+  return `kb:retr:${h}`;
+}
+
+/** 执行 KB 检索：返回 contexts 数组供后续 RAG_COMPOSE_PROMPT 节点使用 */
+export async function execKbRetrieve(step: KbRetrieveStep, ctx: PipelineContext): Promise<ExecResult> {
+  const cfg = KbRetrieveStepSchema.parse(step);
+  const key = cacheKey(cfg.collection, cfg.query, cfg.topK, cfg.filter);
+
+  // 1) 先查缓存
+  try {
+    const cached = await ctx.kv.get(key);
+    if (cached) {
+      ctx.logger.debug("[KB] hit cache", { key });
+      return { ok: true, result: JSON.parse(cached) };
+    }
+  } catch (e) {
+    ctx.logger.warn("[KB] cache read failed", e);
+  }
+
+  // 2) 生成查询向量
+  let vector: number[];
+  try {
+    const [v] = await ctx.embedder.embed([cfg.query]);
+    vector = v;
+    if (!Array.isArray(vector)) throw new Error("embedding failed");
+    if (ctx.embedder.dim && vector.length !== ctx.embedder.dim) {
+      ctx.logger.warn("[KB] embedding dim mismatch", { have: vector.length, want: ctx.embedder.dim });
+    }
+  } catch (e: any) {
+    return { ok: false, error: { code: "KB_EMBED_ERROR", message: String(e?.message || e) } };
+  }
+
+  // 3) 查询向量库
+  try {
+    const hits = await ctx.vectorStore.query(cfg.collection, vector, cfg.topK, cfg.filter);
+    const result = {
+      contexts: hits.map((h) => ({ text: h.text, score: h.score, meta: h.meta })),
+      query: cfg.query,
+      topK: cfg.topK,
+    };
+    // 4) 写缓存
+    try {
+      await ctx.kv.set(key, JSON.stringify(result), cfg.cacheTtlSec);
+    } catch (e) {
+      ctx.logger.warn("[KB] cache write failed", e);
+    }
+    return { ok: true, result };
+  } catch (e: any) {
+    return { ok: false, error: { code: "KB_QUERY_ERROR", message: String(e?.message || e) } };
+  }
+}
+```
+
+> 你可以在 Pipeline 引擎里把 `materialize('{{...}}')` 之后的字符串传给 `query`，或把模板展开逻辑交给上游节点。
+
+---
+
+## 4) Skill 打包器骨架（Claude Skills）
+
+**路径**：`backend/src/skills/packager.ts`
+
+```ts
+/* eslint-disable no-console */
+import fs from "fs";
+import fsp from "fs/promises";
+import path from "path";
+import os from "os";
+import crypto from "crypto";
+import archiver from "archiver";
+import Handlebars from "handlebars";
+
+export type SkillManifest = {
+  name: string;
+  slug: string;
+  version: number;
+  description?: string;
+  scopes?: string[];
+  // 可选：要求的 MCP 工具/连接信息，写入 README
+  requires?: { mcp?: { tools?: string[]; endpoint?: string } };
+};
+
+export type SkillPackRequest = {
+  manifest: SkillManifest;
+  files: {
+    // 逻辑：将内容写入相对路径（prompts/*.hbs、instructions.md、assets/**）
+    relativePath: string;
+    content: string; // 若是二进制，可扩展为 Buffer | string
+    template?: boolean; // 是否进行 Handlebars 渲染
+  }[];
+  // 渲染变量：来自 system_configs / feature_definitions / 自定义
+  variables?: Record<string, any>;
+  // 打包后上传：自定义存储（COS/本地）
+  store?: {
+    asyncUpload?: (filePath: string, targetKey: string) => Promise<{ url: string }>;
+    targetPrefix?: string; // 例如 cos 路径前缀
+  };
+};
+
+export type SkillPackResult = {
+  archivePath: string;
+  sha256: string;
+  size: number;
+  uploaded?: { url: string };
+};
+
+function sha256File(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const s = fs.createReadStream(filePath);
+    s.on("error", reject);
+    s.on("data", (d) => hash.update(d));
+    s.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+/** 将文件数组写入临时目录；template=true 的内容用 Handlebars 渲染 */
+async function writeFilesToTempDir(
+  baseDir: string,
+  files: SkillPackRequest["files"],
+  vars?: Record<string, any>
+) {
+  await fsp.mkdir(baseDir, { recursive: true });
+  for (const f of files) {
+    const abs = path.join(baseDir, f.relativePath);
+    await fsp.mkdir(path.dirname(abs), { recursive: true });
+    let content = f.content;
+    if (f.template) {
+      const tpl = Handlebars.compile(f.content, { noEscape: true });
+      content = tpl(vars ?? {});
+    }
+    await fsp.writeFile(abs, content);
+  }
+}
+
+/** 把临时目录打包成 zip，返回文件路径与大小 */
+async function zipDir(srcDir: string, outFile: string): Promise<number> {
+  await fsp.mkdir(path.dirname(outFile), { recursive: true });
+  const output = fs.createWriteStream(outFile);
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  return new Promise((resolve, reject) => {
+    output.on("close", () => resolve(archive.pointer()));
+    archive.on("error", reject);
+    archive.pipe(output);
+    archive.directory(srcDir, false);
+    archive.finalize().catch(reject);
+  });
+}
+
+/** 主流程：生成 skill.json / 写入文件 / 打包 /（可选）上传 */
+export async function packageSkill(req: SkillPackRequest): Promise<SkillPackResult> {
+  const tmpBase = await fsp.mkdtemp(path.join(os.tmpdir(), `skill-${req.manifest.slug}-`));
+  const workDir = path.join(tmpBase, `${req.manifest.slug}-v${req.manifest.version}`);
+  const distDir = path.join(tmpBase, "dist");
+  const outZip = path.join(distDir, `${req.manifest.slug}-v${req.manifest.version}.zip`);
+
+  // 1) 写入 manifest 与 README 基础
+  const allFiles = [
+    ...req.files,
+    {
+      relativePath: "skill.json",
+      content: JSON.stringify(req.manifest, null, 2),
+      template: false,
+    },
+    {
+      relativePath: "README.md",
+      template: true,
+      content:
+        `# ${req.manifest.name}\n\n` +
+        `Version: ${req.manifest.version}\n\n` +
+        `{{#if description}}{{description}}\n\n{{/if}}` +
+        `{{#if requires.mcp.endpoint}}` +
+        `> MCP Endpoint: {{requires.mcp.endpoint}}\n{{/if}}` +
+        `{{#if requires.mcp.tools}}` +
+        `> Required Tools: {{#each requires.mcp.tools}}\`{{this}}\` {{/each}}\n{{/if}}`,
+    },
+  ];
+
+  await writeFilesToTempDir(workDir, allFiles, {
+    ...(req.variables ?? {}),
+    description: req.manifest.description,
+    requires: req.manifest.requires ?? {},
+  });
+
+  // 2) 打包
+  const size = await zipDir(workDir, outZip);
+  const sha256 = await sha256File(outZip);
+
+  // 3) 可选上传（COS 等）
+  let uploaded: SkillPackResult["uploaded"];
+  if (req.store?.asyncUpload) {
+    const targetKey = `${req.store.targetPrefix ?? ""}${path.basename(outZip)}`;
+    uploaded = await req.store.asyncUpload(outZip, targetKey);
+  }
+
+  return {
+    archivePath: outZip,
+    sha256,
+    size,
+    uploaded,
+  };
+}
+
+/** 使用示例（你可以删掉或改成单元测试）
+async function demo() {
+  const res = await packageSkill({
+    manifest: { name: "Operate CMS via MCP", slug: "operate-cms", version: 1 },
+    files: [
+      { relativePath: "prompts/do-something.hbs", content: "Use tool {{tool}}", template: true },
+      { relativePath: "instructions.md", content: "Follow the steps...", template: false },
+    ],
+    variables: { tool: "list_features" },
+  });
+  console.log(res);
+}
+*/
+```
+
+---
+
+## 5) Knex Migration 样例（TypeScript）
+
+> 文件名请按 Knex 习惯加时间戳前缀（例：`20251101xxxx_*.ts`）。下面是**骨架**，交给 AI 它会自动填补索引/回滚/类型。
+
+### 5.1 `config_snapshots`
+
+**路径**：`backend/migrations/202511010001_create_config_snapshots.ts`
+
+```ts
+import type { Knex } from "knex";
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable("config_snapshots", (t) => {
+    t.bigIncrements("id").primary();
+    t.enum("scope", ["feature", "form", "pipeline", "provider", "system", "mcp", "kb", "skill"]).notNullable();
+    t.bigInteger("ref_id").nullable();
+    t.string("key_name", 255).nullable();
+    t.integer("version").notNullable();
+    t.longtext("json").notNullable();
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+    t.string("created_by", 64).nullable();
+
+    t.index(["scope", "ref_id", "version"], "idx_cfgsnap_ref");
+    t.index(["scope", "key_name", "version"], "idx_cfgsnap_key");
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists("config_snapshots");
+}
+```
+
+### 5.2 `mcp_endpoints`
+
+**路径**：`backend/migrations/202511010002_create_mcp_endpoints.ts`
+
+```ts
+import type { Knex } from "knex";
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable("mcp_endpoints", (t) => {
+    t.increments("id").primary();
+    t.string("name", 100).notNullable();
+    t.enum("transport", ["http", "ws", "stdio"]).defaultTo("http");
+    t.string("base_url", 500).nullable();
+    t.string("command", 255).nullable();
+    t.json("arguments").nullable();
+    t.json("auth").nullable();
+    t.json("allowed_tools").nullable();
+    t.enum("status", ["enabled", "disabled"]).defaultTo("enabled");
+    t.datetime("last_health_at").nullable();
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+  });
+
+  await knex.schema.alterTable("mcp_endpoints", (t) => {
+    t.index(["status"], "idx_mcp_status");
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists("mcp_endpoints");
+}
+```
+
+### 5.3 知识库表：`kb_collections / kb_sources / kb_docs / kb_chunks`
+
+**路径**：`backend/migrations/202511010003_create_kb_tables.ts`
+
+```ts
+import type { Knex } from "knex";
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable("kb_collections", (t) => {
+    t.increments("id").primary();
+    t.string("name", 100).notNullable().unique();
+    t.integer("dim").notNullable();
+    t.enu("metric", ["cosine", "l2"]).defaultTo("cosine");
+    t.enu("status", ["active", "inactive"]).defaultTo("active");
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+  });
+
+  await knex.schema.createTable("kb_sources", (t) => {
+    t.increments("id").primary();
+    t.integer("collection_id").notNullable().references("id").inTable("kb_collections");
+    t.enu("type", ["file", "cos_bucket", "web", "manual"]).notNullable();
+    t.string("locator", 500).nullable();
+    t.enu("parser", ["auto", "markdown", "html", "pdf", "txt"]).defaultTo("auto");
+    t.integer("chunk_size").defaultTo(800);
+    t.integer("chunk_overlap").defaultTo(150);
+    t.enu("status", ["ready", "indexing", "error"]).defaultTo("ready");
+    t.datetime("last_indexed_at").nullable();
+  });
+
+  await knex.schema.createTable("kb_docs", (t) => {
+    t.bigIncrements("id").primary();
+    t.integer("source_id").notNullable().references("id").inTable("kb_sources");
+    t.string("doc_key", 255).notNullable();
+    t.string("title", 255).nullable();
+    t.string("lang", 16).nullable();
+    t.json("meta").nullable();
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+    t.unique(["source_id", "doc_key"], { indexName: "uniq_kbdoc" });
+  });
+
+  await knex.schema.createTable("kb_chunks", (t) => {
+    t.bigIncrements("id").primary();
+    t.bigInteger("doc_id").notNullable().references("id").inTable("kb_docs").onDelete("CASCADE");
+    t.integer("chunk_index").notNullable();
+    t.mediumtext("text").notNullable();
+    t.json("meta").nullable();
+    t.enu("embedding_status", ["none", "queued", "done", "error"]).defaultTo("none");
+    t.text("embedding_error").nullable();
+    t.index(["doc_id"], "idx_kbchunk_doc");
+    t.index(["embedding_status"], "idx_kbchunk_embed");
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists("kb_chunks");
+  await knex.schema.dropTableIfExists("kb_docs");
+  await knex.schema.dropTableIfExists("kb_sources");
+  await knex.schema.dropTableIfExists("kb_collections");
+}
+```
+
+### 5.4 Skills：`skills / skill_versions`
+
+**路径**：`backend/migrations/202511010004_create_skills_tables.ts`
+
+```ts
+import type { Knex } from "knex";
+
+export async function up(knex: Knex): Promise<void> {
+  await knex.schema.createTable("skills", (t) => {
+    t.increments("id").primary();
+    t.string("name", 100).notNullable();
+    t.string("slug", 100).notNullable().unique();
+    t.text("description").nullable();
+    t.enu("status", ["draft", "published"]).defaultTo("draft");
+    t.integer("current_version").defaultTo(1);
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+  });
+
+  await knex.schema.createTable("skill_versions", (t) => {
+    t.increments("id").primary();
+    t.integer("skill_id").notNullable().references("id").inTable("skills").onDelete("CASCADE");
+    t.integer("version").notNullable();
+    t.json("manifest").nullable();      // skill.json
+    t.longtext("files").nullable();     // 文件清单（JSON 字符串）
+    t.string("archive_url", 500).nullable();
+    t.timestamp("created_at").defaultTo(knex.fn.now());
+    t.unique(["skill_id", "version"], { indexName: "uniq_skill_ver" });
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  await knex.schema.dropTableIfExists("skill_versions");
+  await knex.schema.dropTableIfExists("skills");
+}
+```
+
+### 5.5 `provider_endpoints` 增量字段（若未加）
+
+**路径**：`backend/migrations/202511010005_alter_provider_endpoints.ts`
+
+```ts
+import type { Knex } from "knex";
+
+export async function up(knex: Knex): Promise<void> {
+  const has = await knex.schema.hasColumn("provider_endpoints", "provider_key");
+  await knex.schema.alterTable("provider_endpoints", (t) => {
+    if (!has) {
+      t.string("provider_key", 64).notNullable().defaultTo("GENERIC_HTTP");
+      t.string("handler_version", 32).defaultTo("1");
+      t.json("auth").nullable();
+      t.json("req_template").nullable();
+      t.integer("timeout_ms").defaultTo(20000);
+      t.json("retry_policy").defaultTo(JSON.stringify({ max: 1 }));
+      t.enu("status", ["enabled", "disabled"]).defaultTo("enabled");
+      t.datetime("last_health_at").nullable();
+      t.boolean("deleted").defaultTo(false);
+    }
+  });
+  // 可加索引
+  await knex.schema.alterTable("provider_endpoints", (t) => {
+    t.index(["provider_key", "status"], "idx_provider_key_status");
+  });
+}
+
+export async function down(knex: Knex): Promise<void> {
+  // 温和回滚：仅移除索引；字段保留以避免线上数据丢失
+  await knex.schema.alterTable("provider_endpoints", (t) => {
+    t.dropIndex(["provider_key", "status"], "idx_provider_key_status");
+  });
+}
+```
+
+---
+
+## 6) （可选）RAG 模板拼装与受限 Handlebars 渲染骨架
+
+**路径**：`backend/src/pipeline/steps/rag-compose.ts`
+
+```ts
+import Handlebars from "handlebars";
+import { z } from "zod";
+
+export const RagComposeStepSchema = z.object({
+  id: z.string(),
+  type: z.literal("RAG_COMPOSE_PROMPT"),
+  label: z.string().optional(),
+  template: z.string(), // Handlebars 模板
+  inputVar: z.string().default("contexts"), // 上游变量名
+  outputVar: z.string().default("finalPrompt"),
+  maxTokens: z.number().int().positive().default(4096),
+});
+
+export type RagComposeStep = z.infer<typeof RagComposeStepSchema>;
+
+/** 受限 helpers（按需补充） */
+Handlebars.registerHelper("json", (v) => JSON.stringify(v));
+Handlebars.registerHelper("join", (arr: any[], sep: string) => (arr ?? []).join(sep ?? ""));
+
+export function renderTemplateSafe(tpl: string, vars: Record<string, any>): string {
+  const compiled = Handlebars.compile(tpl, { noEscape: true });
+  return compiled(vars);
+}
+```
+
+---
+
+## 7) （可选）VectorStore 工厂骨架
+
+**路径**：`backend/src/rag/vectorstore/factory.ts`
+
+```ts
+import { LanceDbStore } from "./lancedb";
+import type { VectorStore } from "./index";
+
+export function getVectorStore(): VectorStore {
+  // 未来可从 system_configs 读取： rag.store = "lancedb" | "qdrant" | "redis" | "sqlitevss"
+  // 现在先返回 LanceDB
+  return new LanceDbStore({ dir: process.env.LANCEDB_DIR });
+}
+```
+
+---
+
+## 8) 再“AI 化”一点：可选增强点（骨架）
+
+> 你提到“**能不能集成更多，毕竟 AI 时代很多可以 AI 化**”。下面给 2 个即插即用的小骨架，方便你把“设计/配置”也交给 LLM 做半自动化。
+
+### 8.1 AI 协同：表单/流程“自然语言 → 草案”
+
+**路径**：`backend/src/assistants/design-copilot.ts`
+
+```ts
+/**
+ * 设计助手：把自然语言需求转为 UFS 表单草案 / Pipeline v1 草案
+ * 依赖：你现有 Provider 的文本生成接口（或任意 LLM API）
+ * 用法：在 /admin/features/new 里加一个“AI 生成草案”按钮调用。
+ */
+export interface DraftRequest {
+  type: "ufs" | "pipeline";
+  instruction: string;
+  examples?: any[];
+}
+
+export interface DraftResult {
+  ok: boolean;
+  draft?: any; // UFS 或 Pipeline JSON
+  warnings?: string[];
+  rawModelText?: string;
+}
+
+export async function generateDraft(req: DraftRequest): Promise<DraftResult> {
+  // TODO: 调用你的 LLM Provider 生成草案，再用 Zod 校验/规范化
+  // 步骤建议：
+  // 1) 提示词：给出 UFS/Pipeline 的严格 JSON 模板和字段说明
+  // 2) 让模型只输出 JSON（加 <json> 包装），再 parse
+  // 3) Zod 校验失败则返回 warnings + rawModelText
+  return { ok: false, warnings: ["TODO: implement LLM draft generation"] };
+}
+```
+
+### 8.2 AI 校对：Prompt 质量与风险检查
+
+**路径**：`backend/src/assistants/prompt-linter.ts`
+
+```ts
+/**
+ * Prompt Linter：检查模板是否存在注入风险、变量缺失、过长、歧义等，并给出自动修复建议。
+ * 可在 /admin/prompts/save 前调用。
+ */
+export type LintIssue = { code: string; message: string; fix?: string };
+export function lintPrompt(hbs: string): LintIssue[] {
+  const issues: LintIssue[] = [];
+  if (hbs.includes("{{{")) {
+    issues.push({
+      code: "UNESCAPED_TRIPLE_BRACES",
+      message: "Found {{{ }}} (unescaped). Prefer {{ }} or whitelist helpers.",
+      fix: "Replace {{{var}}} with {{var}} or use a safe helper.",
+    });
+  }
+  if (hbs.length > 4000) {
+    issues.push({ code: "PROMPT_TOO_LONG", message: "Prompt exceeds 4000 chars. Consider trimming." });
+  }
+  // TODO: 扫描未定义变量/嵌套复杂逻辑/潜在循环
+  return issues;
+}
+```
+
+---
+
+# 下一步建议（交给 AI 的话术）
+
+1. **让 AI 安装依赖并检查导入**
+
+   * *“请读取以上文件，安装缺失依赖（@modelcontextprotocol/sdk、@lancedb/lancedb、knex、mysql2、archiver、zod、handlebars 等），并修正 ESM/CJS 导入风格，使项目能编译。”*
+
+2. **补全 LanceDB 与 MCP SDK 的 TODO**
+
+   * *“对照 LanceDB 官方 Node SDK，把 `lancedb.ts` 的 create/open/query 调用补齐，并写 UT（插入/TopK 查询）；对照 MCP SDK，把 `mcp-client.ts` 的 WS/STDIO 客户端改为真实实现。”*
+
+3. **接线 Pipeline 引擎**
+
+   * *“为 `kb-retrieve.ts` 写集成测试：构造伪 embedder + LanceDB 假数据，验证 contexts 返回与缓存命中。”*
+
+4. **新增 Knex Migration**
+
+   * *“创建以上 5 个 migration 文件并执行迁移；为 MySQL 设置合理的 row format 与索引长度。”*
+
+5. **Skill 打包器联通 COS**
+
+   * *“在 `packager.ts` 里实现 COS 上传函数（使用你项目现有 COS SDK 工具），并加一个 `/admin/skills/build` 路由调用打包器。”*
+
+---
+
+以上就是可直接落地的**首批文件骨架**。
+你把这条消息整体贴给 Claude Code / Cursor，让它**一键补齐 TODO、写单测、生成安装命令与 CI 步骤**；再回到我们这边继续把 **MCP 工具节点** 和 **RAG 组合节点** 接入到 **Feature 向导 Step 3/4**，两周内就能把“**AI 化（MCP+RAG+Skills）**”的闭环跑通。

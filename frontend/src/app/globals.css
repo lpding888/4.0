@@ -3,71 +3,58 @@
 @tailwind utilities;
 
 /* ============================================
-   高奢时装AI控制台 - 全局视觉系统
+   极简白色视觉系统 - 参考美图设计室
+   艹！纯白背景 + 轻微阴影 + 充足留白
    ============================================ */
 
 :root {
-  /* 青蓝玻璃拟态主题 (默认) */
-  --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #064e3b 100%);
-  --glass-bg: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --accent-cyan: #06b6d4;
-  --accent-teal: #14b8a6;
-  --accent-rose: #f43f5e;
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.6);
+  /* 极简白色配色 */
+  --bg-primary: #FFFFFF;          /* 主背景：纯白 */
+  --bg-secondary: #F9FAFB;        /* 次背景：极浅灰 */
+  --bg-card: #FFFFFF;             /* 卡片背景：纯白 */
 
-  /* 赛博朋克霓虹主题 (备用) */
-  --cyber-primary: linear-gradient(135deg, #1a0033 0%, #330066 50%, #4d0099 100%);
-  --cyber-glass: rgba(255, 0, 128, 0.1);
-  --cyber-border: rgba(0, 255, 255, 0.3);
-  --cyber-pink: #ff0080;
-  --cyber-cyan: #00ffff;
-  --cyber-purple: #9933ff;
-  --cyber-yellow: #ffff00;
+  /* 品牌色系 - 低饱和度棕色 */
+  --brand-primary: #92400E;       /* 主品牌色：深棕色 */
+  --brand-secondary: #B45309;     /* 次品牌色：中棕色 */
+  --brand-tertiary: #D97706;      /* 强调色：琥珀色 */
+  --brand-light: #FEF3C7;         /* 浅品牌色：淡黄 */
 
-  /* 极光流体主题 (备用) */
-  --aurora-primary: linear-gradient(135deg, #0d1117 0%, #1a2f1a 50%, #2d1b69 100%);
-  --aurora-glass: rgba(46, 213, 115, 0.08);
-  --aurora-border: rgba(0, 206, 209, 0.25);
-  --aurora-green: #2ed573;
-  --aurora-teal: #00ced1;
-  --aurora-purple: #8e44ad;
-  --aurora-gold: #f39c12;
+  /* 功能色系 */
+  --success: #10B981;             /* 成功：翠绿 */
+  --warning: #F59E0B;             /* 警告：琥珀 */
+  --error: #EF4444;               /* 错误：红色 */
+  --info: #3B82F6;                /* 信息：蓝色 */
+
+  /* 文字色系 - Tailwind Gray */
+  --text-primary: #1F2937;        /* 主文字：深灰 */
+  --text-secondary: #6B7280;      /* 次文字：中灰 */
+  --text-tertiary: #9CA3AF;       /* 三级文字：浅灰 */
+  --text-inverse: #FFFFFF;        /* 反色文字：白色 */
+
+  /* 边框色系 */
+  --border-primary: #E5E7EB;      /* 主边框 */
+  --border-secondary: #D1D5DB;    /* 次边框 */
+
+  /* 阴影 - 更轻柔 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
-/* 默认使用青蓝玻璃主题 */
+/* ============================================
+   全局基础样式
+   ============================================ */
 body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'HarmonyOS Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  /* 高奢时装深色渐变舞台背景 */
-  background: var(--primary-gradient);
-  background-attachment: fixed;
-  color: var(--text-primary);
-}
-
-/* 添加青蓝光斑效果（可选，轻微舞台效果） */
-body::before {
-  content: '';
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(
-    circle at 30% 50%,
-    rgba(6, 182, 212, 0.1) 0%,
-    transparent 50%
-  );
-  pointer-events: none;
-  z-index: -1;
+  font-feature-settings: 'kern' 1;
 }
 
 * {
@@ -75,205 +62,344 @@ body::before {
 }
 
 /* ============================================
-   玻璃拟态卡片组件
+   极简卡片组件
    ============================================ */
-.glass-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+.pro-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
 }
 
-.glass-card:hover {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
-  transition: all 0.3s ease;
+.pro-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.pro-card-body {
+  padding: 24px;
+}
+
+.pro-card-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text-primary);
 }
 
 /* ============================================
-   按钮系统 - 霓虹细描边
+   按钮系统 - 圆角更大
    ============================================ */
-.btn-neon-primary {
-  background: transparent;
-  border: 1px solid var(--accent-cyan);
-  color: var(--accent-cyan);
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 400;
+.btn-primary {
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  border: none;
+  padding: 12px 32px;
+  border-radius: 24px;
+  font-weight: 500;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
-.btn-neon-primary:hover {
-  background: rgba(6, 182, 212, 0.1);
-  border-color: var(--accent-teal);
-  color: var(--accent-teal);
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+.btn-primary:hover {
+  background: var(--brand-secondary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
-.btn-neon-secondary {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.6);
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 400;
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--brand-primary);
+  border: 1.5px solid var(--border-primary);
+  padding: 12px 32px;
+  border-radius: 24px;
+  font-weight: 500;
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
-.btn-neon-secondary:hover {
-  border-color: rgba(255, 255, 255, 0.4);
-  color: rgba(255, 255, 255, 0.9);
+.btn-secondary:hover {
+  border-color: var(--brand-primary);
+  background: var(--bg-secondary);
 }
 
 /* ============================================
-   状态标签系统 - 胶囊形状
+   状态标签系统
    ============================================ */
-.status-pill {
+.status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.875rem;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
   font-weight: 500;
-  border-width: 1px;
 }
 
-/* Processing状态 - 青蓝霓虹描边 */
 .status-processing {
-  background: rgba(20, 184, 166, 0.2);
-  border-color: rgba(20, 184, 166, 0.5);
-  color: var(--accent-teal);
+  background: #ECFDF5;
+  color: #10B981;
 }
 
-/* Done状态 - 青色描边 */
 .status-done {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: rgba(6, 182, 212, 0.5);
-  color: var(--accent-cyan);
+  background: #DBEAFE;
+  color: #3B82F6;
 }
 
-/* Failed状态 - 玫红描边 */
 .status-failed {
-  background: rgba(244, 63, 94, 0.2);
-  border-color: rgba(244, 63, 94, 0.5);
-  color: var(--accent-rose);
+  background: #FEE2E2;
+  color: #EF4444;
 }
 
-/* Pending状态 - 灰色描边 */
 .status-pending {
-  background: rgba(148, 163, 184, 0.2);
-  border-color: rgba(148, 163, 184, 0.5);
-  color: rgba(255, 255, 255, 0.6);
+  background: #F3F4F6;
+  color: #6B7280;
 }
 
 /* ============================================
    文字层级系统
    ============================================ */
 .text-hero {
-  font-size: 3rem;
-  font-weight: 300;
+  font-size: 56px;
+  font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
 }
 
-.text-title {
-  font-size: 2rem;
-  font-weight: 300;
+.text-title-1 {
+  font-size: 36px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+}
+
+.text-title-2 {
+  font-size: 24px;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1.3;
 }
 
-.text-subtitle {
-  font-size: 1.25rem;
+.text-title-3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.text-body-lg {
+  font-size: 16px;
   font-weight: 400;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  line-height: 1.6;
 }
 
 .text-body {
-  font-size: 1rem;
+  font-size: 14px;
+  font-weight: 400;
   color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.text-body-sm {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .text-caption {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  line-height: 1.5;
 }
 
-/* 强调文字 - 青蓝色 */
 .text-accent {
-  color: var(--accent-cyan);
-}
-
-.text-accent-teal {
-  color: var(--accent-teal);
+  color: var(--brand-primary);
+  font-weight: 500;
 }
 
 /* ============================================
-   呼吸动画 (用于processing状态)
+   输入框系统
    ============================================ */
-@keyframes pulse-glow {
+.input-base {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--border-primary);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  transition: all 0.2s ease;
+}
+
+.input-base:hover {
+  border-color: var(--border-secondary);
+}
+
+.input-base:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(146, 64, 14, 0.08);
+}
+
+.input-base::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ============================================
+   加载动画
+   ============================================ */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes pulse {
   0%, 100% {
     opacity: 1;
-    box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
   }
   50% {
-    opacity: 0.6;
-    box-shadow: 0 0 20px rgba(6, 182, 212, 0.8);
+    opacity: 0.5;
   }
 }
 
 .pulse-indicator {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 /* ============================================
-   主题切换支持 (通过data-theme属性)
+   工具类
    ============================================ */
-[data-theme="glass"] {
-  --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #064e3b 100%);
-  --glass-bg: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --accent-primary: var(--accent-cyan);
-  --accent-secondary: var(--accent-teal);
-  --accent-error: var(--accent-rose);
-}
+.spacing-xs { gap: 8px; }
+.spacing-sm { gap: 12px; }
+.spacing-md { gap: 16px; }
+.spacing-lg { gap: 24px; }
+.spacing-xl { gap: 32px; }
 
-[data-theme="cyber"] {
-  --primary-gradient: var(--cyber-primary);
-  --glass-bg: var(--cyber-glass);
-  --glass-border: var(--cyber-border);
-  --accent-primary: var(--cyber-cyan);
-  --accent-secondary: var(--cyber-pink);
-  --accent-error: var(--cyber-yellow);
-}
+.rounded-sm { border-radius: 6px; }
+.rounded { border-radius: 8px; }
+.rounded-md { border-radius: 12px; }
+.rounded-lg { border-radius: 16px; }
+.rounded-full { border-radius: 9999px; }
 
-[data-theme="aurora"] {
-  --primary-gradient: var(--aurora-primary);
-  --glass-bg: var(--aurora-glass);
-  --glass-border: var(--aurora-border);
-  --accent-primary: var(--aurora-green);
-  --accent-secondary: var(--aurora-teal);
-  --accent-error: var(--aurora-gold);
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  margin: 24px 0;
 }
 
 /* ============================================
-   响应式设计优化
+   Ant Design 覆盖样式
+   ============================================ */
+.ant-btn-primary {
+  background-color: var(--brand-primary) !important;
+  border-color: var(--brand-primary) !important;
+  border-radius: 24px !important;
+}
+
+.ant-btn-primary:hover {
+  background-color: var(--brand-secondary) !important;
+  border-color: var(--brand-secondary) !important;
+}
+
+.ant-card {
+  border-radius: 12px !important;
+  border-color: var(--border-primary) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-md) !important;
+}
+
+.ant-input,
+.ant-input-number,
+.ant-select-selector {
+  border-radius: 10px !important;
+  border-width: 1.5px !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-number:focus,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector {
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 2px rgba(146, 64, 14, 0.08) !important;
+}
+
+/* ============================================
+   响应式设计
    ============================================ */
 @media (max-width: 768px) {
   .text-hero {
-    font-size: 2rem;
+    font-size: 36px;
+    letter-spacing: -1px;
   }
 
-  .text-title {
-    font-size: 1.5rem;
+  .text-title-1 {
+    font-size: 28px;
   }
 
-  /* 移动端简化光效，保持性能 */
-  body::before {
-    display: none;
+  .text-title-2 {
+    font-size: 20px;
   }
+
+  .pro-card-body {
+    padding: 16px;
+  }
+
+  .pro-card-header {
+    padding: 14px 16px;
+  }
+}
+
+/* ============================================
+   滚动条美化
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-tertiary);
 }
