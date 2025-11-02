@@ -116,6 +116,7 @@ app.use('/api/features', require('./routes/feature.routes'));
 app.use('/api/scf', require('./routes/scfCallback.routes'));
 app.use('/api/assets', require('./routes/asset.routes'));
 app.use('/api/distribution', require('./routes/distribution.routes')); // 分销代理路由
+app.use('/api/payment', require('./routes/payment.routes')); // 支付路由 (P0-008)
 
 // 404处理
 app.use(notFoundHandler);
