@@ -3,6 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const mongoSanitize = require('express-mongo-sanitize');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
 const logger = require('./utils/logger');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler.middleware');
 
@@ -21,12 +23,13 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 安全中间件
+// 安全中间件 (P1-013: 允许Swagger UI的inline样式)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Swagger UI需要
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Swagger UI需要
       imgSrc: ["'self'", "data:", "https:"],
     }
   }
@@ -103,6 +106,25 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV
   });
+});
+
+// Swagger API文档 (P1-013)
+// 艹！所有API文档一目了然，访问 /api-docs 查看
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'AI Photo API文档',
+  customCss: '.swagger-ui .topbar { display: none }',
+  swaggerOptions: {
+    persistAuthorization: true, // 持久化认证信息
+    docExpansion: 'none', // 默认折叠所有接口
+    filter: true, // 启用搜索过滤
+    tryItOutEnabled: true // 启用"Try it out"功能
+  }
+}));
+
+// Swagger JSON规范
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // API路由
