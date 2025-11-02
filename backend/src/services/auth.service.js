@@ -117,6 +117,11 @@ class AuthService {
     // 1. 验证码校验
     await this.verifyCode(phone, code);
 
+    // P1-017: 推荐人验证
+    if (referrerId) {
+      await this.validateReferrer(referrerId);
+    }
+
     // 2. 查询或创建用户
     let user = await db('users').where('phone', phone).first();
 
@@ -130,6 +135,8 @@ class AuthService {
           id: userId,
           phone,
           referrer_id: referrerId || null, // 记录推荐人
+          referrer_verified: referrerId ? true : false, // P1-017: 标记推荐人已验证
+          referrer_verified_at: referrerId ? new Date() : null, // P1-017: 记录验证时间
           isMember: false,
           quota_remaining: 0,
           quota_expireAt: null,
@@ -486,6 +493,48 @@ class AuthService {
       quota_expireAt: user.quota_expireAt,
       createdAt: user.created_at
     };
+  }
+
+  /**
+   * 验证推荐人有效性 (P1-017)
+   * 艹！防止用户填写无效的推荐人ID
+   * @param {string} referrerId - 推荐人ID
+   * @returns {Promise<void>}
+   */
+  async validateReferrer(referrerId) {
+    // 1. 检查推荐人是否存在
+    const referrer = await db('users').where('id', referrerId).first();
+
+    if (!referrer) {
+      throw {
+        statusCode: 400,
+        errorCode: 2012,
+        message: '推荐人不存在'
+      };
+    }
+
+    // 2. 检查推荐人账号状态
+    if (referrer.deleted_at) {
+      throw {
+        statusCode: 400,
+        errorCode: 2013,
+        message: '推荐人账号已被删除'
+      };
+    }
+
+    // 3. 检查推荐人是否是分销员（可选）
+    const distributor = await db('distributors')
+      .where('user_id', referrerId)
+      .where('status', 'active')
+      .first();
+
+    if (distributor) {
+      logger.info(`推荐人验证通过（分销员）: referrerId=${referrerId}`);
+    } else {
+      logger.info(`推荐人验证通过（普通用户）: referrerId=${referrerId}`);
+    }
+
+    return true;
   }
 }
 
