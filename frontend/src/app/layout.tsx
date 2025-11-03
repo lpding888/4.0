@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Navigation from '@/components/Navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppThemeProvider } from '@/shared/providers';
+import { initWebVitals } from '@/lib/monitoring/web-vitals';
+import { MSWInitializer } from '@/components/MSWInitializer';
 import './fonts.css';
 import './globals.css';
 
@@ -14,17 +16,22 @@ export const metadata: Metadata = {
  * RootLayout - 根布局
  *
  * 艹！使用GPT5工业级架构，支持主题切换和完整的状态管理！
+ * 还加了Web Vitals监控，性能必须管！
  */
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // 初始化Web Vitals监控
+  initWebVitals();
+
   return (
     <html lang="zh-CN">
       <body>
         <ErrorBoundary>
           <AppThemeProvider>
+            <MSWInitializer />
             <Navigation />
             {children}
           </AppThemeProvider>

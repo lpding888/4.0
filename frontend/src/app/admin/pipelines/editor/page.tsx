@@ -16,6 +16,10 @@ import {
   FileAddOutlined,
   CloudUploadOutlined,
   CheckCircleOutlined,
+  TeamOutlined,
+  UserOutlined,
+  SyncOutlined,
+  HistoryOutlined
 } from '@ant-design/icons';
 import {
   ReactFlow,
@@ -36,6 +40,8 @@ import '@xyflow/react/dist/style.css';
 import { nodeTypes } from '@/components/flow/NodeTypes';
 import NodeConfigDrawer from '@/components/flow/NodeConfigDrawer';
 import ValidationPanel, { ValidationResult } from '@/components/flow/ValidationPanel';
+import { usePipelineCollaboration } from '@/hooks/usePipelineCollaboration';
+import CollaborationPresence from '@/components/collaboration/CollaborationPresence';
 import { adminPipelines } from '@/lib/services/adminPipelines';
 import { PipelineSchema, PipelineDTO, PipelineEdge } from '@/lib/types/pipeline';
 import { validatePipelineSchema } from '@/lib/validators';
@@ -108,14 +114,35 @@ function PipelineEditor() {
   const [form] = Form.useForm();
   const reactFlowInstance = useReactFlow();
 
+  // 协同编辑状态
+  const collaboration = usePipelineCollaboration({
+    pipelineId: currentPipeline?.pipeline_id || 'default',
+    userId: `user_${Math.random().toString(36).substr(2, 9)}`,
+    userName: '当前用户',
+    serverUrl: 'ws://localhost:1234', // 这里应该是实际的WebSocket服务器地址
+    autoConnect: !!currentPipeline?.pipeline_id
+  });
+
   /**
    * 连线回调
    */
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
+      const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // 使用协作编辑添加边
+      collaboration.addEdge(edgeId, {
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
+        data: {} // 可选的边数据
+      });
+
+      // 本地状态更新（立即响应）
+      setEdges((eds) => addEdge({ ...params, id: edgeId }, eds));
     },
-    [setEdges]
+    [collaboration, setEdges]
   );
 
   /**
@@ -126,7 +153,14 @@ function PipelineEditor() {
     console.log('[点击节点]', node);
     setSelectedNode(node);
     setConfigDrawerOpen(true);
-  }, []);
+
+    // 更新协作光标
+    collaboration.updateCursor({
+      nodeId: node.id,
+      x: node.position.x,
+      y: node.position.y
+    });
+  }, [collaboration]);
 
   /**
    * 保存节点配置
@@ -134,6 +168,10 @@ function PipelineEditor() {
    */
   const handleSaveNodeConfig = useCallback(
     (nodeId: string, newData: any) => {
+      // 使用协作编辑更新节点
+      collaboration.updateNode(nodeId, newData);
+
+      // 本地状态更新（立即响应）
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === nodeId) {
@@ -149,7 +187,7 @@ function PipelineEditor() {
         })
       );
     },
-    [setNodes]
+    [collaboration, setNodes]
   );
 
   /**
@@ -189,6 +227,11 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新Provider', providerRef: '' },
     };
+
+    // 使用协作编辑添加节点
+    collaboration.addNode(id, newNode.data);
+
+    // 本地状态更新（立即响应）
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -203,6 +246,8 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新条件', condition: '' },
     };
+
+    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -217,6 +262,8 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '新后处理', processor: '' },
     };
+
+    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -231,6 +278,8 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: '结束' },
     };
+
+    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -246,6 +295,8 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: 'FORK', branches: 2 },
     };
+
+    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -261,6 +312,8 @@ function PipelineEditor() {
       position: { x: Math.random() * 400, y: Math.random() * 300 },
       data: { label: 'JOIN', strategy: 'ALL' },
     };
+
+    collaboration.addNode(id, newNode.data);
     setNodes((nds) => [...nds, newNode]);
   };
 
@@ -654,96 +707,164 @@ function PipelineEditor() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card
-        title={
-          <Space>
-            <BranchesOutlined style={{ fontSize: '20px' }} />
-            <span style={{ fontSize: '18px', fontWeight: 600 }}>流程编辑器</span>
-            <Tag color={currentPipeline ? 'green' : 'default'}>
-              {pipelineName}
-            </Tag>
-            {currentPipeline && (
-              <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
-            )}
-          </Space>
-        }
-        extra={
-          <Space>
-            <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
-              新建
-            </Button>
-            <Button
-              icon={<FolderOpenOutlined />}
-              onClick={() => {
-                loadPipelineList();
-                setLoadModalVisible(true);
-              }}
-            >
-              打开
-            </Button>
-            <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
-              导入JSON
-            </Button>
-            <Button.Group>
-              <Button icon={<PlusOutlined />} onClick={addProviderNode}>
-                Provider
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addConditionNode}>
-                条件
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addPostProcessNode}>
-                后处理
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addForkNode}>
-                FORK
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addJoinNode}>
-                JOIN
-              </Button>
-              <Button icon={<PlusOutlined />} onClick={addEndNode}>
-                结束
-              </Button>
-            </Button.Group>
-            <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
-              查看JSON
-            </Button>
-            <Button
-              icon={<CheckCircleOutlined />}
-              onClick={handleValidate}
-              loading={validating}
-              type={validationResult?.valid ? 'default' : 'dashed'}
-            >
-              {validating ? '校验中' : '校验'}
-            </Button>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={handleSave}
-              loading={saving}
-            >
-              {currentPipeline ? '保存' : '另存为'}
-            </Button>
-          </Space>
-        }
-      >
-        {/* 流程画布 */}
-        <div style={{ height: '700px', border: '1px solid #d9d9d9', borderRadius: '8px' }}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
+      <Row gutter={16}>
+        <Col span={18}>
+          <Card
+            title={
+              <Space>
+                <BranchesOutlined style={{ fontSize: '20px' }} />
+                <span style={{ fontSize: '18px', fontWeight: 600 }}>Pipeline协同编辑器</span>
+                <Tag color={currentPipeline ? 'green' : 'default'}>
+                  {pipelineName}
+                </Tag>
+                {currentPipeline && (
+                  <Tag color="blue">ID: {currentPipeline.pipeline_id}</Tag>
+                )}
+                {collaboration.state.isConnected && (
+                  <Tag color="green" icon={<SyncOutlined spin />}>
+                    协作中
+                  </Tag>
+                )}
+              </Space>
+            }
+            extra={
+              <Space>
+                <Button icon={<FileAddOutlined />} onClick={handleNewPipeline}>
+                  新建
+                </Button>
+                <Button
+                  icon={<FolderOpenOutlined />}
+                  onClick={() => {
+                    loadPipelineList();
+                    setLoadModalVisible(true);
+                  }}
+                >
+                  打开
+                </Button>
+                <Button icon={<CloudUploadOutlined />} onClick={handleImportJSON}>
+                  导入JSON
+                </Button>
+                <Button.Group>
+                  <Button icon={<PlusOutlined />} onClick={addProviderNode}>
+                    Provider
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={addConditionNode}>
+                    条件
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={addPostProcessNode}>
+                    后处理
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={addForkNode}>
+                    FORK
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={addJoinNode}>
+                    JOIN
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={addEndNode}>
+                    结束
+                  </Button>
+                </Button.Group>
+                <Button icon={<CodeOutlined />} onClick={() => setJsonDrawerVisible(true)}>
+                  查看JSON
+                </Button>
+                <Button
+                  icon={<CheckCircleOutlined />}
+                  onClick={handleValidate}
+                  loading={validating}
+                  type={validationResult?.valid ? 'default' : 'dashed'}
+                >
+                  {validating ? '校验中' : '校验'}
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<SaveOutlined />}
+                  onClick={handleSave}
+                  loading={saving}
+                >
+                  {currentPipeline ? '保存' : '另存为'}
+                </Button>
+              </Space>
+            }
           >
-            <Controls />
-            <MiniMap />
-            <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-          </ReactFlow>
-        </div>
-      </Card>
+            {/* 流程画布 */}
+            <div style={{ height: '700px', border: '1px solid #d9d9d9', borderRadius: '8px', position: 'relative' }}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={onNodeClick}
+                onNodeDragStop={(event, node) => {
+                  // 更新协作光标位置
+                  collaboration.updateCursor({
+                    nodeId: node.id,
+                    x: node.position.x,
+                    y: node.position.y
+                  });
+                }}
+                onPaneClick={(event) => {
+                  // 清除协作光标
+                  collaboration.clearCursor();
+                }}
+                nodeTypes={nodeTypes}
+                fitView
+              >
+                <Controls />
+                <MiniMap />
+                <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+              </ReactFlow>
+
+              {/* 显示其他用户的协作光标 */}
+              {collaboration.getUserCursors().map((user) => (
+                <div
+                  key={user.id}
+                  style={{
+                    position: 'absolute',
+                    left: user.cursor?.x || 0,
+                    top: user.cursor?.y || 0,
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '2px 6px',
+                      backgroundColor: user.color,
+                      color: 'white',
+                      borderRadius: 4,
+                      fontSize: 11,
+                      fontWeight: 'bold',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      animation: 'pulse 1.5s infinite'
+                    }}
+                  >
+                    {user.name}
+                    {user.cursor?.nodeId && (
+                      <div style={{ fontSize: 9, opacity: 0.8 }}>
+                        编辑: {user.cursor.nodeId}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </Col>
+
+        <Col span={6}>
+          {/* 协作编辑面板 */}
+          <CollaborationPresence
+            onlineUsers={collaboration.state.onlineUsers}
+            currentUser={collaboration.state.currentUser}
+            isConnected={collaboration.state.isConnected}
+            snapshots={collaboration.getSnapshots()}
+            onCreateSnapshot={(description) => collaboration.createSnapshot(description)}
+            onRollback={(snapshotId) => collaboration.rollbackToSnapshot(snapshotId)}
+          />
+        </Col>
+      </Row>
 
       {/* 节点配置侧边栏 */}
       <NodeConfigDrawer
