@@ -126,39 +126,35 @@ class TaskService {
         };
       }
 
-      // 4. 在事务中扣配额并创建任务
-      const result = await db.transaction(async (trx) => {
-        // 扣减配额
-        await quotaService.deduct(userId, feature.quota_cost, trx);
+      // 4. 先预留配额（Saga第一步）
+      taskId = nanoid(); // 提前生成taskId用于reserve
+      await quotaService.reserve(userId, taskId, feature.quota_cost);
 
-        // 创建任务记录
-        taskId = nanoid();
-        const now = new Date();
-
-        await trx('tasks').insert({
-          id: taskId,
-          userId,
-          feature_id: featureId,
-          status: 'pending',
-          input_data: JSON.stringify(inputData),
-          eligible_for_refund: true, // 🔥 设置为有资格返还配额
-          refunded: false, // 🔥 初始化为未返还
-          created_at: now,
-          updated_at: now,
-          // 保留旧字段兼容性（type是NOT NULL字段，用feature_id作为type的占位值）
-          type: featureId,
-          inputUrl: inputData.imageUrl || '',
-          params: null
-        });
-
-        return {
-          taskId,
-          featureId,
-          status: 'pending',
-          createdAt: now.toISOString(),
-          quotaCost: feature.quota_cost
-        };
+      // 5. 创建任务记录
+      const now = new Date();
+      await db('tasks').insert({
+        id: taskId,
+        userId,
+        feature_id: featureId,
+        status: 'pending',
+        input_data: JSON.stringify(inputData),
+        eligible_for_refund: true, // 🔥 设置为有资格返还配额
+        refunded: false, // 🔥 初始化为未返还
+        created_at: now,
+        updated_at: now,
+        // 保留旧字段兼容性（type是NOT NULL字段，用feature_id作为type的占位值）
+        type: featureId,
+        inputUrl: inputData.imageUrl || '',
+        params: null
       });
+
+      const result = {
+        taskId,
+        featureId,
+        status: 'pending',
+        createdAt: now.toISOString(),
+        quotaCost: feature.quota_cost
+      };
 
       logger.info(
         `[TaskService] Feature任务创建成功 taskId=${taskId} userId=${userId} ` +
@@ -267,18 +263,8 @@ class TaskService {
 
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
 
-      // 如果任务失败,返还配额（艹！必须检查eligible_for_refund）
-      if (status === 'failed') {
-        const task = await db('tasks').where('id', taskId).first();
-        if (task) {
-          const refundAmount = this.getQuotaCost(task.type);
-          // 🔥 修复参数顺序：taskId在前，userId在后
-          const result = await quotaService.refund(taskId, task.userId, refundAmount, `任务失败返还:${taskId}`);
-          if (result.refunded) {
-            logger.info(`[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`);
-          }
-        }
-      }
+      // 注意：配额返还现在由PipelineEngine通过quotaService.cancel()处理
+      // 这里不再直接调用refund方法
 
       return true;
 

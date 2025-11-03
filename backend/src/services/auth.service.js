@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const jwt = require('jsonwebtoken');
+const tokenService = require('./token.service');
 const { generateCode, generateId } = require('../utils/generator');
 const logger = require('../utils/logger');
 
@@ -109,7 +109,7 @@ class AuthService {
    * @param {string} phone - 手机号
    * @param {string} code - 验证码
    * @param {string} referrerId - 推荐人用户ID(可选)
-   * @returns {Promise<{token: string, user: object}>}
+   * @returns {Promise<{accessToken, refreshToken, expiresIn, user: object}>}
    */
   async login(phone, code, referrerId = null) {
     // 1. 验证码校验
@@ -154,22 +154,13 @@ class AuthService {
       .where('code', code)
       .update({ used: true });
 
-    // 4. 生成JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        phone: user.phone
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: process.env.JWT_EXPIRE || '7d'
-      }
-    );
+    // 4. 生成双Token对
+    const tokens = tokenService.generateTokenPair(user);
 
     logger.info(`用户登录成功: userId=${user.id}, phone=${phone}`);
 
     return {
-      token,
+      ...tokens,
       user: {
         id: user.id,
         phone: user.phone,

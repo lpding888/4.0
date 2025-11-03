@@ -13,7 +13,14 @@ module.exports = {
     },
     pool: {
       min: parseInt(process.env.DATABASE_POOL_MIN) || 2,
-      max: parseInt(process.env.DATABASE_POOL_MAX) || 10
+      max: parseInt(process.env.DATABASE_POOL_MAX) || 10,
+      acquireTimeoutMillis: 60000,
+      createTimeoutMillis: 30000,
+      destroyTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000,
+      reapIntervalMillis: 1000,
+      createRetryIntervalMillis: 200,
+      propagateCreateError: false
     },
     migrations: {
       directory: './src/db/migrations',
@@ -36,7 +43,14 @@ module.exports = {
     },
     pool: {
       min: parseInt(process.env.DATABASE_POOL_MIN) || 5,
-      max: parseInt(process.env.DATABASE_POOL_MAX) || 20
+      max: parseInt(process.env.DATABASE_POOL_MAX) || 20,
+      acquireTimeoutMillis: 60000,
+      createTimeoutMillis: 30000,
+      destroyTimeoutMillis: 5000,
+      idleTimeoutMillis: 300000,
+      reapIntervalMillis: 1000,
+      createRetryIntervalMillis: 100,
+      propagateCreateError: false
     },
     migrations: {
       directory: './src/db/migrations',

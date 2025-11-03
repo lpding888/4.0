@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../utils/logger');
 const quotaService = require('./quota.service');
+const providerRegistryService = require('./provider-registry.service');
 
 /**
  * PipelineEngine - 核心编排引擎
@@ -142,48 +143,62 @@ class PipelineEngine {
         throw error;
       }
 
-      // 执行provider(带重试机制)
-      const maxRetries = retryPolicy.max_retries || 0;
-      const retryDelay = retryPolicy.retry_delay_ms || 1000;
+      // 使用Provider包装器执行(带熔断保护和重试机制)
+      const circuitBreakerName = `pipeline_${type}_${providerRef}`;
 
-      let lastError;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          if (attempt > 0) {
-            logger.info(
-              `[PipelineEngine] 重试步骤 attempt=${attempt}/${maxRetries} ` +
-              `taskId=${taskId} stepIndex=${stepIndex}`
-            );
-            await this.sleep(retryDelay);
-          }
+      // 配置熔断器选项
+      const circuitBreakerOptions = {
+        failureThreshold: retryPolicy.failure_threshold || 3,
+        resetTimeout: retryPolicy.reset_timeout_ms || 60000,
+        monitoringPeriod: retryPolicy.monitoring_period_ms || 10000,
+        halfOpenMaxCalls: retryPolicy.half_open_max_calls || 2,
+        successThreshold: retryPolicy.success_threshold || 2
+      };
 
-          const output = await Promise.race([
-            provider.execute(input, taskId),
-            this.timeout(timeout, `步骤执行超时(${timeout}ms)`)
-          ]);
+      // 配置重试选项
+      const retryOptions = {
+        maxAttempts: (retryPolicy.max_retries || 0) + 1, // +1 因为包装器的maxAttempts包含首次尝试
+        baseDelay: retryPolicy.retry_delay_ms || 1000,
+        maxDelay: retryPolicy.max_retry_delay_ms || 30000,
+        backoff: retryPolicy.backoff || 'exponential'
+      };
 
-          // 成功,更新步骤状态
-          await db('task_steps')
-            .where({ task_id: taskId, step_index: stepIndex })
-            .update({
-              status: 'completed',
-              output: JSON.stringify(output),
-              completed_at: new Date()
-            });
+      // 执行选项
+      const executeOptions = {
+        timeout,
+        ...retryOptions,
+        fallback: retryPolicy.fallback ? async (error, args) => {
+          logger.info(`[PipelineEngine] 执行降级策略 taskId=${taskId} stepIndex=${stepIndex}`);
+          return await retryPolicy.fallback(error, { input, taskId, stepConfig });
+        } : null
+      };
 
-          return { success: true, output };
+      try {
+        const output = await providerRegistryService.execute(
+          type, // 使用type作为provider名称
+          'execute',
+          [input, taskId],
+          executeOptions
+        );
 
-        } catch (error) {
-          lastError = error;
-          logger.warn(
-            `[PipelineEngine] 步骤执行失败 attempt=${attempt} ` +
-            `taskId=${taskId} stepIndex=${stepIndex} error=${error.message}`
-          );
-        }
+        // 成功,更新步骤状态
+        await db('task_steps')
+          .where({ task_id: taskId, step_index: stepIndex })
+          .update({
+            status: 'completed',
+            output: JSON.stringify(output),
+            completed_at: new Date()
+          });
+
+        return { success: true, output };
+
+      } catch (error) {
+        logger.error(
+          `[PipelineEngine] Provider执行失败(含熔断保护) ` +
+          `taskId=${taskId} stepIndex=${stepIndex} error=${error.message}`
+        );
+        throw error;
       }
-
-      // 所有重试都失败
-      throw lastError;
 
     } catch (error) {
       // 更新步骤状态为failed
@@ -209,25 +224,35 @@ class PipelineEngine {
    * @returns {Object} Provider实例
    */
   getProvider(type, providerRef) {
-    // 根据type动态加载provider模块
-    // 例如: SYNC_IMAGE_PROCESS -> ./providers/syncImageProcess.provider.js
-
-    const providerMap = {
-      'SYNC_IMAGE_PROCESS': './providers/syncImageProcess.provider',
-      'RUNNINGHUB_WORKFLOW': './providers/runninghubWorkflow.provider',
-      'SCF_POST_PROCESS': './providers/scfPostProcess.provider'
-    };
-
-    const providerPath = providerMap[type];
-    if (!providerPath) {
-      throw new Error(`未知的Provider类型: ${type}`);
-    }
-
     try {
+      // 首先尝试从Provider注册服务获取
+      if (providerRegistryService.isProviderRegistered(type)) {
+        logger.info(`[PipelineEngine] 使用注册的Provider type=${type}`);
+        return {
+          execute: async (input, taskId) => {
+            return await providerRegistryService.execute(type, 'execute', [input, taskId]);
+          }
+        };
+      }
+
+      // 回退到传统的Provider加载方式
+      const providerMap = {
+        'SYNC_IMAGE_PROCESS': './providers/syncImageProcess.provider',
+        'RUNNINGHUB_WORKFLOW': './providers/runninghubWorkflow.provider',
+        'SCF_POST_PROCESS': './providers/scfPostProcess.provider'
+      };
+
+      const providerPath = providerMap[type];
+      if (!providerPath) {
+        throw new Error(`未知的Provider类型: ${type}`);
+      }
+
       const ProviderClass = require(providerPath);
+      logger.info(`[PipelineEngine] 使用传统Provider type=${type} path=${providerPath}`);
       return new ProviderClass(providerRef);
+
     } catch (error) {
-      logger.error(`[PipelineEngine] 加载Provider失败 type=${type} path=${providerPath}`);
+      logger.error(`[PipelineEngine] Provider加载失败 type=${type} ref=${providerRef}`, error);
       throw new Error(`Provider加载失败: ${type}`);
     }
   }
@@ -254,6 +279,15 @@ class PipelineEngine {
       await db('tasks')
         .where('id', taskId)
         .update(updateData);
+
+      // ✅ Saga第二步：确认配额扣减
+      try {
+        await quotaService.confirm(taskId);
+        logger.info(`[PipelineEngine] 配额确认成功 taskId=${taskId}`);
+      } catch (error) {
+        logger.error(`[PipelineEngine] 配额确认失败 taskId=${taskId} error=${error.message}`);
+        // 不影响任务成功状态，只记录错误
+      }
 
       logger.info(`[PipelineEngine] 任务成功完成 taskId=${taskId}`);
 
@@ -282,33 +316,13 @@ class PipelineEngine {
           updated_at: new Date()
         });
 
-      // 2. 获取任务信息用于返还配额
-      const task = await db('tasks').where('id', taskId).first();
-      if (!task) {
-        logger.error(`[PipelineEngine] 任务不存在 taskId=${taskId}`);
-        return;
-      }
-
-      // 3. 获取功能定义,返还配额
-      const feature = await db('feature_definitions')
-        .where('feature_id', featureId)
-        .first();
-
-      if (feature && task.userId) {
-        // 🔥 修复参数顺序：taskId在前，userId在后
-        const result = await quotaService.refund(
-          taskId,
-          task.userId,
-          feature.quota_cost,
-          `Pipeline失败返还:${taskId}`
-        );
-
-        if (result.refunded) {
-          logger.info(
-            `[PipelineEngine] 配额已返还 taskId=${taskId} ` +
-            `userId=${task.userId} amount=${feature.quota_cost}`
-          );
-        }
+      // ❌ Saga第二步：取消配额扣减（退还配额）
+      try {
+        await quotaService.cancel(taskId);
+        logger.info(`[PipelineEngine] 配额退还成功 taskId=${taskId}`);
+      } catch (error) {
+        logger.error(`[PipelineEngine] 配额退还失败 taskId=${taskId} error=${error.message}`);
+        // 不影响任务失败状态，只记录错误
       }
 
       logger.error(

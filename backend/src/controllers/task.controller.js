@@ -1,6 +1,7 @@
 const taskService = require('../services/task.service');
 const imageProcessService = require('../services/imageProcess.service');
 const aiModelService = require('../services/aiModel.service');
+const paginationService = require('../services/pagination.service');
 const logger = require('../utils/logger');
 
 /**
@@ -178,30 +179,231 @@ class TaskController {
   }
 
   /**
-   * 获取任务列表
-   * GET /api/task/list?limit=10&offset=0&status=success&type=basic_clean
+   * 获取用户任务列表（游标分页）
+   * GET /api/task/list?cursor=xxx&limit=20&status=success&type=basic_clean
    */
   async list(req, res, next) {
     try {
       const userId = req.user.id;
-      const { limit, offset, status, type } = req.query;
+      const { cursor, limit, status, type, pagination = 'cursor' } = req.query;
 
-      const options = {
-        limit: limit ? parseInt(limit) : 10,
-        offset: offset ? parseInt(offset) : 0,
-        status: status || null,
-        type: type || null
-      };
+      // 构建过滤条件
+      const filters = {};
+      if (status) filters.status = status;
+      if (type) filters.type = type;
 
-      const result = await taskService.list(userId, options);
+      let result;
+
+      if (pagination === 'offset') {
+        // 传统分页（兼容性）
+        const { page = 1 } = req.query;
+        result = await paginationService.offsetPaginate({
+          table: 'tasks',
+          columns: ['id', 'userId', 'type', 'status', 'created_at', 'completed_at', 'resultUrls'],
+          where: { userId, ...filters },
+          orderBy: [
+            { column: 'created_at', direction: 'desc' },
+            { column: 'id', direction: 'desc' }
+          ],
+          page: parseInt(page),
+          limit: limit ? parseInt(limit) : 20
+        });
+      } else {
+        // 游标分页（推荐）
+        result = await paginationService.getUserTasks(userId, {
+          cursor,
+          limit: limit ? parseInt(limit) : 20,
+          where: filters
+        });
+      }
 
       res.json({
         success: true,
-        data: result
+        data: result.data,
+        pagination: result.pageInfo,
+        paginationType: result.paginationType
       });
 
     } catch (error) {
       logger.error(`[TaskController] 获取任务列表失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 管理员获取任务列表
+   * GET /api/admin/tasks?page=1&limit=20&status=success&userId=xxx
+   */
+  async adminList(req, res, next) {
+    try {
+      // 验证管理员权限
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 4003,
+            message: '需要管理员权限'
+          }
+        });
+      }
+
+      const {
+        page = 1,
+        limit = 20,
+        status,
+        type,
+        userId,
+        startDate,
+        endDate
+      } = req.query;
+
+      // 构建过滤条件
+      const filters = {};
+      if (status) filters.status = status;
+      if (type) filters.type = type;
+      if (userId) filters.userId = userId;
+
+      // 日期范围过滤
+      if (startDate || endDate) {
+        const dateCondition = function() {
+          if (startDate && endDate) {
+            this.whereBetween('created_at', [startDate, endDate]);
+          } else if (startDate) {
+            this.where('created_at', '>=', startDate);
+          } else if (endDate) {
+            this.where('created_at', '<=', endDate);
+          }
+        };
+        filters.created_at = dateCondition;
+      }
+
+      const result = await paginationService.getTaskList(filters, {
+        page: parseInt(page),
+        limit: Math.min(parseInt(limit), 100) // 限制最大100条
+      });
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pageInfo
+      });
+
+    } catch (error) {
+      logger.error(`[TaskController] 管理员获取任务列表失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 搜索任务
+   * GET /api/admin/tasks/search?q=keyword&page=1&limit=20
+   */
+  async search(req, res, next) {
+    try {
+      // 验证管理员权限
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 4003,
+            message: '需要管理员权限'
+          }
+        });
+      }
+
+      const {
+        q: searchTerm,
+        page = 1,
+        limit = 20,
+        status,
+        type
+      } = req.query;
+
+      if (!searchTerm || searchTerm.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 4001,
+            message: '搜索关键词不能为空'
+          }
+        });
+      }
+
+      // 构建过滤条件
+      const filters = {};
+      if (status) filters.status = status;
+      if (type) filters.type = type;
+
+      const result = await paginationService.searchTasks(searchTerm.trim(), {
+        page: parseInt(page),
+        limit: Math.min(parseInt(limit), 100),
+        where: filters
+      });
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pageInfo,
+        searchTerm: searchTerm.trim()
+      });
+
+    } catch (error) {
+      logger.error(`[TaskController] 任务搜索失败: ${error.message}`, error);
+      next(error);
+    }
+  }
+
+  /**
+   * 获取数据库性能分析
+   * GET /api/admin/db/performance?table=tasks&status=success
+   */
+  async getDbPerformance(req, res, next) {
+    try {
+      // 验证管理员权限
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 4003,
+            message: '需要管理员权限'
+          }
+        });
+      }
+
+      const { table, status } = req.query;
+
+      if (!table) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 4001,
+            message: '缺少表名参数'
+          }
+        });
+      }
+
+      // 构建查询条件
+      const where = {};
+      if (status) where.status = status;
+
+      // 分析查询性能
+      const analysis = await paginationService.analyzeQuery(table, where, [
+        { column: 'created_at', direction: 'desc' },
+        { column: 'id', direction: 'desc' }
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          table,
+          query: analysis.sql,
+          bindings: analysis.bindings,
+          explain: analysis.explain
+        }
+      });
+
+    } catch (error) {
+      logger.error(`[TaskController] 获取数据库性能分析失败: ${error.message}`, error);
       next(error);
     }
   }
