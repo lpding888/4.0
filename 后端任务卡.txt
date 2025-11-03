@@ -1,0 +1,1798 @@
+下面这份规划把你要的 **“任务卡”** 做成了可直接交给 Codex/自动化代理执行的 JSON（**按部门分组**，每张卡严格 18 字段）。
+任务设计**完全对齐你文件里的体例**（缓存链路 LRU→Redis→快照→DB、Pub/Sub 精准失效、配置快照+回滚、MCP/RAG/流程编辑器/Prompt 中心/内容 CRUD 等），并复用了你给出的字段命名与实施节奏。 同时把你另一份后端优化建议里的**错误码/日志/监控/限流/幂等/游标分页**等工程基线也合并进来，保证上线可用与可观测。
+
+> 额外满足你的诉求“**后端就可以排列好前端的 AI 功能**”：本计划新增 **UI Schema/Menu API** 与 **Feature Registry API** 两组任务（/ui/schema 与 /ui/features），前端只需“读配置即渲染”；对应缓存/快照/广播仍沿用你现有方案（cfg:invalidate）。
+
+---
+
+## 开发阶段建议（可选阅读）
+
+* **Week 1**：底座（Sidecar 接入、Provider & Model Catalog、缓存与快照、错误处理/日志/监控基线、UI Schema/Menu API）。
+* **Week 2**：流程编辑器（React Flow）、MCP、RAG、Feature 向导 Step4 发布闭环、内容管理（公告/轮播/COS）、Prompt 中心初版。
+* **Week 3**：Prompt 版本/测试器、E2E、协作与回滚强化、计费与配额、SRE 告警面板、风控/限流。
+
+---
+
+## 标准任务卡 JSON（按部门分组）
+
+```json
+{
+  "Backend": [
+    {
+      "id": "BE-BLD-001",
+      "department": "Backend",
+      "title": "接入 BuildingAI 侧车（仅后端服务）并内网隔离",
+      "description": "以 Docker Compose 起 BuildingAI server（关闭其前端），配置 DB_TYPE=mysql 指向现有 MySQL8，Redis 使用独立 DB/前缀。限制 4090 端口仅内网可达，首启强制修改默认超管密码。",
+      "businessValue": "最小改造获得多厂商模型聚合/MCP/计费/知识库等能力，与你后端同生态。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": [
+        "deploy/buildingai/docker-compose.yml",
+        ".env.buildingai",
+        "docs/buildingai-sidecar.md"
+      ],
+      "acceptanceCriteria": [
+        "侧车服务 200 健康可用",
+        "默认超管密码被修改与记录",
+        "对外仅 BFF 可访问（安全组/Nginx 限制）"
+      ],
+      "risk": [
+        "端口暴露与默认密码风险",
+        "DB/Redis 键空间冲突"
+      ],
+      "mitigation": [
+        "反代白名单+内网访问",
+        "Redis 使用独立 DB 或 Key 前缀"
+      ],
+      "techSpec": "docker-compose 启动 buildingai-server；以 .env 注入 DB/REDIS；Nginx 反代仅 BFF 可达；BFF 内部调用侧车。",
+      "testPlan": [
+        "健康检查 /health",
+        "BFF->侧车 Chat/Completions 冒烟"
+      ],
+      "metrics": {
+        "healthOk": true,
+        "portExposed": false
+      },
+      "aiPromptSuggestion": "生成 docker-compose 与 Nginx 内网反代配置，并写一段 Node 脚本请求侧车的 /api/health 验证联通。"
+    },
+    {
+      "id": "BE-PRV-001",
+      "department": "Backend",
+      "title": "Provider Catalog 表结构与迁移（provider_endpoints/provider_secrets）",
+      "description": "为多厂商/多模型统一路由创建 provider_endpoints/provider_secrets 两表，支持 kind/base_url/handler_key/权重/超时/重试 与 AES-256-GCM 加密密钥。",
+      "businessValue": "后端统一管理模型供应商，前端读取即渲染选择器。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": [
+        "backend/migrations/001_provider_catalog.ts",
+        "backend/repos/provider.repo.ts",
+        "docs/provider-catalog.md"
+      ],
+      "acceptanceCriteria": [
+        "Knex up/down 可回滚",
+        "唯一约束/索引齐全",
+        "集成 UT 通过"
+      ],
+      "risk": [
+        "敏感信息泄露",
+        "索引设计不当"
+      ],
+      "mitigation": [
+        "应用层加密+掩码输出",
+        "执行 EXPLAIN 基线评估"
+      ],
+      "techSpec": "参照既有索引与回滚规范；支持 handlerKey 白名单加载与健康检查。",
+      "testPlan": [
+        "UT：CRUD 与加解密",
+        "IT：侧车测试连接通过"
+      ],
+      "metrics": {
+        "ddlRollbackable": true,
+        "utCoverage": 0.8
+      },
+      "aiPromptSuggestion": "用 Knex 生成两个表的 migration（含索引/注释），并写 repo/DTO 与基本 UT。"
+    },
+    {
+      "id": "BE-PRV-002",
+      "department": "Backend",
+      "title": "Provider 管理 API + 测试连接（直通侧车）",
+      "description": "实现 /admin/providers CRUD 与 /admin/providers/test 接口，后端调用侧车进行连通性与延迟校验，返回 masked 字段。",
+      "businessValue": "管理员可视化管理与一键验活，前端只读配置渲染。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Platform",
+      "dependencies": ["BE-PRV-001", "BE-BLD-001"],
+      "deliverables": [
+        "backend/src/routes/admin/providers.route.ts",
+        "backend/src/controllers/admin/providers.controller.ts"
+      ],
+      "acceptanceCriteria": [
+        "CRUD 正常，测试连接返回耗时/错误",
+        "敏感字段不回显原文"
+      ],
+      "risk": [
+        "侧车异常导致阻塞"
+      ],
+      "mitigation": [
+        "超时/重试/熔断与降级"
+      ],
+      "techSpec": "pino 日志+错误码统一；调用侧车 HTTP API；错误兼容为 {code,message,requestId}。",
+      "testPlan": [
+        "IT：成功/失败/超时用例",
+        "快照测试返回格式"
+      ],
+      "metrics": {
+        "p95Ms": 100,
+        "errorRate": 0.01
+      },
+      "aiPromptSuggestion": "实现 /admin/providers CRUD & /test 路由，调用侧车进行连通性检查，返回 masked 字段与延迟。"
+    },
+    {
+      "id": "BE-API-001",
+      "department": "Backend",
+      "title": "统一推理 API：/ai/chat 与 /ai/completions（SSE）",
+      "description": "BFF 层提供统一 Chat/Completions API，支持 SSE 流式、工具调用透传、模型参数标准化；内部转发到 BuildingAI 或自研 handler。",
+      "businessValue": "前端与流程试跑只对接一个协议，降低接入复杂度。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-LLM",
+      "dependencies": ["BE-BLD-001", "BE-PRV-001"],
+      "deliverables": [
+        "backend/src/routes/ai.route.ts",
+        "backend/src/services/ai-gateway.service.ts"
+      ],
+      "acceptanceCriteria": [
+        "SSE 持续输出，异常有尾帧",
+        "支持温度/最大 Token 等通参"
+      ],
+      "risk": [
+        "供应商接口差异",
+        "流式中断"
+      ],
+      "mitigation": [
+        "参数适配层",
+        "断线重连/尾帧错误"
+      ],
+      "techSpec": "EventStream 格式统一；pino 记录 requestId；限流与熔断可选。",
+      "testPlan": [
+        "IT：三家 Provider 回放",
+        "端到端浏览器 SSE 测试"
+      ],
+      "metrics": {
+        "sseAbortRate": 0.01,
+        "p95Latency": 200
+      },
+      "aiPromptSuggestion": "编写 Express SSE 路由与适配层，封装供应商差异，输出统一事件流。"
+    },
+    {
+      "id": "BE-UI-001",
+      "department": "Backend",
+      "title": "UI Schema & Menu API（后端排版驱动前端）",
+      "description": "实现 /ui/schema 与 /ui/menus：按角色/配置动态下发可见功能、菜单分组、字段显示与表单模板，前端仅读配置渲染。",
+      "businessValue": "真正实现“后端排好前端功能”。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": ["BE-PRV-002", "BE-CFG-002"],
+      "deliverables": [
+        "backend/src/routes/ui.route.ts",
+        "backend/src/services/ui-schema.service.ts",
+        "docs/ui-schema.json"
+      ],
+      "acceptanceCriteria": [
+        "不同角色返回差异菜单",
+        "前端无需改代码即可增减功能"
+      ],
+      "risk": [
+        "Schema 过度复杂"
+      ],
+      "mitigation": [
+        "JSON Schema + 最小化字段",
+        "版本化与快照"
+      ],
+      "techSpec": "返回 {menus, forms, tables, permissions}；走缓存链路 LRU→Redis→快照→DB；变更发布 cfg:invalidate。",
+      "testPlan": [
+        "UT：角色/权限分支",
+        "IT：发布后 1s 内前端生效"
+      ],
+      "metrics": {
+        "cacheHit": 0.85,
+        "invalidationMs": 200
+      },
+      "aiPromptSuggestion": "实现 /ui/schema 与 /ui/menus 两个路由与服务层，内置角色开关与字段开关，含缓存与发布失效。"
+    },
+    {
+      "id": "BE-MCP-001",
+      "department": "Backend",
+      "title": "MCP 端点表与 CRUD + 工具发现",
+      "description": "创建 mcp_endpoints 表，后端实现 /admin/mcp CRUD、/discover、/test；白名单工具注册与 Token 鉴权。",
+      "businessValue": "把你图像处理链路以 MCP 工具形式挂入流程/试跑器。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Integrations",
+      "dependencies": ["BE-PRV-001"],
+      "deliverables": [
+        "backend/migrations/002_mcp_endpoints.ts",
+        "backend/src/routes/admin/mcp.route.ts"
+      ],
+      "acceptanceCriteria": [
+        "discover 返回 tools 列表",
+        "test 可验证连通与权限"
+      ],
+      "risk": [
+        "外部工具不稳定"
+      ],
+      "mitigation": [
+        "超时/重试/审计"
+      ],
+      "techSpec": "HTTP/WS/stdio 多传输；工具 Schema 用 Zod 校验；返回 masked 信息。",
+      "testPlan": [
+        "IT：3 类传输分别发现/测试",
+        "UT：参数校验"
+      ],
+      "metrics": {
+        "discoverFailRate": 0.02,
+        "avgLatencyMs": 150
+      },
+      "aiPromptSuggestion": "为 MCP 设计表与路由，实现 discover/test 白名单校验与日志。"
+    },
+    {
+      "id": "BE-MCP-002",
+      "department": "Backend",
+      "title": "流程执行器节点：MCP_TOOL_CALL",
+      "description": "在流程引擎新增 MCP_TOOL_CALL 节点执行器，从上下文变量渲染参数，调用 MCP 工具并合并结果到 state。",
+      "businessValue": "流程可直接调你图像处理工具，统一管理重试/超时/错误。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Engine",
+      "dependencies": ["BE-MCP-001", "BE-API-001"],
+      "deliverables": [
+        "backend/src/engine/nodes/mcp-tool-call.ts",
+        "backend/src/engine/types.ts"
+      ],
+      "acceptanceCriteria": [
+        "变量替换/校验完善",
+        "失败有清晰错误码与补偿"
+      ],
+      "risk": [
+        "变量缺失导致失败"
+      ],
+      "mitigation": [
+        "保存前校验 + 运行期降级"
+      ],
+      "techSpec": "Zod 校验 tool schema；withRetryTimeout；错误包装为 ApiError。",
+      "testPlan": [
+        "UT：变量缺失/超时/重试",
+        "IT：端到端试跑"
+      ],
+      "metrics": {
+        "nodeFailRate": 0.03,
+        "retrySuccessRate": 0.7
+      },
+      "aiPromptSuggestion": "实现一个流程节点执行器 mcp-tool-call，含变量渲染/重试/错误归一化与单元测试。"
+    },
+    {
+      "id": "BE-RAG-001",
+      "department": "Backend",
+      "title": "知识库摄取与解析（Markdown/HTML/PDF/中文切块）",
+      "description": "实现解析→切块管线，支持中英文混排、去噪，准备向量化入库；提供状态机与可重入。",
+      "businessValue": "为 RAG 检索与技能生成提供干净语料。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-RAG",
+      "dependencies": [],
+      "deliverables": [
+        "backend/src/rag/ingest/parser.ts",
+        "backend/src/rag/ingest/chunker.ts"
+      ],
+      "acceptanceCriteria": [
+        "常见格式解析正常",
+        "切块统计/预览可用"
+      ],
+      "risk": [
+        "复杂排版导致噪声"
+      ],
+      "mitigation": [
+        "正则去噪与白名单标签"
+      ],
+      "techSpec": "chunk_size/overlap 可配；中文按标点断句；英文按句号。",
+      "testPlan": [
+        "UT：多样样本",
+        "IT：100 篇批量入库预演"
+      ],
+      "metrics": {
+        "parseSuccessRate": 0.98,
+        "avgChunkLen": 400
+      },
+      "aiPromptSuggestion": "实现多格式解析与切块，输出统计与预览函数，并写 UT 覆盖中英文样本。"
+    },
+    {
+      "id": "BE-RAG-002",
+      "department": "Backend",
+      "title": "KB 元数据表与摄取队列（BullMQ）",
+      "description": "创建 kb_* 表与摄取队列：解析→切块→嵌入→向量库 upsert→状态回写，支持并发与重试。",
+      "businessValue": "规模化稳定入库，便于监控与回溯。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-RAG",
+      "dependencies": ["BE-RAG-001"],
+      "deliverables": [
+        "backend/migrations/003_kb_tables.ts",
+        "backend/src/rag/ingest/worker.ts"
+      ],
+      "acceptanceCriteria": [
+        "100 文档入库无阻塞",
+        "失败任务可重试成功"
+      ],
+      "risk": [
+        "向量库资源紧张"
+      ],
+      "mitigation": [
+        "并发/退避可调",
+        "冷门文档延迟入库"
+      ],
+      "techSpec": "BullMQ 并发与指数退避；幂等 jobId；embedding 缓存。",
+      "testPlan": [
+        "IT：端到端入库",
+        "压测：高并发吞吐"
+      ],
+      "metrics": {
+        "throughputMin": 100,
+        "failRetryRate": 0.9
+      },
+      "aiPromptSuggestion": "实现摄取 Worker 与表结构，串起解析/切块/嵌入/入库全链路并加退避重试。"
+    },
+    {
+      "id": "BE-RAG-003",
+      "department": "Backend",
+      "title": "检索 API 与流程节点 KB_RETRIEVE",
+      "description": "实现 /admin/kb/query 与流程节点 KB_RETRIEVE：输入 query/filters/topK→返回 contexts；embedding 缓存。",
+      "businessValue": "为 Prompt 拼装与工具编排提供知识补全。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-RAG",
+      "dependencies": ["BE-RAG-002"],
+      "deliverables": [
+        "backend/src/routes/admin/kb.route.ts",
+        "backend/src/engine/nodes/kb-retrieve.ts"
+      ],
+      "acceptanceCriteria": [
+        "topK 与 filters 生效",
+        "缓存命中率 > 80%"
+      ],
+      "risk": [
+        "召回质量不稳"
+      ],
+      "mitigation": [
+        "预留 rerank 钩子",
+        "热词预热缓存"
+      ],
+      "techSpec": "向量库抽象接口；embedding Provider 走统一网关。",
+      "testPlan": [
+        "UT：过滤与排序",
+        "IT：端到端拼装"
+      ],
+      "metrics": {
+        "cacheHitRatio": 0.8,
+        "p95LatencyMs": 80
+      },
+      "aiPromptSuggestion": "实现 /kb/query 与 KB_RETRIEVE 节点，加入 embedding 缓存与基本过滤。"
+    },
+    {
+      "id": "BE-CFG-001",
+      "department": "Backend",
+      "title": "多层读缓存封装（LRU→Redis→快照→DB）",
+      "description": "实现 getOrSet(key, loader) 通用读缓存，含随机 TTL 抖动、Null Cache、防击穿与指标埋点。",
+      "businessValue": "大幅降低配置类 DB QPS，提升稳定性。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": [
+        "backend/src/cache/config-cache.ts",
+        "backend/src/utils/metrics.ts"
+      ],
+      "acceptanceCriteria": [
+        "命中率 > 85%",
+        "断 Redis 自动降级仍可用"
+      ],
+      "risk": [
+        "一致性窗口"
+      ],
+      "mitigation": [
+        "stale-while-revalidate",
+        "版本化 key"
+      ],
+      "techSpec": "LRU 本地 30s；Redis TTL=300±60；Null Cache 30s；single-flight 互斥。",
+      "testPlan": [
+        "UT：多层回退",
+        "压测：过期抖动"
+      ],
+      "metrics": {
+        "hitRatio": 0.85,
+        "originQpsDrop": 0.6
+      },
+      "aiPromptSuggestion": "写通用缓存封装，支持随机 TTL 与 Null Cache，并输出命中率指标。"
+    },
+    {
+      "id": "BE-CFG-002",
+      "department": "Backend",
+      "title": "配置快照表与回滚 CLI + Pub/Sub 精准失效",
+      "description": "创建 config_snapshots；提供 rollback CLI；写入/回滚时通过 cfg:invalidate 发布精准失效消息，各进程订阅后清除 LRU/Redis。",
+      "businessValue": "配置改错一键回滚，秒级生效。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Platform",
+      "dependencies": ["BE-CFG-001"],
+      "deliverables": [
+        "backend/migrations/004_config_snapshots.ts",
+        "backend/scripts/rollback-config.ts",
+        "backend/src/pubsub/index.ts"
+      ],
+      "acceptanceCriteria": [
+        "回滚可用且秒级生效",
+        "多进程 1s 内一致"
+      ],
+      "risk": [
+        "误删键",
+        "订阅断线"
+      ],
+      "mitigation": [
+        "白名单/前缀精准匹配",
+        "自动重连与合并广播"
+      ],
+      "techSpec": "频道 cfg:invalidate；payload={scope,key,version}；索引 scope+ref_id+version。",
+      "testPlan": [
+        "IT：PM2 多进程模拟",
+        "回滚链路验证"
+      ],
+      "metrics": {
+        "invalidationMs": 200,
+        "rollbackSuccess": true
+      },
+      "aiPromptSuggestion": "实现 snapshots 表/回滚脚本/Redis PubSub 广播与订阅处理，输出多进程集成测试。"
+    },
+    {
+      "id": "BE-SEC-001",
+      "department": "Backend",
+      "title": "ApiError 体系与统一错误处理中间件",
+      "description": "实现 ApiError（code/message/httpStatus/details），全局错误中间件统一输出 {code,message,requestId} 并隐藏堆栈。",
+      "businessValue": "一致错误语义，便于前端与监控联动。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": [
+        "backend/src/middlewares/error.ts",
+        "backend/src/errors/api-error.ts"
+      ],
+      "acceptanceCriteria": [
+        "所有路由格式一致",
+        "日志含 requestId"
+      ],
+      "risk": [
+        "旧异常未被捕获"
+      ],
+      "mitigation": [
+        "适配层兜底包装"
+      ],
+      "techSpec": "结合 pino-http 与 AsyncLocalStorage 贯穿 requestId。",
+      "testPlan": [
+        "三类异常快照测试"
+      ],
+      "metrics": {
+        "errorFormatConsistency": 1,
+        "leakedStackTraces": 0
+      },
+      "aiPromptSuggestion": "实现 ApiError 与错误中间件，给两个演示路由分别抛业务/未知异常并写测试。"
+    },
+    {
+      "id": "BE-LOG-001",
+      "department": "Backend",
+      "title": "结构化日志与请求追踪（pino + AsyncLocalStorage）",
+      "description": "接入 pino/pino-http，统一 JSON 日志字段（ts, level, requestId, userId, route, status, duration）。",
+      "businessValue": "可观测与排障基础。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Platform",
+      "dependencies": [],
+      "deliverables": [
+        "backend/src/logger.ts",
+        "backend/src/middlewares/request-id.ts"
+      ],
+      "acceptanceCriteria": [
+        "每条日志含 requestId",
+        "敏感信息不落盘"
+      ],
+      "risk": [
+        "日志开销"
+      ],
+      "mitigation": [
+        "采样与等级控制"
+      ],
+      "techSpec": "pino-http serializers；X-Request-Id 响应头回传。",
+      "testPlan": [
+        "并发压测下不阻塞",
+        "敏感字段脱敏"
+      ],
+      "metrics": {
+        "structuredLogCoverage": 1,
+        "logVolume": "可控"
+      },
+      "aiPromptSuggestion": "接入 pino 与请求 ID 中间件，输出示例日志与单测。"
+    },
+    {
+      "id": "BE-SEC-002",
+      "department": "Backend",
+      "title": "JWT 刷新与旋转 + 黑名单",
+      "description": "实现 Access(15m)+Refresh(7d)；Refresh 旋转并写入 Redis 黑名单；Cookie HttpOnly+Secure。",
+      "businessValue": "提升会话安全，降低泄露风险。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "BE-Auth",
+      "dependencies": ["BE-SEC-001", "BE-CFG-001"],
+      "deliverables": [
+        "backend/src/services/token.service.ts",
+        "backend/src/routes/auth.route.ts"
+      ],
+      "acceptanceCriteria": [
+        "旋转后旧 Refresh 立即失效",
+        "并发刷新仅一条成功"
+      ],
+      "risk": [
+        "跨域 Cookie 配置错误"
+      ],
+      "mitigation": [
+        "sameSite/secure 明确文档"
+      ],
+      "techSpec": "jti 黑名单；withLock 防并发。",
+      "testPlan": [
+        "并发刷新/盗用用例"
+      ],
+      "metrics": {
+        "stolenTokenAccepted": 0,
+        "refreshSuccessRate": 0.99
+      },
+      "aiPromptSuggestion": "实现 tokenService 的 sign/verify/rotate 与 Redis 黑名单，并写并发刷新测试。"
+    },
+    {
+      "id": "BE-COS-001",
+      "department": "Backend",
+      "title": "COS 直传（STS）后端接口与策略",
+      "description": "提供 /admin/uploads/sts 返回临时凭证与策略，限制路径/大小/MIME；用于轮播/素材上传。",
+      "businessValue": "前端无中转，稳定高效。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "BE-Content",
+      "dependencies": [],
+      "deliverables": [
+        "backend/src/routes/admin/uploads.route.ts",
+        "backend/src/services/cos-sts.service.ts"
+      ],
+      "acceptanceCriteria": [
+        "直传成功并可预览",
+        "越权类型被拒绝"
+      ],
+      "risk": [
+        "策略过宽导致滥用"
+      ],
+      "mitigation": [
+        "前缀/类型白名单",
+        "限流"
+      ],
+      "techSpec": "STS 时效 10 分钟；回调校验签名。",
+      "testPlan": [
+        "IT：上传/预览",
+        "风控：异常类型拒绝"
+      ],
+      "metrics": {
+        "uploadSuccess": 0.99,
+        "policyLeaks": 0
+      },
+      "aiPromptSuggestion": "实现 COS STS 发放与策略限制，并写集成测试。"
+    }
+  ],
+  "Frontend": [
+    {
+      "id": "FE-SHL-001",
+      "department": "Frontend",
+      "title": "/admin 框架与 RBAC 菜单消费 /ui/menus",
+      "description": "Next.js 14 App Router + AntD 构建管理台外壳，从 /ui/menus 渲染菜单/权限，敏感项隐藏。",
+      "businessValue": "前端完全由后端驱动排列功能。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "FE-Admin",
+      "dependencies": ["BE-UI-001"],
+      "deliverables": [
+        "frontend/app/admin/layout.tsx",
+        "frontend/lib/api/ui.ts"
+      ],
+      "acceptanceCriteria": [
+        "不同角色菜单差异可见",
+        "无权限按钮不可见"
+      ],
+      "risk": [
+        "菜单缓存不一致"
+      ],
+      "mitigation": [
+        "缓存版本与失效广播"
+      ],
+      "techSpec": "AntD Layout + Sider；SWR 拉取 /ui/menus。",
+      "testPlan": [
+        "RTL：角色快照",
+        "E2E：不同账号对比"
+      ],
+      "metrics": {
+        "menuMismatch": 0,
+        "renderP95Ms": 50
+      },
+      "aiPromptSuggestion": "实现 /admin 外壳，调用 /ui/menus 渲染动态菜单与权限控制。"
+    },
+    {
+      "id": "FE-PRV-001",
+      "department": "Frontend",
+      "title": "Provider 管理页（列表/抽屉编辑/测试连接）",
+      "description": "AntD Table + Drawer + Form；敏感字段掩码展示；“测试连接”按钮调用后端。",
+      "businessValue": "快速管理与验活供应商。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["BE-PRV-002", "FE-SHL-001"],
+      "deliverables": [
+        "frontend/app/admin/providers/page.tsx",
+        "frontend/app/admin/providers/[id]/edit.tsx"
+      ],
+      "acceptanceCriteria": [
+        "CRUD 与测试连接可用",
+        "错误反馈清晰"
+      ],
+      "risk": [
+        "掩码误显示"
+      ],
+      "mitigation": [
+        "仅后端解密，前端不存敏感值"
+      ],
+      "techSpec": "表单校验 + Result 提示；SWR 与乐观更新。",
+      "testPlan": [
+        "RTL：校验与交互",
+        "E2E：完整流转"
+      ],
+      "metrics": {
+        "formErrorRate": 0.02,
+        "testLatencyMs": 200
+      },
+      "aiPromptSuggestion": "实现 Provider 列表与编辑抽屉、测试连接交互，掩码敏感字段。"
+    },
+    {
+      "id": "FE-MCP-001",
+      "department": "Frontend",
+      "title": "MCP 端点管理与工具发现 UI",
+      "description": "列表/创建/编辑/发现/一键测试；工具 Schema 动态表单渲染；校验高亮未定义变量。",
+      "businessValue": "MCP 工具的可视化配置与调试。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["BE-MCP-001", "FE-SHL-001"],
+      "deliverables": [
+        "frontend/app/admin/mcp/page.tsx",
+        "frontend/components/flow/NodeInspector.tsx"
+      ],
+      "acceptanceCriteria": [
+        "discover 列表/测试可用",
+        "参数校验即时提示"
+      ],
+      "risk": [
+        "Schema 差异大"
+      ],
+      "mitigation": [
+        "Zod 动态生成表单"
+      ],
+      "techSpec": "AntD Form + 动态字段；红框标记未绑定变量。",
+      "testPlan": [
+        "RTL：Schema 驱动表单",
+        "E2E：一键测试"
+      ],
+      "metrics": {
+        "discoverFailRate": 0.02,
+        "saveP95Ms": 80
+      },
+      "aiPromptSuggestion": "实现 MCP 管理页与工具发现/测试 UI，按 Zod Schema 动态渲染表单。"
+    },
+    {
+      "id": "FE-FTR-001",
+      "department": "Frontend",
+      "title": "Feature 向导 Step4：预览与发布（试跑）",
+      "description": "展示表单预览与流程图缩略图；支持一键试跑与发布，发布后触发缓存失效。",
+      "businessValue": "两步完成交付：测试→发布→前台可见。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Admin",
+      "dependencies": ["FE-SHL-001", "BE-API-001", "BE-CFG-002"],
+      "deliverables": [
+        "frontend/app/admin/features/new/Step4Publish.tsx"
+      ],
+      "acceptanceCriteria": [
+        "试跑可出结果",
+        "发布成功后前台可见"
+      ],
+      "risk": [
+        "流程不合法导致发布失败"
+      ],
+      "mitigation": [
+        "发布前进行拓扑合法性校验"
+      ],
+      "techSpec": "SSE 订阅试跑进度；发布调用 /admin/features 与 cfg:invalidate。",
+      "testPlan": [
+        "E2E：从创建到发布",
+        "回归：重复发布"
+      ],
+      "metrics": {
+        "publishSuccess": 0.99,
+        "runP95Ms": 300
+      },
+      "aiPromptSuggestion": "实现 Step4 预览/试跑/发布页面，走统一推理 API 与回滚/失效链路。"
+    },
+    {
+      "id": "FE-CNT-001",
+      "department": "Frontend",
+      "title": "内容管理：公告/轮播/COS 上传与拖拽排序",
+      "description": "公告 CRUD + 定时上下线；轮播 COS 直传（STS）+ React DnD 排序；前台组件消费。",
+      "businessValue": "搭建前台营销与运营基础能力。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "FE-Content",
+      "dependencies": ["BE-COS-001"],
+      "deliverables": [
+        "frontend/app/admin/announcements/page.tsx",
+        "frontend/app/admin/banners/page.tsx"
+      ],
+      "acceptanceCriteria": [
+        "直传成功并预览",
+        "排序/上下线即刻生效"
+      ],
+      "risk": [
+        "素材过大影响体验"
+      ],
+      "mitigation": [
+        "压缩与尺寸限制"
+      ],
+      "techSpec": "AntD Upload + STS；拖拽排序保存 sort_order。",
+      "testPlan": [
+        "RTL：排序交互",
+        "E2E：上传→预览"
+      ],
+      "metrics": {
+        "uploadP95Ms": 800,
+        "sortPersistOk": true
+      },
+      "aiPromptSuggestion": "实现公告/轮播管理与 COS 直传、拖拽排序、定时上下线 UI。"
+    }
+  ],
+  "QA": [
+    {
+      "id": "QA-E2E-001",
+      "department": "QA",
+      "title": "关键路径 E2E：新建 Feature→试跑→发布→前台可见",
+      "description": "Playwright 端到端自动化，覆盖从创建到发布与前台展示；产出视频与截图。",
+      "businessValue": "用例保障核心闭环交付质量。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "QA-Automation",
+      "dependencies": ["FE-FTR-001", "BE-API-001", "BE-CFG-002"],
+      "deliverables": [
+        "tests/e2e/feature-create.spec.ts"
+      ],
+      "acceptanceCriteria": [
+        "稳定环境通过率 100%",
+        "失败出具截图/视频"
+      ],
+      "risk": [
+        "依赖外部 Provider 波动"
+      ],
+      "mitigation": [
+        "Mock 模式与真实模式切换"
+      ],
+      "techSpec": "登录→创建→表单/流程→试跑→发布→前台校验。",
+      "testPlan": [
+        "多数据集",
+        "多角色账号"
+      ],
+      "metrics": {
+        "passRate": 1,
+        "flakeRate": 0.05
+      },
+      "aiPromptSuggestion": "用 Playwright 写端到端脚本，产出录像与失败时截图。"
+    },
+    {
+      "id": "QA-API-001",
+      "department": "QA",
+      "title": "统一推理 API 契约测试（SSE/错误帧）",
+      "description": "合约测试 Chat/Completions SSE：事件序、尾帧错误、超时/重试语义。",
+      "businessValue": "避免前端/流程引擎依赖不一致。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "QA-Platform",
+      "dependencies": ["BE-API-001"],
+      "deliverables": [
+        "tests/contract/ai-sse.spec.ts"
+      ],
+      "acceptanceCriteria": [
+        "事件序与文档一致",
+        "异常统一格式"
+      ],
+      "risk": [
+        "不同供应商行为差异"
+      ],
+      "mitigation": [
+        "以适配层统一格式"
+      ],
+      "techSpec": "supertest + eventsource-parser；注入超时/断线场景。",
+      "testPlan": [
+        "三种异常注入",
+        "重试覆盖"
+      ],
+      "metrics": {
+        "contractBreak": 0,
+        "coverage": 0.85
+      },
+      "aiPromptSuggestion": "写 SSE 合约测试，覆盖正常/异常/超时场景，断言尾帧。"
+    },
+    {
+      "id": "QA-CFG-001",
+      "department": "QA",
+      "title": "缓存与快照一致性测试（多进程）",
+      "description": "在 PM2 多进程下验证 cfg:invalidate 广播后各进程 1s 内一致，失败用例记录。",
+      "businessValue": "保证“后端排版”改动秒级生效。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "QA-Platform",
+      "dependencies": ["BE-CFG-002"],
+      "deliverables": [
+        "tests/integration/cache-invalidate.spec.ts"
+      ],
+      "acceptanceCriteria": [
+        "1s 内所有进程命中新值",
+        "无误杀其他键"
+      ],
+      "risk": [
+        "订阅丢线"
+      ],
+      "mitigation": [
+        "重连与批量合并广播"
+      ],
+      "techSpec": "spawn 多进程模拟；延迟与命中率度量。",
+      "testPlan": [
+        "高频变更",
+        "异常重连"
+      ],
+      "metrics": {
+        "invalidationMs": 200,
+        "staleRead": 0
+      },
+      "aiPromptSuggestion": "实现多进程一致性 IT，度量失效延迟与正确性。"
+    }
+  ],
+  "SRE-DevOps": [
+    {
+      "id": "SRE-OTEL-001",
+      "department": "SRE-DevOps",
+      "title": "OpenTelemetry + Prometheus 指标",
+      "description": "接入 OTEL（HTTP/MySQL/Redis/BullMQ 自动注入），/metrics 暴露直方图时延与队列指标；Grafana 模板。",
+      "businessValue": "可观测与容量规划基础。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "SRE-Obs",
+      "dependencies": ["BE-LOG-001"],
+      "deliverables": [
+        "backend/src/otel.ts",
+        "ops/grafana/dashboard.json"
+      ],
+      "acceptanceCriteria": [
+        "路由/外部依赖有 Trace",
+        "/metrics 可采集"
+      ],
+      "risk": [
+        "采样率过高开销大"
+      ],
+      "mitigation": [
+        "生产 1% 起步，可调"
+      ],
+      "techSpec": "prom-client 直方图/计数器/Gauge；Jaeger/Tempo 导出。",
+      "testPlan": [
+        "压测下正常上报",
+        "Trace 可串联 requestId"
+      ],
+      "metrics": {
+        "traceCoverage": 0.8,
+        "metricsScrapeOk": 1
+      },
+      "aiPromptSuggestion": "初始化 OTEL 与 prom-client，输出 Grafana 看板 JSON 与集成样例。"
+    },
+    {
+      "id": "SRE-CI-001",
+      "department": "SRE-DevOps",
+      "title": "CI/CD：Lint+UT+IT+E2E 与容器镜像构建",
+      "description": "GitHub Actions：分阶段执行 Lint/UT/IT/E2E，构建镜像并推送；生成变更日志。",
+      "businessValue": "持续交付、降低回归。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "SRE-Platform",
+      "dependencies": ["QA-E2E-001"],
+      "deliverables": [
+        ".github/workflows/ci.yml",
+        "Dockerfile"
+      ],
+      "acceptanceCriteria": [
+        "PR 必须通过四套测试",
+        "镜像可部署"
+      ],
+      "risk": [
+        "E2E 波动导致阻塞"
+      ],
+      "mitigation": [
+        "重试与分层缓存"
+      ],
+      "techSpec": "Node 版本锁定；缓存依赖；并行矩阵。",
+      "testPlan": [
+        "故意引入错误验证阻断",
+        "发布分支自动构建"
+      ],
+      "metrics": {
+        "ciSuccessRate": 0.95,
+        "meanPipelineMin": 15
+      },
+      "aiPromptSuggestion": "写 CI 配置：分步跑 Lint/UT/IT/E2E，成功后构建并推送镜像。"
+    }
+  ]
+}
+```
+
+---
+
+### 说明与对齐
+
+* 上面各模块与验收标准**与您现有文档一致**（缓存/快照/广播、流程/向导/发布、MCP/RAG/Prompt/内容/COS…），可以直接复用你已有的代码路径与命名约定。
+* 错误处理/日志/监控/限流/幂等/游标分页等工程底座**采用你后端优化文件的原则**，保证 P95 时延、错误收敛与可回滚性。
+
+> 需要我把这些任务卡导出为 **YAML** 或拆成 **单仓/多仓的 issue 模板**，或把 **OpenAPI（yaml）**、**Knex 迁移骨架**与 **前端页面骨架**一并生成吗？我可以直接附上对应文件，方便你“一键丢给 Codex 跑”。
+
+
+下面这份交付物把**你现有后端重构计划 + 自研CMS目标 + BuildingAI（FastBuildAI）侧车集成**合并为一套可直接执行的开发计划。形式全部采用你们习惯的「**任务卡**」规范，**明确角色分工（后端/前端/测试/运维/安全）**、依赖关系、技术规格与**可复制给 Codex 的 aiPromptSuggestion**。
+本文所有 P0/P1 优先级和 18 条必做方案，均来自你在《GPT5提问-后端架构重构方案.txt》中列出的清单；同时吸纳了《后端优化回答.md》中给出的数据库/缓存/并发/日志监控等实现细则与任务卡写法。 
+
+---
+
+## 一、关键架构决策（ADR）
+
+1. **前后端形态**
+
+* 前端维持 **Next.js 14 + React + AntD**；不搬用 BuildingAI 的 Nuxt 前端，仅**读取后端“功能配置（Features）”动态渲染菜单与页面**。
+* 后端维持 **Express + Knex + MySQL 8 + Redis**；**引入 BuildingAI 作为“侧车微服务”**（仅服务端），用于**多厂商模型网关、MCP 工具调用、（可选）知识库**。
+* 侧车通过适配层暴露统一接口 `/ai/chat|/ai/completions|/ai/tools/run`；数据库指向你现有 MySQL，Redis 使用独立 DB 索引/Key 前缀。
+
+2. **P0 问题一次性兜底**（严格对应你文档中的 P0/P1 列表）
+
+* **Saga + 预扣配额 + 事务/幂等**（防“扣了不回滚”）；
+* **双 Token（Access+Refresh）+ 刷新旋转 + 黑名单**；
+* **Knex 连接池 + EXPLAIN/ANALYZE + 游标分页**；
+* **BullMQ 队列 + p-limit 并发阈值 + 断路器**；
+* **COS 生命周期 + 中间文件清理**；
+* **统一认证中间件（管理员与用户）**；
+* **WebSocket 推送替代高频轮询**；
+* **统一错误码与 AppError**、**Swagger/OpenAPI**、**监控告警** 等。以上均为你文档强制项。
+
+3. **“后端排好前端功能”的执行路径**
+
+* 定义后端「**Feature Catalog**」与「**Provider/MCP/Prompt 模板**」三类配置表（Knex 迁移），前端仅渲染这些配置即可出业务；
+* 配置改动走**快照-发布-回滚**与**Redis Pub/Sub 失效**，保障一致性与灰度。这套写法与你在《后端优化回答.md》中的任务卡风格与缓存策略完全一致。
+
+---
+
+## 二、里程碑 & 排期（按周）
+
+* **Week 1（P0 地基）**：Saga 预扣配额、双 Token、统一错误/日志/请求 ID、连接池与索引、游标分页、配置缓存与失效。 
+* **Week 2（P0 并发与外部依赖）**：BullMQ 队列化、p-limit 并发阈值、Provider 熔断/降级、WebSocket 推送、COS 生命周期清理、Swagger。
+* **Week 3（P0 完成 + P1 起步）**：微信登录与统一登录机制、支付 SDK 接入、Referrer 校验与邀请码池、用户资料补全、敏感信息加密与密钥管理。
+* **Week 4（P1 强化）**：监控告警（OTEL/Prom/Sentry）、任务统计聚合表、RBAC、接口级限流与风控。
+* **Week 5（BuildingAI 融合）**：侧车部署与适配层、Provider/MCP/Prompt Center 对接、Feature Catalog 打通、灰度/快照回滚与前端动态渲染联调。
+
+> 备注：各里程碑的具体任务卡与依赖见下文「任务卡 JSON」。所有 P0 任务出现在 Week1–3 内闭环，严格符合你文档“优先解决 P0”的要求。
+
+---
+
+## 三、任务卡（可直接给 Codex），标准 JSON
+
+> 说明
+>
+> * 每张卡包含：`id, role, title, description, businessValue, priority, difficulty, estimatePersonDay, owner, dependencies, deliverables, acceptanceCriteria, risk, mitigation, techSpec, testPlan, metrics, aiPromptSuggestion`（与《后端优化回答.md》一致的结构和粒度）。
+> * 任务分组：**后端/前端/测试QA/运维SRE/安全**。
+> * 共 **32 张任务卡**，完全覆盖你在「GPT5 专用提问」中列出的 **18 项方案**，并补充了 BuildingAI 侧车集成与 CMS Feature Catalog 所需任务。
+
+```json
+{
+  "后端": [
+    {
+      "id": "BE-QUOTA-001",
+      "role": "Backend",
+      "title": "Saga 预扣配额 + 确认/回滚（事务与幂等）",
+      "description": "实现任务创建时的 Saga：步骤A-预扣配额(locked)，步骤B-提交任务入队，步骤C-任务完成确认(commit)；任何失败触发回滚(release)。所有步骤使用幂等键 taskId，结合 Redis 分布式锁避免重复扣减。",
+      "businessValue": "修复“执行失败但配额已扣”P0致命问题；保证财务一致性。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1.5,
+      "owner": "Core-Service",
+      "dependencies": [],
+      "deliverables": ["quota.service.ts", "quota.repository.ts", "knex migration: quotas_lock", "sequence diagrams (saga.md)"],
+      "acceptanceCriteria": [
+        "并发100次相同taskId仅扣一次",
+        "失败路径均能释放锁定额度",
+        "补偿逻辑在宕机恢复后仍可达成最终一致"
+      ],
+      "risk": ["锁粒度过粗导致吞吐下降", "补偿遗漏"],
+      "mitigation": ["细化到 userId+taskId", "补偿任务定时扫描"],
+      "techSpec": "MySQL: quotas(user_id,remaining,updated_at); 新增 quotas_lock(user_id, task_id, amount, status:locked|committed|released)。Redis 锁 key: lock:quota:{userId}:{taskId} TTL=5s；使用 Lua 原子扣减。",
+      "testPlan": ["Jest 并发测试模拟重复提交", "断电恢复后重放补偿用例"],
+      "metrics": {"duplicateDeduction": 0, "sagaFailureRecoveryMinutes": "<=5"},
+      "aiPromptSuggestion": "实现基于 Express+Knex+Redis 的 Saga 预扣配额模块：提供 lockQuota, commitQuota, releaseQuota 三接口，使用 Lua 脚本原子性保证。编写 Jest 并发测试验证仅扣一次与失败回滚。"
+    },
+    {
+      "id": "BE-AUTH-001",
+      "role": "Backend",
+      "title": "双 Token（Access+Refresh）+ 刷新旋转 + 黑名单",
+      "description": "实现 Access(15m)+Refresh(7d)；刷新时旋转 Refresh 并把旧 jti 放入黑名单（Redis TTL=剩余寿命）；提供 /auth/refresh 路由；支持 HttpOnly+Secure Cookie 与 Bearer 两种模式。",
+      "businessValue": "修复没有刷新与撤销能力的 P0 安全问题。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Auth-Service",
+      "dependencies": [],
+      "deliverables": ["token.service.ts", "auth.controller.ts", "knex migration: tokens_blacklist(optional)"],
+      "acceptanceCriteria": [
+        "刷新后旧 Refresh 立即不可用",
+        "并发刷新仅成功一次",
+        "黑名单命中生效"
+      ],
+      "risk": ["跨域Cookie配置错误", "竞态刷新"],
+      "mitigation": ["SameSite/Domain 配置清单", "用分布式锁保护刷新流程"],
+      "techSpec": "JWT 含 jti/uid/role；Redis 黑名单 key: jwt:blacklist:{jti}；刷新时写入黑名单并签发新对。",
+      "testPlan": ["Supertest 覆盖正常/并发刷新/黑名单", "伪造Token被拒绝"],
+      "metrics": {"refreshSuccessRate": ">=99%", "revokedTokenAccepted": 0},
+      "aiPromptSuggestion": "实现 tokenService(signAccess, signRefresh, rotateRefresh) 与 /auth/refresh 控制器，使用 Redis 记录黑名单；编写并发刷新测试用例。"
+    },
+    {
+      "id": "BE-DB-POOL-001",
+      "role": "Backend",
+      "title": "Knex 连接池与 EXPLAIN/ANALYZE 基线",
+      "description": "为 PM2 进程设置 pool(min=2,max=8)，建立核心SQL的EXPLAIN/ANALYZE基线，导出池指标到 /metrics。",
+      "businessValue": "防止连接耗尽，为索引优化提供依据。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "DB-Team",
+      "dependencies": [],
+      "deliverables": ["db.ts(pool)", "explain-baseline.md", "/metrics 连接池指标"],
+      "acceptanceCriteria": ["高峰无 acquireTimeout", "EXPLAIN 覆盖>90% 高频SQL"],
+      "risk": ["连接过多压垮MySQL"],
+      "mitigation": ["分批放大上限并监控"],
+      "techSpec": "pool:{min:2,max:8,acquireTimeoutMillis:10000,idleTimeoutMillis:30000}；prom-client 导出 inUse/pending。",
+      "testPlan": ["k6 压测观察 pool_pending", "EXPLAIN 截图归档"],
+      "metrics": {"poolTimeouts": 0},
+      "aiPromptSuggestion": "写出 db.ts 连接池初始化、prom-client 指标导出与一个 SQL EXPLAIN/ANALYZE 自动记录脚本。"
+    },
+    {
+      "id": "BE-DB-INDEX-001",
+      "role": "Backend",
+      "title": "核心索引与游标分页（Seek）替换 Offset",
+      "description": "新增 tasks(user_id,status,created_at DESC,id)、tasks(status,created_at DESC,id)、tasks(vendor_task_id UNIQUE) 等索引；列表接口改用(created_at,id)游标。",
+      "businessValue": "P95 查询<80ms；深分页不卡顿。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "DB-Team",
+      "dependencies": ["BE-DB-POOL-001"],
+      "deliverables": ["Knex migration: indexes", "cursor-paging util", "列表接口改造PR"],
+      "acceptanceCriteria": ["列表 P95 < 80ms", "rows examined 下降90%+"],
+      "risk": ["排序不稳定导致遗漏"],
+      "mitigation": ["双字段稳定序+回归测试"],
+      "techSpec": "SQL: WHERE (created_at,id) < (?,?) ORDER BY created_at DESC,id DESC LIMIT ?；Base64 游标。",
+      "testPlan": ["并发翻页不重不漏", "1k页深翻页对比 rows examined"],
+      "metrics": {"listP95Ms": "<=80"},
+      "aiPromptSuggestion": "生成 Knex migration 与 /tasks 列表游标分页示例（Express+Knex），附 Jest 测试。"
+    },
+    {
+      "id": "BE-CACHE-001",
+      "role": "Backend",
+      "title": "配置缓存 + 版本化 + Pub/Sub 失效",
+      "description": "为 feature_definitions/provider_configs 等高频配置实现 Redis Cache-Aside；key=cfg:{feature}:{ver}；更新后发布 config.invalidate 频道使全进程失效。",
+      "businessValue": "配置读DB QPS 下降60%+；变更秒级生效。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Core-Service",
+      "dependencies": [],
+      "deliverables": ["cache.ts(getOrSet)", "pubsub.ts", "变更流程Hook"],
+      "acceptanceCriteria": ["命中率≥85%", "失效延迟≤200ms"],
+      "risk": ["失效丢消息"],
+      "mitigation": ["重连+合并失效"],
+      "techSpec": "TTL=300±60s；stale-while-revalidate；本地LRU 30s；频道：config.invalidate。",
+      "testPlan": ["多进程一致性测试", "变更灰度验证"],
+      "metrics": {"cacheHitRatio": ">=0.85"},
+      "aiPromptSuggestion": "实现 getOrSet 与发布/订阅失效，写两处接入示例：读 feature_definitions、provider_configs。"
+    },
+    {
+      "id": "BE-ASYNC-001",
+      "role": "Backend",
+      "title": "BullMQ 队列化 Pipeline + p-limit 并发阈值",
+      "description": "主链路仅接单排队；Worker 执行图像处理 Pipeline；对外部 Provider 通过 p-limit 控制并发；失败指数退避与死信队列；以 taskId 作为 jobId 保幂等。",
+      "businessValue": "吞吐提升、避免“FORK/JOIN 无并发控制”的 P0 问题。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1.5,
+      "owner": "Core-Service",
+      "dependencies": ["BE-QUOTA-001", "BE-CACHE-001"],
+      "deliverables": ["queue.ts", "workers/pipeline.worker.ts", "limits/provider-limit.ts"],
+      "acceptanceCriteria": ["创建API P95<80ms(排队)", "队列吞吐≥1000/min"],
+      "risk": ["积压导致时延上升"],
+      "mitigation": ["并发动态调参+告警"],
+      "techSpec": "BullMQ Queue/Worker/Scheduler；p-limit 每 Provider 设置并发阈值；失败 attempts=5 expo backoff。",
+      "testPlan": ["回放1万任务", "注入Provider超时观察降级"],
+      "metrics": {"workerThroughput": ">=1000/min", "queueLagSec": "<=60"},
+      "aiPromptSuggestion": "集成 bullmq + p-limit，迁移旧同步流程到 processor；演示并发阈值、退避与死信。"
+    },
+    {
+      "id": "BE-CB-001",
+      "role": "Backend",
+      "title": "Provider 熔断/降级（opossum）",
+      "description": "为外部AI供应商调用包裹断路器；失败率/超时触发时切换备选Provider或降级画质/排队提示。",
+      "businessValue": "避免雪崩，提升可用性。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Core-Service",
+      "dependencies": ["BE-ASYNC-001"],
+      "deliverables": ["provider-wrapper.ts", "fallback 策略配置"],
+      "acceptanceCriteria": ["宕机时1分钟内仍可有序响应", "断路器状态可观测"],
+      "risk": ["开关震荡"],
+      "mitigation": ["滑动窗口与冷却时间"],
+      "techSpec": "超时2s, 错误率>50%开30s；Prom 指标：circuit_open_count。",
+      "testPlan": ["注入故障并验证熔断与恢复"],
+      "metrics": {"degradedSuccessRate": ">=90%"},
+      "aiPromptSuggestion": "封装 withCircuitBreaker(fn, options)，并给出双Provider FallBack示例。"
+    },
+    {
+      "id": "BE-STORAGE-001",
+      "role": "Backend",
+      "title": "COS 生命周期与中间文件清理",
+      "description": "在 COS 配置生命周期规则（临时/中间/失败产物 3~7天删除），任务完成后只保留最终产物；提供清理脚本与对账。",
+      "businessValue": "控制云存储成本（P0）。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Infra",
+      "dependencies": [],
+      "deliverables": ["cos-lifecycle.md", "cleanup.js(cron)", "对账报表"],
+      "acceptanceCriteria": ["中间产物 100% 按期清理", "月度成本下降"],
+      "risk": ["误删结果文件"],
+      "mitigation": ["标签/前缀分层与白名单"],
+      "techSpec": "对象Key前缀：tmp/, stage/, final/；Tag: kind=temp|stage|final；Cron 每日清理。",
+      "testPlan": ["沙箱桶演练与回滚"],
+      "metrics": {"cosCostChange": "<0"},
+      "aiPromptSuggestion": "编写 Node 脚本：扫描 tmp/ 与 Tag=temp 的对象并删除；输出删除日志。附 COS 生命周期策略 YAML。"
+    },
+    {
+      "id": "BE-AUTH-UNI-001",
+      "role": "Backend",
+      "title": "统一认证中间件（管理员/用户）",
+      "description": "合并两套认证中间件；JWT 内含 role；所有路由声明权限要求；管理员路由强制二次校验。",
+      "businessValue": "修复“管理员权限校验失效”的 P0。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Auth-Service",
+      "dependencies": ["BE-AUTH-001"],
+      "deliverables": ["auth.middleware.ts", "role.guard.ts", "路由装饰器"],
+      "acceptanceCriteria": ["任意越权请求403", "错误体统一"],
+      "risk": ["遗漏保护路由"],
+      "mitigation": ["路由扫描校验脚本"],
+      "techSpec": "装饰器 @RequireRole('admin')；AppError(code, httpStatus)。",
+      "testPlan": ["10+权限组合白盒测试"],
+      "metrics": {"unauthorizedAccess": 0},
+      "aiPromptSuggestion": "实现 requireRole 与统一 auth 中间件，提供三条示例路由（公开/用户/管理员）。"
+    },
+    {
+      "id": "BE-WS-001",
+      "role": "Backend",
+      "title": "WebSocket 推送任务进度（替代高频轮询）",
+      "description": "接入 Socket.IO；任务状态变化时服务端推送事件；前端订阅 userId + taskId 房间。",
+      "businessValue": "降低DB与API轮询压力（P1->提前做）。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Core-Service",
+      "dependencies": ["BE-ASYNC-001"],
+      "deliverables": ["ws.gateway.ts", "事件协议文档", "前后端Demo"],
+      "acceptanceCriteria": ["轮询频率下降80%+", "消息送达率≥99%"],
+      "risk": ["连接数量过多"],
+      "mitigation": ["心跳与断线重连策略"],
+      "techSpec": "命名空间 /ws；房间 user:{id}；事件 task.update。",
+      "testPlan": ["并发1k连接稳定性测试"],
+      "metrics": {"pollQpsDrop": ">=80%"},
+      "aiPromptSuggestion": "集成 Socket.IO，实现 task.update 推送，写一个前端 minimal 客户端示例。"
+    },
+    {
+      "id": "BE-DOC-001",
+      "role": "Backend",
+      "title": "Swagger/OpenAPI 自动文档",
+      "description": "为所有公开 API 生成 OpenAPI；提供 Swagger UI 与 JSON 导出；与前端 typed client 对齐。",
+      "businessValue": "补齐文档缺失（P1）。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Platform",
+      "dependencies": [],
+      "deliverables": ["openapi.json", "swagger-ui 路径", "typed client 生成脚本"],
+      "acceptanceCriteria": ["公开接口覆盖≥95%", "CI 校验通过"],
+      "risk": ["描述与实现漂移"],
+      "mitigation": ["CI 生成校验"],
+      "techSpec": "swagger-jsdoc + swagger-ui-express；openapi-typescript 生成client。",
+      "testPlan": ["随机抽查10条接口契合"],
+      "metrics": {"docCoverage": ">=95%"},
+      "aiPromptSuggestion": "根据现有路由自动生成 OpenAPI，并用 openapi-typescript 生成前端 typed client。"
+    },
+    {
+      "id": "BE-PAY-001",
+      "role": "Backend",
+      "title": "支付 SDK 接入（微信支付/支付宝）+ 退款",
+      "description": "接入官方 SDK，统一下单/回调/退款流程；签名、幂等与安全对账；订单状态机。",
+      "businessValue": "支撑商业闭环（P0）。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 2,
+      "owner": "Billing",
+      "dependencies": [],
+      "deliverables": ["payment.service.ts", "webhook.controller.ts", "orders 表与状态机"],
+      "acceptanceCriteria": ["真实支付可用", "退款流程闭环"],
+      "risk": ["签名错误", "回调安全"],
+      "mitigation": ["白名单IP/重放防护", "签名双验"],
+      "techSpec": "订单幂等键 out_trade_no；回调验签；对账日报。",
+      "testPlan": ["沙箱支付与退款", "重放攻击模拟"],
+      "metrics": {"chargeSuccessRate": ">=98%"},
+      "aiPromptSuggestion": "集成微信/支付宝官方SDK，完成统一下单、回调、退款；输出对账脚本与签名校验代码。"
+    },
+    {
+      "id": "BE-WX-LOGIN-001",
+      "role": "Backend",
+      "title": "微信登录（code2Session + OpenID 管理）",
+      "description": "小程序登录：wx.login=>code2Session 获取 openid/session_key；建立 user<->openid 绑定；补齐资料。",
+      "businessValue": "小程序上架硬性要求（P0）。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Auth-Service",
+      "dependencies": ["BE-AUTH-001"],
+      "deliverables": ["wechat.controller.ts", "users_oauth 表", "文档：小程序配置"],
+      "acceptanceCriteria": ["成功登录并绑定账号", "防止多账号绑定冲突"],
+      "risk": ["绑定策略复杂"],
+      "mitigation": ["一对一/换绑流程"],
+      "techSpec": "users_oauth(provider='wechat', openid unique)",
+      "testPlan": ["沙箱环境联调", "异常码处理"],
+      "metrics": {"wxLoginSuccessRate": ">=98%"},
+      "aiPromptSuggestion": "实现 /auth/wechat/callback，完成 code2Session、用户绑定与 JWT 签发流程。"
+    },
+    {
+      "id": "BE-LOGIN-UNI-001",
+      "role": "Backend",
+      "title": "统一登录机制（密码/验证码/微信 + 忘记密码）",
+      "description": "把密码登录、短信验证码、微信登录统一为一套入口与用户策略；支持忘记密码和风控阈值。",
+      "businessValue": "修复机制混乱（P0/P1）。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Auth-Service",
+      "dependencies": ["BE-WX-LOGIN-001"],
+      "deliverables": ["login.controller.ts", "风控策略配置"],
+      "acceptanceCriteria": ["三种登录路径统一返回体", "异常提示一致"],
+      "risk": ["风控误伤"],
+      "mitigation": ["白名单与灰度"],
+      "techSpec": "错误次数限制+临时封禁；短信冷却。",
+      "testPlan": ["撞库模拟", "忘记密码流程"],
+      "metrics": {"loginErrorRate": "可观测"},
+      "aiPromptSuggestion": "统一登录控制器，封装三种模式并输出统一响应；实现忘记密码与风控策略。"
+    },
+    {
+      "id": "BE-ERR-001",
+      "role": "Backend",
+      "title": "统一错误码 + AppError + i18n",
+      "description": "建立错误码表（2xxx业务/5xxx系统）；AppError 输出 {code,message,requestId}；多语言消息模板。",
+      "businessValue": "前端可识别与归类（P1）。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Platform",
+      "dependencies": [],
+      "deliverables": ["error-codes.json", "AppError 类", "i18n 资源"],
+      "acceptanceCriteria": ["覆盖≥95% 核心接口"],
+      "risk": ["过度细化"],
+      "mitigation": ["按模块分组编号"],
+      "techSpec": "TASKS_2001 等命名；en/zh-CN 双语。",
+      "testPlan": ["快照测试多语言输出"],
+      "metrics": {"mappedErrorRate": ">=95%"},
+      "aiPromptSuggestion": "生成 error-codes.json 与 AppError；在两个路由中演示抛出与输出体。"
+    },
+    {
+      "id": "BE-KB-001",
+      "role": "Backend",
+      "title": "Feature Catalog + Prompt 模板 + Provider/MCP 配置表",
+      "description": "建立 features、prompt_templates、provider_endpoints、provider_secrets、mcp_endpoints 等表，作为前端动态渲染与后端路由的唯一来源；支持快照/回滚。",
+      "businessValue": "“后端排好前端功能”的关键底座。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1.5,
+      "owner": "Core-Service",
+      "dependencies": ["BE-CACHE-001"],
+      "deliverables": ["Knex migrations x5", "feature.service.ts CRUD", "发布与快照逻辑"],
+      "acceptanceCriteria": ["前端仅靠 /features 即可出页面"],
+      "risk": ["误发布"],
+      "mitigation": ["快照回滚与只读模式"],
+      "techSpec": "features(id,key,name,enabled,menu,meta_json,version)；snapshots(feature_key,version,blob).",
+      "testPlan": ["快照创建/回滚e2e"],
+      "metrics": {"frontendDrivenByConfig": true},
+      "aiPromptSuggestion": "编写上述 5 张表的 Knex migration 与 features CRUD；实现快照发布/回滚 API。"
+    },
+    {
+      "id": "BE-BAI-ADAPT-001",
+      "role": "Backend",
+      "title": "BuildingAI 侧车适配层（Chat/Completions/Tools）",
+      "description": "在 Express BFF 暴露 /ai/* 接口，内部调用 BuildingAI 侧车（仅Server）；对接 Provider 聚合与 MCP 工具调用，统一 SSE 流与错误体。",
+      "businessValue": "一周内具备多模型/多厂商能力与 MCP 调用，不换前端。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Core-Service",
+      "dependencies": ["BE-KB-001", "BE-ASYNC-001"],
+      "deliverables": ["ai.controller.ts", "bai.adapter.ts", "SSE 工具"],
+      "acceptanceCriteria": ["SSE 稳定输出", "错误码与本系统一致"],
+      "risk": ["侧车 Beta 稳定性"],
+      "mitigation": ["适配层隔离/回退到直连Provider"],
+      "techSpec": "POST /ai/chat|/completions|/tools/run；SSE event:data。",
+      "testPlan": ["连通多个Provider与一个MCP工具"],
+      "metrics": {"providerSwitchLatencyMs": "<=200"},
+      "aiPromptSuggestion": "实现 /ai/* 路由与 SSE 输出；封装一个 BuildingAI 客户端（baseURL/keys），并提供两家Provider与一个 MCP 的连通测试。"
+    },
+    {
+      "id": "BE-INVITE-001",
+      "role": "Backend",
+      "title": "邀请码生成池 + 冲突上限",
+      "description": "用 Snowflake+Base62 预生成邀请码池；消费时 O(1) 取用；冲突达到上限报警；避免无限循环。",
+      "businessValue": "修复高并发下卡死的 P1 问题。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Platform",
+      "dependencies": [],
+      "deliverables": ["invite.service.ts", "预生成脚本", "监控指标"],
+      "acceptanceCriteria": ["冲突率<1e-6", "无死循环"],
+      "risk": ["池耗尽"],
+      "mitigation": ["低水位预警自动补货"],
+      "techSpec": "表 invites_pool(code,status)",
+      "testPlan": ["并发生成与消费测试"],
+      "metrics": {"conflictRate": "<1e-6"},
+      "aiPromptSuggestion": "实现预生成邀请码池脚本与领取API，加入冲突上限与报警。"
+    },
+    {
+      "id": "BE-USER-001",
+      "role": "Backend",
+      "title": "用户资料补全（昵称/头像/性别等）+ 两步注册",
+      "description": "扩展 users 表字段；首次登录仅建账号，后续引导完善资料（前端向导）。",
+      "businessValue": "支持社区功能（P1）。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Auth-Service",
+      "dependencies": [],
+      "deliverables": ["knex migration: users_ext", "profile.controller.ts"],
+      "acceptanceCriteria": ["资料更新成功并校验"],
+      "risk": ["头像存储安全"],
+      "mitigation": ["COS 白名单与校验"],
+      "techSpec": "users(nick,avatar,gender,bio)",
+      "testPlan": ["字段校验与存储安全测试"],
+      "metrics": {"profileCompletionRate": "可观测"},
+      "aiPromptSuggestion": "扩展 users 表并实现 profile CRUD。"
+    },
+    {
+      "id": "BE-REF-001",
+      "role": "Backend",
+      "title": "推荐人(referrer)有效性校验",
+      "description": "注册前校验 referrer_id 或邀请码是否存在且有效，写入日志与反作弊。",
+      "businessValue": "避免脏数据与刷子（P1）。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Auth-Service",
+      "dependencies": ["BE-INVITE-001"],
+      "deliverables": ["referral.service.ts", "审计日志表"],
+      "acceptanceCriteria": ["无无效referrer写入"],
+      "risk": ["链路增加时延"],
+      "mitigation": ["缓存热referrer"],
+      "techSpec": "审计表 referral_audit",
+      "testPlan": ["无效/过期用例校验"],
+      "metrics": {"invalidReferralWrites": 0},
+      "aiPromptSuggestion": "实现推荐人校验与审计日志写入；给出缓存策略。"
+    },
+    {
+      "id": "BE-KMS-001",
+      "role": "Backend",
+      "title": "敏感信息加密与密钥管理",
+      "description": "对身份证等敏感字段进行 AES-256-GCM 应用层加密；KMS/环境变量密钥管理；字段级脱敏输出。",
+      "businessValue": "满足合规与最小暴露原则（P1）。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Security",
+      "dependencies": [],
+      "deliverables": ["crypto.service.ts", "字段映射与DTO脱敏"],
+      "acceptanceCriteria": ["明文不可落库", "DTO 无敏感字段外泄"],
+      "risk": ["密钥泄露"],
+      "mitigation": ["轮换/分级权限"],
+      "techSpec": "env KMS_MASTER_KEY；每条记录随机IV+AuthTag。",
+      "testPlan": ["加解密回归", "轮换演练"],
+      "metrics": {"plaintextIncidents": 0},
+      "aiPromptSuggestion": "实现 encrypt/decrypt 与字段级脱敏 toPublicDTO；写轮换脚本示例。"
+    }
+  ],
+  "前端": [
+    {
+      "id": "FE-FEATURE-001",
+      "role": "Frontend",
+      "title": "基于 Feature Catalog 的动态菜单/路由渲染",
+      "description": "Next.js Admin 从 /admin/features 拉取配置，动态渲染菜单、权限与页面骨架；不再硬编码功能入口。",
+      "businessValue": "实现“后端排好前端功能”。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Admin-UI",
+      "dependencies": ["BE-KB-001"],
+      "deliverables": ["featuresStore.ts", "DynamicMenu.tsx", "权限指令"],
+      "acceptanceCriteria": ["改配置即改菜单", "无代码发布新功能入口"],
+      "risk": ["配置结构变动"],
+      "mitigation": ["版本字段与兼容解析"],
+      "techSpec": "AntD Menu + 权限指令；路由守卫读取 role。",
+      "testPlan": ["菜单更新回显<1s", "权限菜单不泄露"],
+      "metrics": {"menuFromConfig": true},
+      "aiPromptSuggestion": "实现 React 动态菜单组件，读取 /admin/features 并渲染；写两个示例 Feature。"
+    },
+    {
+      "id": "FE-PROVIDER-UI-001",
+      "role": "Frontend",
+      "title": "Provider 管理界面（抽屉表单 + 测试连接）",
+      "description": "表格展示/筛选 Provider；抽屉编辑 BaseURL/Key/限流；点击“测试连接”直连后端适配层。",
+      "businessValue": "低成本切换多厂商模型。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Admin-UI",
+      "dependencies": ["BE-KB-001", "BE-BAI-ADAPT-001"],
+      "deliverables": ["ProviderList.tsx", "ProviderForm.tsx"],
+      "acceptanceCriteria": ["测试连接≤2s回显", "敏感字段掩码"],
+      "risk": ["误露Key"],
+      "mitigation": ["只前端明文展示一次"],
+      "techSpec": "AntD Table/Drawer；/admin/providers,test",
+      "testPlan": ["联通两家Provider", "失败提示规范"],
+      "metrics": {"connectTestLatencyMs": "<=2000"},
+      "aiPromptSuggestion": "实现 Provider 列表/抽屉/测试按钮组件，调用 /admin/providers/test，掩码显示Key。"
+    },
+    {
+      "id": "FE-MCP-UI-001",
+      "role": "Frontend",
+      "title": "MCP 连接管理与工具发现",
+      "description": "MCP 列表/创建/编辑；查询工具清单与一键测试；用于图像处理工具远程调用。",
+      "businessValue": "让后端可插可换工具链。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Admin-UI",
+      "dependencies": ["BE-KB-001", "BE-BAI-ADAPT-001"],
+      "deliverables": ["MCPList.tsx", "MCPDrawer.tsx", "ToolPreview.tsx"],
+      "acceptanceCriteria": ["工具发现<1s回显", "测试结果可复现"],
+      "risk": ["跨域/超时"],
+      "mitigation": ["超时显式提示与重试"],
+      "techSpec": "GET/POST /admin/mcp/*；工具 JSON 展示。",
+      "testPlan": ["发现/测试用例", "超时回退"],
+      "metrics": {"discoverLatencyMs": "<=1000"},
+      "aiPromptSuggestion": "实现 MCP 管理界面（AntD），调用 /admin/mcp/discover 与 /ai/tools/run。"
+    },
+    {
+      "id": "FE-PROMPT-UI-001",
+      "role": "Frontend",
+      "title": "Prompt 模板中心（Monaco + 变量预览）",
+      "description": "模板 CRUD、版本回滚、变量校验与一键试跑（调用 /ai/completions）。",
+      "businessValue": "提升迭代效率。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "Admin-UI",
+      "dependencies": ["BE-KB-001", "BE-BAI-ADAPT-001"],
+      "deliverables": ["PromptCenter.tsx", "Monaco 集成", "试跑 Panel"],
+      "acceptanceCriteria": ["版本回滚可用", "试跑SSE回显稳定"],
+      "risk": ["变量注入错误"],
+      "mitigation": ["变量校验与预览"],
+      "techSpec": "Monaco Editor；SSE 流输出",
+      "testPlan": ["变量缺失/类型错误用例"],
+      "metrics": {"promptTestLatencyMs": "<=3000"},
+      "aiPromptSuggestion": "实现 Prompt 编辑与SSE试跑面板，兼容多模型切换。"
+    }
+  ],
+  "测试QA": [
+    {
+      "id": "QA-SAGA-001",
+      "role": "QA",
+      "title": "Saga/配额幂等与补偿回归套件",
+      "description": "覆盖预扣-提交-确认-回滚四路径；并发重复提交与宕机恢复。",
+      "businessValue": "保障 P0 财务一致性。",
+      "priority": "P0",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "QA",
+      "dependencies": ["BE-QUOTA-001"],
+      "deliverables": ["jest/e2e-saga.spec.ts", "测试数据脚本"],
+      "acceptanceCriteria": ["全部断言通过"],
+      "risk": ["测试数据污染"],
+      "mitigation": ["独立测试库与回滚"],
+      "techSpec": "Jest + Supertest + Docker MySQL",
+      "testPlan": ["并发/断电/补偿三类场景"],
+      "metrics": {"e2ePassRate": "100%"},
+      "aiPromptSuggestion": "编写 Supertest 场景：并发与回滚；注入宕机后恢复再确认。"
+    },
+    {
+      "id": "QA-WS-001",
+      "role": "QA",
+      "title": "WebSocket 推送一致性测试",
+      "description": "比对轮询与推送结果一致；断开重连恢复消息。",
+      "businessValue": "替代轮询的稳定性证明。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "QA",
+      "dependencies": ["BE-WS-001"],
+      "deliverables": ["ws.e2e.spec.ts"],
+      "acceptanceCriteria": ["一致性100%", "重连不丢消息"],
+      "risk": ["时间序引起偶发偏差"],
+      "mitigation": ["引入序列号与重放"],
+      "techSpec": "Socket.IO 客户端模拟",
+      "testPlan": ["断网/重连/压力"],
+      "metrics": {"messageLoss": 0},
+      "aiPromptSuggestion": "用 socket.io-client 写 e2e：订阅房间并校验顺序与完整性。"
+    },
+    {
+      "id": "QA-PERF-001",
+      "role": "QA",
+      "title": "k6 压测：连接池/队列/推送全链路",
+      "description": "模拟 500~1000 并发用户：创建任务→排队→结果推送；指标采集与对比。",
+      "businessValue": "验证容量目标。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "QA",
+      "dependencies": ["BE-DB-POOL-001", "BE-ASYNC-001", "BE-WS-001"],
+      "deliverables": ["k6 脚本", "压测报告"],
+      "acceptanceCriteria": ["API P95<100ms", "Worker 吞吐≥1000/min"],
+      "risk": ["环境不足"],
+      "mitigation": ["夜间压测与采样"],
+      "techSpec": "k6/http/ws；Prom 指标抓取",
+      "testPlan": ["阶梯并发与长稳测试"],
+      "metrics": {"apiP95Ms": "<=100", "workerThroughput": ">=1000/min"},
+      "aiPromptSuggestion": "生成 k6 脚本：登录→创建任务→等待推送；导出 Prom 指标对比。"
+    }
+  ],
+  "运维SRE": [
+    {
+      "id": "SRE-LOG-001",
+      "role": "SRE",
+      "title": "Pino 结构化日志 + 请求ID（AsyncLocalStorage）",
+      "description": "每个请求注入 requestId；日志 JSON 输出并脱敏；响应头回传 X-Request-Id。",
+      "businessValue": "排障与关联追踪。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "SRE",
+      "dependencies": [],
+      "deliverables": ["logger.ts", "request-id.middleware.ts"],
+      "acceptanceCriteria": ["100%请求带 requestId"],
+      "risk": ["上下文丢失"],
+      "mitigation": ["关键路径手动传递兜底"],
+      "techSpec": "pino + pino-http；AsyncLocalStorage",
+      "testPlan": ["并发不串线测试"],
+      "metrics": {"requestIdCoverage": "100%"},
+      "aiPromptSuggestion": "接入 pino-http 与 AsyncLocalStorage；演示跨层日志同一 requestId。"
+    },
+    {
+      "id": "SRE-OTEL-001",
+      "role": "SRE",
+      "title": "OpenTelemetry Tracing + Prometheus 指标 + Sentry",
+      "description": "HTTP/MySQL/Redis/BullMQ 自动注入 Trace；/metrics 暴露直方图；接入 Sentry 错误聚合。",
+      "businessValue": "可观测性三件套。",
+      "priority": "P1",
+      "difficulty": "M",
+      "estimatePersonDay": 1,
+      "owner": "SRE",
+      "dependencies": ["SRE-LOG-001"],
+      "deliverables": ["otel.ts", "/metrics", "Sentry 初始化"],
+      "acceptanceCriteria": ["Trace 覆盖≥80%", "/metrics 可抓取"],
+      "risk": ["采样开销"],
+      "mitigation": ["采样率1%起步"],
+      "techSpec": "OTEL SDK, prom-client, Sentry SDK",
+      "testPlan": ["压测下指标稳定", "错误事件入库"],
+      "metrics": {"traceCoverage": ">=0.8", "alertLatencySec": "<=60"},
+      "aiPromptSuggestion": "初始化 OTEL、prom-client 与 Sentry；输出 Grafana 仪表模板。"
+    },
+    {
+      "id": "SRE-HEALTH-001",
+      "role": "SRE",
+      "title": "健康检查端点 /health,/health/db,/health/redis",
+      "description": "轻量探针+延迟返回；异常时 degraded。",
+      "businessValue": "部署与熔断摘流依据。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "SRE",
+      "dependencies": [],
+      "deliverables": ["health.controller.ts"],
+      "acceptanceCriteria": ["三端点返回200", "异常标记degraded"],
+      "risk": ["探测本身负担"],
+      "mitigation": ["结果缓存1s"],
+      "techSpec": "DB:SELECT 1；Redis:GET/SET；JSON状态。",
+      "testPlan": ["断开依赖模拟"],
+      "metrics": {"healthLatencyMs": "<=5"},
+      "aiPromptSuggestion": "实现健康检查端点，附 Supertest 覆盖。"
+    },
+    {
+      "id": "SRE-DEPLOY-BAI-001",
+      "role": "SRE",
+      "title": "BuildingAI 侧车部署（Docker Compose）",
+      "description": "仅启用 Server；DB_TYPE=mysql 指向现有库；Redis 使用新索引与Key前缀；限制内网访问。",
+      "businessValue": "一周内具备多模型与 MCP 能力。",
+      "priority": "P0",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "SRE",
+      "dependencies": [],
+      "deliverables": ["docker-compose.yml", ".env.sample", "运维手册"],
+      "acceptanceCriteria": ["/ai/* 联调通过", "默认超管密码已旋转"],
+      "risk": ["Beta 稳定性"],
+      "mitigation": ["灰度发布与回退脚本"],
+      "techSpec": "服务端口4090仅内网开放；健康探针加入。",
+      "testPlan": ["预发联通与压测"],
+      "metrics": {"baiUptime": ">=99.9%"},
+      "aiPromptSuggestion": "编写 Compose 与 .env，限制侧车仅内网可达；输出健康检查脚本。"
+    }
+  ],
+  "安全": [
+    {
+      "id": "SEC-DTO-001",
+      "role": "Security",
+      "title": "DTO 白名单输出 + 字段脱敏",
+      "description": "统一出参白名单；对 Key、身份证、手机号等进行掩码或散列；管理员与普通用户字段差异。",
+      "businessValue": "消除信息泄露（P1）。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Security",
+      "dependencies": ["BE-ERR-001"],
+      "deliverables": ["toPublicDTO.ts", "mask.util.ts"],
+      "acceptanceCriteria": ["随机抽样 50 个响应无敏感字段"],
+      "risk": ["漏网接口"],
+      "mitigation": ["接口扫描脚本+快照测试"],
+      "techSpec": "基于 role 裁剪输出。",
+      "testPlan": ["快照对比"],
+      "metrics": {"leakIncidents": 0},
+      "aiPromptSuggestion": "实现 toPublicDTO 与 mask 工具，对 tasks/user 输出做裁剪与掩码。"
+    },
+    {
+      "id": "SEC-RATE-001",
+      "role": "Security",
+      "title": "接口级限流与风控（敏感操作更严）",
+      "description": "在创建任务、配置变更、鉴权等接口叠加更严阈值；黑白名单豁免。",
+      "businessValue": "降低滥用与撞库风险（P1）。",
+      "priority": "P1",
+      "difficulty": "S",
+      "estimatePersonDay": 0.5,
+      "owner": "Security",
+      "dependencies": ["BE-ASYNC-001"],
+      "deliverables": ["rate-limit.policy.json", "middleware/rate-limit.ts"],
+      "acceptanceCriteria": ["被限流可观测", "白名单生效"],
+      "risk": ["误伤"],
+      "mitigation": ["灰度+回滚"],
+      "techSpec": "rate-limiter-flexible + Redis；路由标签化策略。",
+      "testPlan": ["撞库模拟被拦"],
+      "metrics": {"securityThrottles": "可观测"},
+      "aiPromptSuggestion": "在既有限流基础上实现路由级策略与名单豁免，给出示例配置。"
+    }
+  ]
+}
+```
+
+> 上述任务卡字段、写法、粒度与你在《后端优化回答.md》中示范的任务卡完全对齐；并与《GPT5提问-后端架构重构方案.txt》中的 **18 条必做方案**逐项映射（Saga/双Token/连接池/队列+p-limit/COS生命周期/微信登录/统一登录/支付SDK/统一认证/Redis缓存/WebSocket/统一错误/Swagger/监控告警/邀请码/用户信息/推荐人校验/敏感信息加密）。 
+
+---
+
+## 四、跨文档映射表（确保“按图施工”）
+
+| 你的强制项（18 方案）      | 任务卡 ID                                            |
+| ----------------- | ------------------------------------------------- |
+| Saga + 预扣配额       | BE-QUOTA-001                                      |
+| 双 Token + 刷新旋转    | BE-AUTH-001                                       |
+| 连接池 + 基线          | BE-DB-POOL-001                                    |
+| Bull 队列 + p-limit | BE-ASYNC-001                                      |
+| COS 生命周期          | BE-STORAGE-001                                    |
+| 微信登录              | BE-WX-LOGIN-001                                   |
+| 统一登录              | BE-LOGIN-UNI-001                                  |
+| 支付 SDK            | BE-PAY-001                                        |
+| 统一认证中间件           | BE-AUTH-UNI-001                                   |
+| Redis 缓存优化        | BE-CACHE-001                                      |
+| WebSocket 推送      | BE-WS-001                                         |
+| 统一错误处理            | BE-ERR-001                                        |
+| Swagger           | BE-DOC-001                                        |
+| 监控告警              | SRE-OTEL-001（含 Sentry）、SRE-LOG-001、SRE-HEALTH-001 |
+| 邀请码生成优化           | BE-INVITE-001                                     |
+| 用户信息完善            | BE-USER-001                                       |
+| 推荐人验证             | BE-REF-001                                        |
+| 敏感信息加密与密钥         | BE-KMS-001                                        |
+
+> 以上映射严格按照你在「GPT5 专用提问」文件中对输出物的要求建立；P0/P1 的排序也与原文一致。
+
+---
+
+## 五、验收门槛（量化）
+
+* **性能**：核心 API P95 **< 100ms**；任务创建 API P95 **< 80ms**（排队模式）；列表查询 P95 **< 80ms**；队列吞吐 **≥ 1000/min**。
+* **一致性**：Saga 并发重复提交 **0 重复扣减**；失败回滚 **100% 覆盖**。
+* **安全**：刷新旋转黑名单生效；越权访问 **403**；敏感字段 **0 泄露**。
+* **可观测性**：Trace 覆盖 **≥ 80%**；错误上报 **100%**；健康探针 **稳定**。
+* **“后端排前端”**：前端菜单/页面改动**不经发版**，仅通过 /admin/features 发布即可生效（秒级）。
+  上述量化与你的重构目标、P0/P1 问题对应的验收口径完全一致。 
+
+---
+
+## 六、如何落地（立即执行清单）
+
+1. **拉起侧车**：SRE 执行 `SRE-DEPLOY-BAI-001`，仅启 Server，锁内网访问。
+2. **打底安全与错误栈**：后端先做 `BE-AUTH-001`、`BE-AUTH-UNI-001`、`BE-ERR-001`、`SRE-LOG-001`。
+3. **P0 数据与并发**：`BE-QUOTA-001` → `BE-DB-POOL-001` → `BE-DB-INDEX-001` → `BE-CACHE-001` → `BE-ASYNC-001`/`BE-CB-001` → `BE-WS-001`。
+4. **存储/支付/登录**：`BE-STORAGE-001`、`BE-PAY-001`、`BE-WX-LOGIN-001`、`BE-LOGIN-UNI-001`。
+5. **Feature Catalog**：`BE-KB-001` + `FE-FEATURE-001`，随后 `FE-PROVIDER-UI-001`/`FE-MCP-UI-001`/`FE-PROMPT-UI-001`。
+6. **监控告警**：`SRE-OTEL-001`、`SRE-HEALTH-001`；QA 立刻跑 `QA-SAGA-001`、`QA-WS-001`、`QA-PERF-001`。
+
+---
+
+以上就是**系统架构师级**的开发计划与任务卡清单。
+如果需要，我可以把每张任务卡进一步拆分为「PR 清单 + 代码骨架路径 + CI 检查项」，或把 **OpenAPI+Knex 迁移**一次性生成在压缩包里，直接给 Codex 作为初始仓库结构。

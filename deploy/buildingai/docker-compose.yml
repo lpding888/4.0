@@ -1,0 +1,117 @@
+version: '3.8'
+
+# BuildingAI Sidecar Service
+# 仅启动后端服务，不启动前端
+# 使用现有MySQL和Redis（隔离配置）
+
+services:
+  # BuildingAI后端服务（侧车模式）
+  buildingai-server:
+    image: ghcr.io/bidingcc/buildingai:latest
+    container_name: buildingai-sidecar
+    restart: always
+
+    # 端口映射（仅绑定localhost，不对外暴露）
+    ports:
+      - "127.0.0.1:4090:4090"
+
+    # 环境变量配置
+    environment:
+      # ==========================================
+      # 数据库配置（使用现有MySQL）
+      # ==========================================
+      - DB_TYPE=mysql
+      - DB_HOST=${MYSQL_HOST:-host.docker.internal}
+      - DB_PORT=${MYSQL_PORT:-3306}
+      - DB_USERNAME=${MYSQL_USER:-root}
+      - DB_PASSWORD=${MYSQL_PASSWORD}
+      - DB_DATABASE=${MYSQL_DATABASE:-ai_photo}
+      - DB_SYNCHRONIZE=false
+      - DB_LOGGING=false
+
+      # ==========================================
+      # Redis配置（使用独立DB避免键冲突）
+      # ==========================================
+      - REDIS_HOST=${REDIS_HOST:-host.docker.internal}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-1}
+      - REDIS_PREFIX=buildingai:
+
+      # ==========================================
+      # BuildingAI服务配置
+      # ==========================================
+      - NODE_ENV=production
+      - PORT=4090
+      - API_PREFIX=/api
+
+      # JWT配置
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=7d
+
+      # 管理员账号（首次启动后需修改）
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@buildingai.local}
+
+      # ==========================================
+      # 功能开关
+      # ==========================================
+      - DISABLE_FRONTEND=true
+      - ENABLE_CORS=false
+      - ENABLE_SWAGGER=false
+
+      # ==========================================
+      # 文件存储（如需使用）
+      # ==========================================
+      - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      - UPLOAD_DIR=/app/uploads
+
+      # ==========================================
+      # 日志配置
+      # ==========================================
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=json
+
+    # 卷映射
+    volumes:
+      - buildingai-uploads:/app/uploads
+      - buildingai-logs:/app/logs
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4090/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # 网络配置
+    networks:
+      - buildingai-network
+
+    # 额外配置
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+# 数据卷定义
+volumes:
+  buildingai-uploads:
+    driver: local
+  buildingai-logs:
+    driver: local
+
+# 网络定义
+networks:
+  buildingai-network:
+    driver: bridge
