@@ -250,11 +250,10 @@ describe('SecurityService', () => {
       mockRedis.ping = jest.fn().mockResolvedValue('PONG');
 
       // 模拟系统信息
-      const originalOS = require('os');
-      require('os') = {
+      jest.mock('os', () => ({
         totalmem: jest.fn().mockReturnValue(8000000000),
         freemem: jest.fn().mockReturnValue(4000000000)
-      };
+      }));
 
       // 执行测试
       const result = await securityService.performHealthChecks();
