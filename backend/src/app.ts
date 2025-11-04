@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 
 // 艹，导入所有routes
+// 基础CMS路由
 import authRoutes from './routes/auth.routes';
 import usersRoutes from './routes/users.routes';
 import providersRoutes from './routes/providers.routes';
@@ -21,6 +22,19 @@ import membershipBenefitsRoutes from './routes/membershipBenefits.routes';
 import contentTextsRoutes from './routes/contentTexts.routes';
 import auditLogsRoutes from './routes/auditLogs.routes';
 import importExportRoutes from './routes/importExport.routes';
+
+// P0核心功能路由
+import aiRoutes from './routes/ai.route';
+import kbRoutes from './routes/admin/kb.route';
+import uploadsRoutes from './routes/admin/uploads.route';
+
+// 核心业务路由（CommonJS格式）
+const featureCatalogRoutes = require('./routes/feature-catalog.routes');
+const uiRoutes = require('./routes/ui.routes');
+const pipelineSchemasRoutes = require('./routes/pipelineSchemas.routes');
+const pipelineExecutionRoutes = require('./routes/pipelineExecution.routes');
+const mcpEndpointsRoutes = require('./routes/mcpEndpoints.routes');
+const buildingAIRoutes = require('./routes/buildingai-adaptor.routes');
 
 // 艹，导入调度器
 import { startAnnouncementScheduler } from './services/announcementScheduler.service';
@@ -75,6 +89,20 @@ app.use('/api', membershipBenefitsRoutes);
 app.use('/api', contentTextsRoutes);
 app.use('/api', auditLogsRoutes);
 app.use('/api', importExportRoutes);
+
+// P0核心功能路由
+// 艹，这些是P0阶段的核心API，必须注册！
+app.use('/api/ai', aiRoutes);                    // 统一推理API（OpenAI兼容）
+app.use('/api/admin/kb', kbRoutes);              // 知识库管理
+app.use('/api/admin/uploads', uploadsRoutes);    // COS直传STS
+
+// 核心业务功能路由
+app.use('/api/admin/features', featureCatalogRoutes);     // 功能目录管理
+app.use('/api/admin/ui', uiRoutes);                       // UI Schema动态渲染
+app.use('/api/admin/pipeline-schemas', pipelineSchemasRoutes);  // Pipeline Schema管理
+app.use('/api/admin/pipeline-execution', pipelineExecutionRoutes); // Pipeline执行
+app.use('/api/admin/mcp-endpoints', mcpEndpointsRoutes);  // MCP端点管理
+app.use('/api/buildingai', buildingAIRoutes);             // BuildingAI侧车集成
 
 // ===== 404处理 =====
 app.use((req: Request, res: Response) => {
