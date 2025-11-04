@@ -26,6 +26,7 @@ import {
   adminProviders,
   Provider,
   ProviderInput,
+  QualityTier,
 } from '@/lib/services/adminProviders';
 
 /**
@@ -36,6 +37,16 @@ const AUTH_TYPES = [
   { value: 'bearer', label: 'Bearer Token', color: 'green' },
   { value: 'basic', label: 'Basic Auth', color: 'orange' },
   { value: 'oauth2', label: 'OAuth 2.0', color: 'purple' },
+];
+
+/**
+ * 质量档位配置
+ * 艹！低/中/高三档，成本优化必备！
+ */
+const QUALITY_TIERS: Array<{ value: QualityTier; label: string; color: string; description: string }> = [
+  { value: 'low', label: '低画质', color: 'default', description: '成本最低，适合批量处理' },
+  { value: 'medium', label: '中画质', color: 'blue', description: '性价比均衡，日常使用' },
+  { value: 'high', label: '高画质', color: 'gold', description: '效果最佳，关键任务' },
 ];
 
 /**
@@ -125,7 +136,7 @@ export default function ProvidersPage() {
       title: 'Provider引用ID',
       dataIndex: 'provider_ref',
       key: 'provider_ref',
-      width: 200,
+      width: 180,
       render: (text: string) => (
         <code style={{ color: '#1890ff', fontSize: '13px' }}>{text}</code>
       ),
@@ -134,7 +145,7 @@ export default function ProvidersPage() {
       title: 'Provider名称',
       dataIndex: 'provider_name',
       key: 'provider_name',
-      width: 200,
+      width: 180,
     },
     {
       title: 'API端点',
@@ -151,17 +162,57 @@ export default function ProvidersPage() {
       title: '认证类型',
       dataIndex: 'auth_type',
       key: 'auth_type',
-      width: 140,
+      width: 120,
       render: (authType: string) => {
         const config = AUTH_TYPES.find((t) => t.value === authType);
         return <Tag color={config?.color || 'default'}>{config?.label || authType}</Tag>;
       },
     },
     {
+      title: '质量档位',
+      dataIndex: 'quality_tier',
+      key: 'quality_tier',
+      width: 100,
+      render: (tier: QualityTier | undefined) => {
+        if (!tier) return <Tag color="default">未设置</Tag>;
+        const config = QUALITY_TIERS.find((t) => t.value === tier);
+        return (
+          <Tooltip title={config?.description}>
+            <Tag color={config?.color || 'default'}>{config?.label || tier}</Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: '权重',
+      dataIndex: 'weight',
+      key: 'weight',
+      width: 80,
+      render: (weight: number | undefined) => weight || '-',
+    },
+    {
+      title: '成本（$/1K）',
+      dataIndex: 'cost_per_1k_tokens',
+      key: 'cost_per_1k_tokens',
+      width: 120,
+      render: (cost: number | undefined) => (cost !== undefined ? `$${cost.toFixed(4)}` : '-'),
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      key: 'enabled',
+      width: 80,
+      render: (enabled: boolean | undefined) => (
+        <Tag color={enabled === false ? 'red' : 'green'}>
+          {enabled === false ? '已禁用' : '已启用'}
+        </Tag>
+      ),
+    },
+    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 180,
+      width: 160,
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
@@ -224,6 +275,10 @@ export default function ProvidersPage() {
         provider_name: fullProvider.provider_name,
         endpoint_url: fullProvider.endpoint_url,
         auth_type: fullProvider.auth_type,
+        quality_tier: fullProvider.quality_tier,
+        weight: fullProvider.weight,
+        cost_per_1k_tokens: fullProvider.cost_per_1k_tokens,
+        enabled: fullProvider.enabled !== undefined ? fullProvider.enabled : true,
       });
     } catch (error: any) {
       message.error(`加载Provider详情失败: ${error.message}`);
@@ -307,6 +362,10 @@ export default function ProvidersPage() {
         endpoint_url: values.endpoint_url,
         credentials,
         auth_type: values.auth_type,
+        quality_tier: values.quality_tier,
+        weight: values.weight,
+        cost_per_1k_tokens: values.cost_per_1k_tokens,
+        enabled: values.enabled !== undefined ? values.enabled : true,
       };
 
       if (drawerMode === 'create') {
@@ -470,6 +529,101 @@ export default function ProvidersPage() {
 
           {/* 动态凭证字段 */}
           {renderCredentialFields()}
+
+          {/* 分隔线 */}
+          <div style={{ borderTop: '1px solid #f0f0f0', margin: '24px 0' }} />
+
+          {/* 路由策略配置 */}
+          <h3 style={{ marginBottom: 16, fontSize: 14, fontWeight: 600 }}>
+            路由策略配置（成本优化）
+          </h3>
+
+          {/* 质量档位 */}
+          <Form.Item
+            name="quality_tier"
+            label="质量档位"
+            rules={[{ required: true, message: '请选择质量档位' }]}
+            tooltip="用于降级重试策略，高级模型失败后会自动降级到中级/低级"
+          >
+            <Select placeholder="选择质量档位">
+              {QUALITY_TIERS.map((tier) => (
+                <Select.Option key={tier.value} value={tier.value}>
+                  <div>
+                    <Tag color={tier.color} style={{ marginRight: 8 }}>
+                      {tier.label}
+                    </Tag>
+                    <span style={{ color: '#666', fontSize: 12 }}>{tier.description}</span>
+                  </div>
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          {/* 路由权重 */}
+          <Form.Item
+            name="weight"
+            label="路由权重"
+            rules={[
+              { required: true, message: '请输入路由权重' },
+              {
+                type: 'number',
+                min: 1,
+                max: 100,
+                message: '权重范围: 1-100',
+                transform: (value) => Number(value),
+              },
+            ]}
+            tooltip="同档位的Provider按权重随机选择，权重越高，被选中概率越大"
+          >
+            <Input
+              type="number"
+              placeholder="1-100"
+              min={1}
+              max={100}
+              addonAfter="（1-100）"
+            />
+          </Form.Item>
+
+          {/* 每1K tokens成本 */}
+          <Form.Item
+            name="cost_per_1k_tokens"
+            label="成本（美元/1K tokens）"
+            rules={[
+              { required: true, message: '请输入成本' },
+              {
+                type: 'number',
+                min: 0,
+                message: '成本不能为负数',
+                transform: (value) => Number(value),
+              },
+            ]}
+            tooltip="用于成本统计和报表，精确到小数点后4位"
+          >
+            <Input
+              type="number"
+              placeholder="例如: 0.0001"
+              step="0.0001"
+              addonBefore="$"
+              addonAfter="/ 1K tokens"
+            />
+          </Form.Item>
+
+          {/* 启用状态 */}
+          <Form.Item
+            name="enabled"
+            label="启用状态"
+            valuePropName="checked"
+            tooltip="禁用后，该Provider不会被路由选择"
+          >
+            <Select
+              placeholder="选择状态"
+              defaultValue={true}
+              options={[
+                { label: '启用', value: true },
+                { label: '禁用', value: false },
+              ]}
+            />
+          </Form.Item>
 
           {/* 安全提示 */}
           {drawerMode === 'edit' && (

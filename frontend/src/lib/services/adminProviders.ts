@@ -6,6 +6,12 @@
 import { api } from '../api';
 
 /**
+ * Provider质量档位
+ * 艹！低/中/高三档，成本控制必须清晰！
+ */
+export type QualityTier = 'low' | 'medium' | 'high';
+
+/**
  * Provider端点数据结构
  */
 export interface Provider {
@@ -14,6 +20,10 @@ export interface Provider {
   endpoint_url: string;
   credentials_encrypted?: any; // 加密后的凭证（前端只读，不修改）
   auth_type: 'api_key' | 'bearer' | 'basic' | 'oauth2';
+  quality_tier?: QualityTier; // 质量档位（低/中/高）
+  weight?: number; // 路由权重（1-100），权重越高，被选中概率越大
+  cost_per_1k_tokens?: number; // 每1K tokens成本（美元）
+  enabled?: boolean; // 是否启用
   created_at?: string;
   updated_at?: string;
 }
@@ -27,6 +37,10 @@ export interface ProviderInput {
   endpoint_url: string;
   credentials: Record<string, any>; // 明文凭证（会被后端加密）
   auth_type: 'api_key' | 'bearer' | 'basic' | 'oauth2';
+  quality_tier?: QualityTier; // 质量档位
+  weight?: number; // 路由权重（1-100）
+  cost_per_1k_tokens?: number; // 每1K tokens成本（美元）
+  enabled?: boolean; // 是否启用
 }
 
 /**

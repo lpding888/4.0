@@ -1,11 +1,12 @@
 /**
- * 应用主题Provider
- * 艹，这个tm负责应用Ant Design主题！
+ * UI-P2-TOKEN-205: 应用主题Provider(增强版)
+ * 艹!这个tm负责应用Ant Design主题!
  *
- * 功能：
+ * 功能:
  * 1. 从Zustand读取theme状态
- * 2. 动态应用亮色/暗色主题
+ * 2. 动态应用light/dark/brand三种主题
  * 3. 支持Next.js SSR
+ * 4. 集成Design Tokens系统
  *
  * @author 老王
  */
@@ -17,7 +18,7 @@ import { ConfigProvider, App as AntdApp } from 'antd';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import zhCN from 'antd/locale/zh_CN';
 import { useTheme } from '@/shared/store';
-import { getThemeConfig } from '@/shared/styles/theme';
+import { getThemeConfig, ThemeManager } from '@/shared/styles/theme';
 
 /**
  * AppThemeProvider Props
@@ -27,27 +28,26 @@ interface AppThemeProviderProps {
 }
 
 /**
- * AppThemeProvider组件
- * 艹，包裹整个应用的主题提供者！
+ * UI-P2-TOKEN-205: AppThemeProvider组件(增强版)
+ * 艹!包裹整个应用的主题提供者!
  */
 export function AppThemeProvider({ children }: AppThemeProviderProps) {
   const theme = useTheme();
 
-  // 艹，应用主题到document元素（用于全局CSS变量）
+  // 艹!初始化主题(页面加载时)
+  useEffect(() => {
+    ThemeManager.initTheme();
+  }, []);
+
+  // 艹!应用主题到document元素(用于全局CSS变量)
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', theme);
-
-      // 艹，暗色主题时添加dark类
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      // 艹!使用ThemeManager统一管理主题
+      ThemeManager.setTheme(theme);
     }
   }, [theme]);
 
-  // 艹，获取对应的主题配置
+  // 艹!获取对应的主题配置
   const themeConfig = getThemeConfig(theme);
 
   return (

@@ -32,11 +32,31 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // 记录错误信息到控制台（生产环境这里应该上报到监控服务）
+    // 记录错误信息到结构化日志
     console.error('ErrorBoundary捕获到错误:', error, errorInfo);
 
-    // TODO: 集成错误监控服务（如Sentry）
-    // Sentry.captureException(error, { extra: errorInfo });
+    // 集成结构化日志系统
+    try {
+      // 动态导入logger（避免SSR问题）
+      import('@/lib/monitoring/logger').then(({ logger }) => {
+        logger.error('React Error Boundary捕获错误', error, {
+          component: errorInfo.componentStack,
+        });
+      });
+    } catch (err) {
+      console.error('日志记录失败:', err);
+    }
+
+    // 上报到Sentry
+    if (typeof window !== 'undefined' && (window as any).Sentry) {
+      (window as any).Sentry.captureException(error, {
+        contexts: {
+          react: {
+            componentStack: errorInfo.componentStack,
+          },
+        },
+      });
+    }
 
     this.setState({
       error,

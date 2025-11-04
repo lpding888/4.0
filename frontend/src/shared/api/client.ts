@@ -5,7 +5,7 @@
  * @author 老王
  */
 
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
 /**
  * API基础URL
@@ -25,6 +25,35 @@ export const apiClient: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+/**
+ * 请求拦截器：自动添加租户ID
+ * 艹！多租户系统核心逻辑，所有请求必须带上x-tenant-id！
+ */
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    // 从localStorage读取当前租户（由Zustand持久化）
+    try {
+      const tenantStorage = localStorage.getItem('tenant-storage');
+      if (tenantStorage) {
+        const { state } = JSON.parse(tenantStorage);
+        const activeTenant = state?.activeTenant;
+
+        if (activeTenant?.id) {
+          // 添加租户ID到请求头
+          config.headers['x-tenant-id'] = activeTenant.id;
+        }
+      }
+    } catch (error) {
+      console.warn('[API Client] 读取租户ID失败:', error);
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 /**
  * 导出BASE_URL

@@ -1,7 +1,10 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useQuota } from '@/store/quota';
+import { TenantSwitcher } from '@/components/tenant/TenantSwitcher';
 import {
   AppstoreOutlined,
   HistoryOutlined,
@@ -9,7 +12,9 @@ import {
   CrownOutlined,
   SettingOutlined,
   LogoutOutlined,
-  LoginOutlined
+  LoginOutlined,
+  ThunderboltOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 
 /**
@@ -22,6 +27,16 @@ export default function Navigation() {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const clearAuth = useAuthStore((state) => state.clearAuth);
+
+  // 配额状态
+  const { quota, fetchQuota, quotaPercentage } = useQuota();
+
+  // 用户登录后自动获取配额
+  useEffect(() => {
+    if (user) {
+      fetchQuota();
+    }
+  }, [user, fetchQuota]);
 
   // 如果是登录页，不显示导航栏
   if (pathname === '/login') {
@@ -95,6 +110,40 @@ export default function Navigation() {
           {/* 已登录：显示完整菜单 */}
           {user && (
             <div className="flex items-center gap-1">
+              {/* 配额显示（左侧） */}
+              {quota && (
+                <div
+                  onClick={() => router.push('/membership/plans')}
+                  className={`
+                    mr-2 px-3 py-2 rounded-lg
+                    flex items-center gap-2
+                    transition-all duration-300 cursor-pointer
+                    ${quotaPercentage <= 20
+                      ? 'bg-rose-500/20 border border-rose-400/50 text-rose-300 hover:bg-rose-500/30'
+                      : 'bg-white/10 border border-white/20 text-white/90 hover:bg-white/20'
+                    }
+                  `}
+                  title={`点击前往会员中心 | ${quota.plan_name}`}
+                >
+                  {quotaPercentage <= 20 ? (
+                    <ExclamationCircleOutlined className="text-base" />
+                  ) : (
+                    <ThunderboltOutlined className="text-base" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {quota.remaining_quota.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-white/60 hidden lg:inline">
+                    / {quota.total_quota.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* 租户切换器 */}
+              <div className="mr-2">
+                <TenantSwitcher />
+              </div>
+
               {menuItems.map((item) => (
                 <button
                   key={item.key}

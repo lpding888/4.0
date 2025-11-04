@@ -62,6 +62,7 @@ import { useSSE } from '@/hooks/useSSE';
 import bootstrap from '@/lib/mocks/bootstrap.json';
 import type { UIField, UISchema } from '@/lib/schema/ui';
 import type { ProgressEvent, StatusEvent, CompleteEvent } from '@/hooks/useSSE';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 
 const { Title, Text, Paragraph } = Typography;
 const { Step } = Steps;
@@ -815,6 +816,7 @@ export default function StudioPage() {
             </Paragraph>
           </div>
           <Space>
+            <ThemeSwitcher mode="dropdown" size="middle" />
             <Button
               icon={<ReloadOutlined />}
               onClick={() => {

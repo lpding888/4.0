@@ -8,9 +8,10 @@
 import { StateCreator } from 'zustand';
 
 /**
- * 主题类型
+ * UI-P2-TOKEN-205: 主题类型(支持三种主题)
+ * 艹!light=亮色紫色主题, dark=暗色主题, brand=品牌蓝色主题!
  */
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'brand';
 
 /**
  * UI状态接口
