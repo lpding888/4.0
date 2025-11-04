@@ -1,0 +1,218 @@
+/**
+ * UI-P2-TOKEN-205: Design Tokens定义
+ * 艹!统一设计系统的基础变量,所有样式都从这里取值!
+ *
+ * @author 老王
+ */
+
+:root {
+  /* ========== 艹!颜色系统 ========== */
+
+  /* 主色(品牌色) */
+  --color-primary: #1890ff;
+  --color-primary-hover: #40a9ff;
+  --color-primary-active: #096dd9;
+  --color-primary-light: #e6f7ff;
+  --color-primary-lighter: #bae7ff;
+
+  /* 成功色 */
+  --color-success: #52c41a;
+  --color-success-hover: #73d13d;
+  --color-success-active: #389e0d;
+  --color-success-light: #f6ffed;
+
+  /* 警告色 */
+  --color-warning: #faad14;
+  --color-warning-hover: #ffc53d;
+  --color-warning-active: #d48806;
+  --color-warning-light: #fffbe6;
+
+  /* 错误色 */
+  --color-error: #ff4d4f;
+  --color-error-hover: #ff7875;
+  --color-error-active: #d9363e;
+  --color-error-light: #fff2f0;
+
+  /* 信息色 */
+  --color-info: #1890ff;
+  --color-info-hover: #40a9ff;
+  --color-info-active: #096dd9;
+  --color-info-light: #e6f7ff;
+
+  /* 中性色(灰度) */
+  --color-text-primary: rgba(0, 0, 0, 0.85);
+  --color-text-secondary: rgba(0, 0, 0, 0.65);
+  --color-text-tertiary: rgba(0, 0, 0, 0.45);
+  --color-text-disabled: rgba(0, 0, 0, 0.25);
+
+  --color-bg-base: #ffffff;
+  --color-bg-container: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-layout: #f5f5f5;
+  --color-bg-spotlight: #fafafa;
+
+  --color-border-base: #d9d9d9;
+  --color-border-secondary: #f0f0f0;
+
+  /* 艹!特殊场景色 */
+  --color-link: #1890ff;
+  --color-link-hover: #40a9ff;
+  --color-link-active: #096dd9;
+
+  /* ========== 艹!间距系统 ========== */
+
+  /* 基础间距单位(4px) */
+  --spacing-base: 4px;
+
+  /* 具体间距值 */
+  --spacing-xs: 8px;    /* 2 * base */
+  --spacing-sm: 12px;   /* 3 * base */
+  --spacing-md: 16px;   /* 4 * base */
+  --spacing-lg: 24px;   /* 6 * base */
+  --spacing-xl: 32px;   /* 8 * base */
+  --spacing-xxl: 48px;  /* 12 * base */
+  --spacing-xxxl: 64px; /* 16 * base */
+
+  /* 组件内边距 */
+  --padding-xs: 8px 12px;
+  --padding-sm: 12px 16px;
+  --padding-md: 16px 24px;
+  --padding-lg: 24px 32px;
+
+  /* ========== 艹!字体系统 ========== */
+
+  /* 字体家族 */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-code: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+
+  /* 字体大小 */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 24px;
+
+  /* 标题字体大小 */
+  --font-size-h1: 38px;
+  --font-size-h2: 30px;
+  --font-size-h3: 24px;
+  --font-size-h4: 20px;
+  --font-size-h5: 16px;
+
+  /* 行高 */
+  --line-height-base: 1.5715;
+  --line-height-heading: 1.35;
+
+  /* 字重 */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ========== 艹!圆角系统 ========== */
+
+  --border-radius-xs: 2px;
+  --border-radius-sm: 4px;
+  --border-radius-base: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  --border-radius-xl: 16px;
+  --border-radius-circle: 50%;
+  --border-radius-pill: 9999px;
+
+  /* ========== 艹!阴影系统 ========== */
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+
+  /* ========== 艹!动画系统 ========== */
+
+  /* 缓动函数 */
+  --ease-base: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 动画时长 */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+
+  /* ========== 艹!层级系统 ========== */
+
+  --z-index-base: 0;
+  --z-index-dropdown: 1000;
+  --z-index-modal-mask: 1000;
+  --z-index-modal: 1000;
+  --z-index-notification: 1010;
+  --z-index-message: 1010;
+  --z-index-popover: 1030;
+  --z-index-tooltip: 1060;
+
+  /* ========== 艹!尺寸系统 ========== */
+
+  /* 组件高度 */
+  --height-xs: 24px;
+  --height-sm: 32px;
+  --height-base: 32px;
+  --height-md: 40px;
+  --height-lg: 48px;
+
+  /* 布局宽度 */
+  --width-xs: 480px;
+  --width-sm: 576px;
+  --width-md: 768px;
+  --width-lg: 992px;
+  --width-xl: 1200px;
+  --width-xxl: 1600px;
+}
+
+/* ========== 艹!暗色主题 ========== */
+
+[data-theme="dark"] {
+  /* 主色调整 */
+  --color-primary: #177ddc;
+  --color-primary-hover: #1765ad;
+  --color-primary-active: #3c9ae8;
+
+  /* 文本色 */
+  --color-text-primary: rgba(255, 255, 255, 0.85);
+  --color-text-secondary: rgba(255, 255, 255, 0.65);
+  --color-text-tertiary: rgba(255, 255, 255, 0.45);
+  --color-text-disabled: rgba(255, 255, 255, 0.25);
+
+  /* 背景色 */
+  --color-bg-base: #141414;
+  --color-bg-container: #1f1f1f;
+  --color-bg-elevated: #2a2a2a;
+  --color-bg-layout: #000000;
+  --color-bg-spotlight: #1a1a1a;
+
+  /* 边框色 */
+  --color-border-base: #434343;
+  --color-border-secondary: #303030;
+
+  /* 阴影(暗色模式下调整) */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.24);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.32), 0 1px 2px -1px rgba(0, 0, 0, 0.32);
+  --shadow-base: 0 4px 6px -1px rgba(0, 0, 0, 0.32), 0 2px 4px -2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.32), 0 4px 6px -4px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.32), 0 8px 10px -6px rgba(0, 0, 0, 0.32);
+  --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.48);
+}
+
+/* ========== 艹!品牌主题(可选) ========== */
+
+[data-theme="brand"] {
+  --color-primary: #722ed1;
+  --color-primary-hover: #9254de;
+  --color-primary-active: #531dab;
+  --color-primary-light: #f9f0ff;
+}
