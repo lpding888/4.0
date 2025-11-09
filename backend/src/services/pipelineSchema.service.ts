@@ -3,10 +3,68 @@ import cmsCacheService from './cmsCache.service.js';
 import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
+import type {
+  PipelineSchema,
+  PipelineNodeDefinition,
+  PipelineEdgeDefinition,
+  VariableMappings,
+  SchemaValidationRule,
+  SchemaConstraintConfig,
+  VariableMappingSource,
+  JsonSchema
+} from '../engine/pipeline-types.js';
+
+// 艹！Schema服务专用类型定义
+type ValidationStatus = 'passed' | 'warning' | 'failed';
+export type ValidationType = 'topology' | 'variables' | 'completeness' | 'constraints';
+
+interface ValidationResult {
+  status: ValidationStatus;
+  errors?: string[];
+  warnings?: string[];
+  metrics?: Record<string, unknown>;
+}
+
+interface SchemaQueryOptions {
+  page?: number;
+  limit?: number;
+  category?: string;
+  status?: string;
+  is_valid?: boolean;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+interface ValidationOptions {
+  page?: number;
+  limit?: number;
+}
+
+interface ValidationHistoryResult {
+  schema_id: string | number;
+  validation_type: string;
+  status: 'passed' | 'warning' | 'failed';
+  validation_result: Record<string, unknown>;
+  execution_time_ms: number;
+  triggered_by: string | null;
+  created_at: string;
+}
+
+interface SchemaStatsResult {
+  total: number;
+  valid_count: number;
+  active_count: number;
+  category_count: number;
+  category_distribution: Array<{ category: string; count: number }>;
+}
 
 class PipelineSchemaService {
   private readonly CACHE_SCOPE = 'pipeline-schemas';
-  private readonly VALIDATION_TYPES = {
+  private readonly VALIDATION_TYPES: Record<
+    'TOPOLOGY' | 'VARIABLES' | 'COMPLETENESS' | 'CONSTRAINTS',
+    ValidationType
+  > = {
     TOPOLOGY: 'topology',
     VARIABLES: 'variables',
     COMPLETENESS: 'completeness',
@@ -23,12 +81,12 @@ class PipelineSchemaService {
     MERGE: 'merge'
   } as const;
 
-  async createSchema(schemaData: any, userId: string) {
+  async createSchema(schemaData: Partial<PipelineSchema>, userId: string): Promise<PipelineSchema> {
     try {
       const schema = { ...schemaData, is_valid: false, created_by: userId, updated_by: userId };
       const [insertedId] = await db('pipeline_schemas').insert(schema);
       const newSchema = await this.getSchemaById(insertedId);
-      this.validateSchemaAsync(insertedId, userId).catch((error: any) => {
+      this.validateSchemaAsync(insertedId, userId).catch((error) => {
         logger.error('[PipelineSchemaService] Async validation failed:', error);
       });
       return newSchema;
@@ -38,7 +96,7 @@ class PipelineSchemaService {
     }
   }
 
-  async getSchemas(options: any = {}) {
+  async getSchemas(options: SchemaQueryOptions = {}) {
     try {
       const {
         page = 1,
@@ -51,7 +109,7 @@ class PipelineSchemaService {
         sortOrder = 'desc'
       } = options;
 
-      let query: any = db('pipeline_schemas').select([
+      let query = db('pipeline_schemas').select([
         'id',
         'name',
         'description',
@@ -67,7 +125,7 @@ class PipelineSchemaService {
       if (status) query = query.where('status', status);
       if (is_valid !== undefined) query = query.where('is_valid', String(is_valid) === 'true');
       if (search) {
-        query = query.where(function (this: any) {
+        query = query.where(function () {
           this.where('name', 'like', `%${search}%`).orWhere('description', 'like', `%${search}%`);
         });
       }
@@ -75,8 +133,8 @@ class PipelineSchemaService {
 
       const offset = (page - 1) * limit;
       const results = await query.limit(limit).offset(offset);
-      const totalCount: any = await db('pipeline_schemas')
-        .where(function (this: any) {
+      const totalCount = (await db('pipeline_schemas')
+        .where(function () {
           if (category) this.where('category', category);
           if (status) this.where('status', status);
           if (is_valid !== undefined) this.where('is_valid', String(is_valid) === 'true');
@@ -84,7 +142,7 @@ class PipelineSchemaService {
             this.where('name', 'like', `%${search}%`).orWhere('description', 'like', `%${search}%`);
         })
         .count('* as total')
-        .first();
+        .first()) as { total: number };
 
       return {
         schemas: results,
@@ -101,46 +159,50 @@ class PipelineSchemaService {
     }
   }
 
-  async getSchemaById(id: string | number) {
+  async getSchemaById(id: string | number): Promise<PipelineSchema> {
     try {
       const cacheKey = `schema:${id}`;
-      return await (cmsCacheService as any).getOrSet(this.CACHE_SCOPE, cacheKey, async () => {
+      return await cmsCacheService.getOrSet(this.CACHE_SCOPE, cacheKey, async () => {
         const schema = await db('pipeline_schemas').where('id', id).first();
         if (!schema) throw AppError.custom(ERROR_CODES.TASK_NOT_FOUND, '流程模板不存在');
-        return schema;
+        return schema as PipelineSchema;
       });
-    } catch (error: any) {
+    } catch (error) {
       if (AppError.isAppError?.(error)) throw error;
       logger.error('[PipelineSchemaService] Get schema by ID failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '获取流程模板失败');
     }
   }
 
-  async updateSchema(id: string | number, updateData: any, userId: string) {
+  async updateSchema(
+    id: string | number,
+    updateData: Partial<PipelineSchema>,
+    userId: string
+  ): Promise<PipelineSchema> {
     try {
       await this.getSchemaById(id);
       const updatedData = { ...updateData, updated_by: userId, is_valid: false };
       await db('pipeline_schemas').where('id', id).update(updatedData);
-      await (cmsCacheService as any).invalidate(this.CACHE_SCOPE, `schema:${id}`);
-      this.validateSchemaAsync(id, userId).catch((error: any) => {
+      await cmsCacheService.invalidate(this.CACHE_SCOPE, `schema:${id}`);
+      this.validateSchemaAsync(id, userId).catch((error) => {
         logger.error('[PipelineSchemaService] Async validation failed:', error);
       });
       return await this.getSchemaById(id);
-    } catch (error: any) {
+    } catch (error) {
       if (AppError.isAppError?.(error)) throw error;
       logger.error('[PipelineSchemaService] Update schema failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '更新流程模板失败');
     }
   }
 
-  async deleteSchema(id: string | number, userId: string) {
+  async deleteSchema(id: string | number, userId: string): Promise<boolean> {
     try {
       await this.getSchemaById(id);
       await db('pipeline_schemas').where('id', id).del();
-      await (cmsCacheService as any).invalidate(this.CACHE_SCOPE, `schema:${id}`);
+      await cmsCacheService.invalidate(this.CACHE_SCOPE, `schema:${id}`);
       logger.info('[PipelineSchemaService] Schema deleted:', { id, userId });
       return true;
-    } catch (error: any) {
+    } catch (error) {
       if (AppError.isAppError?.(error)) throw error;
       logger.error('[PipelineSchemaService] Delete schema failed:', error);
       throw AppError.custom(ERROR_CODES.INTERNAL_SERVER_ERROR, '删除流程模板失败');
@@ -149,13 +211,13 @@ class PipelineSchemaService {
 
   async validateSchema(
     id: string | number,
-    validationTypes: string[] | null = null,
+    validationTypes: ValidationType[] | null = null,
     userId: string | null = null
   ) {
     try {
       const startTime = Date.now();
       const schema = await this.getSchemaById(id);
-      const validationResults: Record<string, any> = {};
+      const validationResults: Record<string, ValidationResult> = {};
       const allErrors: string[] = [];
       let overallStatus: 'passed' | 'warning' | 'failed' = 'passed';
       const types = validationTypes ?? Object.values(this.VALIDATION_TYPES);
@@ -168,10 +230,14 @@ class PipelineSchemaService {
             overallStatus = result.status === 'failed' ? 'failed' : 'warning';
             if (result.errors) allErrors.push(...result.errors);
           }
-        } catch (error: any) {
-          validationResults[type] = { status: 'failed', errors: [error.message] };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '验证失败';
+          validationResults[type] = {
+            status: 'failed',
+            errors: [errorMessage]
+          };
           overallStatus = 'failed';
-          allErrors.push(error.message);
+          allErrors.push(errorMessage);
         }
       }
 
@@ -192,7 +258,7 @@ class PipelineSchemaService {
         executionTime,
         userId
       );
-      await (cmsCacheService as any).invalidate(this.CACHE_SCOPE, `schema:${id}`);
+      await cmsCacheService.invalidate(this.CACHE_SCOPE, `schema:${id}`);
 
       return {
         schema_id: id,
@@ -207,7 +273,7 @@ class PipelineSchemaService {
     }
   }
 
-  async performValidation(type: string, schema: any) {
+  async performValidation(type: ValidationType, schema: PipelineSchema): Promise<ValidationResult> {
     switch (type) {
       case this.VALIDATION_TYPES.TOPOLOGY:
         return await this.validateTopology(schema);
@@ -222,7 +288,7 @@ class PipelineSchemaService {
     }
   }
 
-  async validateTopology(schema: any) {
+  async validateTopology(schema: PipelineSchema): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     try {
@@ -235,17 +301,19 @@ class PipelineSchemaService {
         errors.push('边定义必须是数组');
         return { status: 'failed', errors, warnings };
       }
-      const hasInput = node_definitions.some((n: any) => n.type === this.NODE_TYPES.INPUT);
-      const hasOutput = node_definitions.some((n: any) => n.type === this.NODE_TYPES.OUTPUT);
+      const hasInput = node_definitions.some((n) => n.node_type === this.NODE_TYPES.INPUT);
+      const hasOutput = node_definitions.some((n) => n.node_type === this.NODE_TYPES.OUTPUT);
       if (!hasInput) errors.push('流程必须包含至少一个输入节点');
       if (!hasOutput) errors.push('流程必须包含至少一个输出节点');
-      const nodeIds = node_definitions.map((n: any) => n.id);
+      const nodeIds = node_definitions.map((n) => n.node_id);
       const uniqueNodeIds = [...new Set(nodeIds)];
       if (nodeIds.length !== uniqueNodeIds.length) errors.push('节点ID必须唯一');
       const allNodeIds = new Set(nodeIds);
       for (const edge of edge_definitions) {
-        if (!allNodeIds.has(edge.source)) errors.push(`边引用了不存在的源节点: ${edge.source}`);
-        if (!allNodeIds.has(edge.target)) errors.push(`边引用了不存在的目标节点: ${edge.target}`);
+        if (!allNodeIds.has(edge.source_node_id))
+          errors.push(`边引用了不存在的源节点: ${edge.source_node_id}`);
+        if (!allNodeIds.has(edge.target_node_id))
+          errors.push(`边引用了不存在的目标节点: ${edge.target_node_id}`);
       }
       const hasCycle = this.detectCycle(nodeIds, edge_definitions);
       if (hasCycle) errors.push('流程存在循环依赖');
@@ -253,24 +321,23 @@ class PipelineSchemaService {
       warnings.push(...connectivityIssues);
       const isolatedNodes = this.findIsolatedNodes(nodeIds, edge_definitions);
       if (isolatedNodes.length > 0) warnings.push(`存在孤立节点: ${isolatedNodes.join(', ')}`);
-      return {
-        status: errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed',
-        errors,
-        warnings
-      };
-    } catch (error: any) {
+      const status: ValidationStatus =
+        errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed';
+      return { status, errors, warnings };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '拓扑验证失败';
       logger.error('[PipelineSchemaService] Topology validation failed:', error);
-      return { status: 'failed', errors: [error.message], warnings };
+      return { status: 'failed', errors: [errorMessage], warnings };
     }
   }
 
-  async validateVariables(schema: any) {
+  async validateVariables(schema: PipelineSchema): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     try {
-      const inputVars = this.extractVariablesFromSchema(schema.input_schema || {});
-      const outputVars = this.extractVariablesFromSchema(schema.output_schema || {});
-      const mappings = schema.variable_mappings || {};
+      const inputVars = this.extractVariablesFromSchema(schema.input_schema);
+      const outputVars = this.extractVariablesFromSchema(schema.output_schema);
+      const mappings: VariableMappings = schema.variable_mappings ?? {};
       const referencedInput = this.extractReferencedVariables(mappings, 'input');
       const referencedOutput = this.extractReferencedVariables(mappings, 'output');
       const missingInputs = referencedInput.filter((v) => !inputVars.includes(v));
@@ -279,24 +346,24 @@ class PipelineSchemaService {
         errors.push(`引用了未在输入中定义的变量: ${missingInputs.join(', ')}`);
       if (missingOutputs.length > 0)
         errors.push(`引用了未在输出中定义的变量: ${missingOutputs.join(', ')}`);
-      const flowIssues = this.checkVariableFlow(schema.node_definitions || [], mappings);
+      const flowIssues = this.checkVariableFlow(schema.node_definitions, mappings);
       warnings.push(...flowIssues);
-      return {
-        status: errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed',
-        errors,
-        warnings
-      };
-    } catch (error: any) {
+      const status: ValidationStatus =
+        errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed';
+      return { status, errors, warnings };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '变量验证失败';
       logger.error('[PipelineSchemaService] Variables validation failed:', error);
-      return { status: 'failed', errors: [error.message], warnings };
+      return { status: 'failed', errors: [errorMessage], warnings };
     }
   }
 
-  async validateCompleteness(schema: any) {
+  async validateCompleteness(schema: PipelineSchema): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     try {
-      const { node_definitions, edge_definitions, validation_rules } = schema;
+      const { node_definitions, edge_definitions } = schema;
+      const validationRules = schema.validation_rules ?? [];
       if (!node_definitions || node_definitions.length === 0) errors.push('缺少节点定义');
       if (!edge_definitions || edge_definitions.length === 0) warnings.push('缺少边定义');
       const branchIssues = this.checkBranchCompleteness(
@@ -304,52 +371,54 @@ class PipelineSchemaService {
         edge_definitions || []
       );
       warnings.push(...branchIssues);
-      const rules = validation_rules || [];
-      const missingRuleIds = rules.filter((r: any) => !r?.id).length;
+      const missingRuleIds = validationRules.filter((rule) => !rule?.id).length;
       if (missingRuleIds > 0) warnings.push(`存在 ${missingRuleIds} 条缺少ID的校验规则`);
-      return {
-        status: errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed',
-        errors,
-        warnings
-      };
-    } catch (error: any) {
+      const status: ValidationStatus =
+        errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed';
+      return { status, errors, warnings };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '完整性验证失败';
       logger.error('[PipelineSchemaService] Completeness validation failed:', error);
-      return { status: 'failed', errors: [error.message], warnings };
+      return { status: 'failed', errors: [errorMessage], warnings };
     }
   }
 
-  async validateConstraints(schema: any) {
+  async validateConstraints(schema: PipelineSchema): Promise<ValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     try {
-      const { constraints, validation_rules } = schema;
+      const constraints = schema.constraints;
+      const validationRules = schema.validation_rules;
       if (constraints && schema.node_definitions && schema.edge_definitions) {
         const v = this.checkConstraintViolations(schema, constraints);
         errors.push(...v.errors);
         warnings.push(...v.warnings);
       }
+      const status: ValidationStatus =
+        errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed';
       return {
-        status: errors.length > 0 ? 'failed' : warnings.length > 0 ? 'warning' : 'passed',
+        status,
         errors,
         warnings,
         metrics: {
           constraints_count: constraints ? Object.keys(constraints).length : 0,
-          validation_rules_count: validation_rules ? validation_rules.length : 0
+          validation_rules_count: validationRules ? validationRules.length : 0
         }
       };
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '约束验证失败';
       logger.error('[PipelineSchemaService] Constraints validation failed:', error);
-      return { status: 'failed', errors: [error.message], warnings };
+      return { status: 'failed', errors: [errorMessage], warnings };
     }
   }
 
-  detectCycle(nodes: string[], edges: any[]) {
+  detectCycle(nodes: string[], edges: PipelineEdgeDefinition[]): boolean {
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
     const graph: Record<string, string[]> = {};
     for (const node of nodes) graph[node] = [];
     for (const edge of edges) {
-      if (graph[edge.source]) graph[edge.source].push(edge.target);
+      if (graph[edge.source_node_id]) graph[edge.source_node_id].push(edge.target_node_id);
     }
     const hasCycle = (node: string): boolean => {
       if (recursionStack.has(node)) return true;
@@ -364,12 +433,13 @@ class PipelineSchemaService {
     return false;
   }
 
-  checkConnectivity(nodes: string[], edges: any[]) {
+  checkConnectivity(nodes: string[], edges: PipelineEdgeDefinition[]): string[] {
     const issues: string[] = [];
     if (nodes.length === 0) return issues;
     const graph: Record<string, string[]> = {};
     for (const node of nodes) graph[node] = [];
-    for (const edge of edges) if (graph[edge.source]) graph[edge.source].push(edge.target);
+    for (const edge of edges)
+      if (graph[edge.source_node_id]) graph[edge.source_node_id].push(edge.target_node_id);
     const inputNodes = nodes.filter((n) => n.includes('input') || n.includes('Input'));
     if (inputNodes.length === 0) {
       issues.push('未找到输入节点，无法检查连通性');
@@ -388,23 +458,23 @@ class PipelineSchemaService {
     return issues;
   }
 
-  findIsolatedNodes(nodes: string[], edges: any[]) {
+  findIsolatedNodes(nodes: string[], edges: PipelineEdgeDefinition[]): string[] {
     const connected = new Set<string>();
     for (const edge of edges) {
-      connected.add(edge.source);
-      connected.add(edge.target);
+      connected.add(edge.source_node_id);
+      connected.add(edge.target_node_id);
     }
     return nodes.filter((n) => !connected.has(n));
   }
 
-  extractVariablesFromSchema(schema: any) {
-    if (!schema || !schema.properties) return [] as string[];
+  extractVariablesFromSchema(schema: JsonSchema | null | undefined): string[] {
+    if (!schema?.properties) return [];
     const variables: string[] = [];
-    const extractFromProperties = (properties: Record<string, any>, prefix = '') => {
+    const extractFromProperties = (properties: Record<string, JsonSchema>, prefix = '') => {
       for (const [key, value] of Object.entries(properties)) {
         const fullName = prefix ? `${prefix}.${key}` : key;
-        if ((value as any).type === 'object' && (value as any).properties) {
-          extractFromProperties((value as any).properties, fullName);
+        if (value?.type === 'object' && value.properties) {
+          extractFromProperties(value.properties, fullName);
         } else {
           variables.push(fullName);
         }
@@ -414,53 +484,71 @@ class PipelineSchemaService {
     return variables;
   }
 
-  extractReferencedVariables(variableMappings: any, sourceType: string) {
+  extractReferencedVariables(
+    variableMappings: VariableMappings,
+    sourceType: Extract<VariableMappingSource, 'input' | 'output'>
+  ): string[] {
     const references: string[] = [];
-    for (const [_key, mapping] of Object.entries<any>(variableMappings)) {
-      if ((mapping as any).source === sourceType) references.push((mapping as any).variable);
+    for (const mapping of Object.values(variableMappings)) {
+      if (mapping?.source === sourceType && mapping.variable) {
+        references.push(mapping.variable);
+      }
     }
     return references;
   }
 
-  extractProducedVariables(variableMappings: any) {
+  extractProducedVariables(variableMappings: VariableMappings): string[] {
     const produced: string[] = [];
-    for (const [key, mapping] of Object.entries<any>(variableMappings)) {
-      if ((mapping as any).source === 'node' || (mapping as any).source === 'transform')
+    for (const [key, mapping] of Object.entries(variableMappings)) {
+      if (mapping?.source === 'node' || mapping?.source === 'transform') {
         produced.push(key);
+      }
     }
     return produced;
   }
 
-  checkVariableFlow(_nodeDefinitions: any[], _variableMappings: any) {
+  checkVariableFlow(
+    _nodeDefinitions: PipelineNodeDefinition[],
+    _variableMappings: VariableMappings
+  ): string[] {
     const issues: string[] = [];
     return issues;
   }
 
-  checkBranchCompleteness(nodeDefinitions: any[], edgeDefinitions: any[]) {
+  checkBranchCompleteness(
+    nodeDefinitions: PipelineNodeDefinition[],
+    edgeDefinitions: PipelineEdgeDefinition[]
+  ): string[] {
     const issues: string[] = [];
-    const conditionNodes = nodeDefinitions.filter((n) => n.type === this.NODE_TYPES.CONDITION);
+    const conditionNodes = nodeDefinitions.filter((n) => n.node_type === this.NODE_TYPES.CONDITION);
     for (const node of conditionNodes) {
-      const outgoing = edgeDefinitions.filter((e) => e.source === node.id);
-      if (outgoing.length < 2) issues.push(`条件节点[${node.id}]应该有至少两个输出分支`);
+      const outgoing = edgeDefinitions.filter((e) => e.source_node_id === node.node_id);
+      if (outgoing.length < 2) issues.push(`条件节点[${node.node_id}]应该有至少两个输出分支`);
     }
     return issues;
   }
 
-  checkConstraintViolations(schema: any, constraints: any) {
+  checkConstraintViolations(
+    schema: PipelineSchema,
+    constraints: SchemaConstraintConfig
+  ): { errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    if (constraints.max_nodes && schema.node_definitions.length > constraints.max_nodes) {
-      errors.push(`节点数量(${schema.node_definitions.length})超过限制(${constraints.max_nodes})`);
+    const { max_nodes: maxNodes, max_edges: maxEdges, allowed_node_types: allowedNodeTypes } =
+      constraints;
+
+    if (typeof maxNodes === 'number' && schema.node_definitions.length > maxNodes) {
+      errors.push(`节点数量(${schema.node_definitions.length})超过限制(${maxNodes})`);
     }
-    if (constraints.max_edges && schema.edge_definitions.length > constraints.max_edges) {
-      errors.push(`边数量(${schema.edge_definitions.length})超过限制(${constraints.max_edges})`);
+    if (typeof maxEdges === 'number' && schema.edge_definitions.length > maxEdges) {
+      errors.push(`边数量(${schema.edge_definitions.length})超过限制(${maxEdges})`);
     }
-    if (constraints.allowed_node_types) {
+    if (Array.isArray(allowedNodeTypes) && allowedNodeTypes.length > 0) {
       const invalidNodes = schema.node_definitions.filter(
-        (n: any) => !constraints.allowed_node_types.includes(n.type)
+        (n) => !allowedNodeTypes.includes(n.node_type)
       );
       if (invalidNodes.length > 0)
-        errors.push(`存在不允许的节点类型: ${invalidNodes.map((n: any) => n.type).join(', ')}`);
+        errors.push(`存在不允许的节点类型: ${invalidNodes.map((n) => n.node_type).join(', ')}`);
     }
     return { errors, warnings };
   }
@@ -469,10 +557,10 @@ class PipelineSchemaService {
     schemaId: string | number,
     validationType: string,
     status: 'passed' | 'warning' | 'failed',
-    result: any,
+    result: Record<string, ValidationResult>,
     executionTime: number,
     userId: string | null
-  ) {
+  ): Promise<void> {
     try {
       await db('pipeline_validations').insert({
         schema_id: schemaId,
@@ -487,18 +575,19 @@ class PipelineSchemaService {
     }
   }
 
-  async validateSchemaAsync(id: string | number, userId: string | null) {
+  async validateSchemaAsync(id: string | number, userId: string | null): Promise<void> {
     try {
       await this.validateSchema(id, null, userId ?? null);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
       logger.error('[PipelineSchemaService] Async validation failed:', {
         id,
-        error: error.message
+        error: errorMessage
       });
     }
   }
 
-  async getValidationHistory(schemaId: string | number, options: any = {}) {
+  async getValidationHistory(schemaId: string | number, options: ValidationOptions = {}) {
     try {
       const { page = 1, limit = 20 } = options;
       const offset = (page - 1) * limit;
@@ -507,12 +596,12 @@ class PipelineSchemaService {
         .orderBy('created_at', 'desc')
         .limit(limit)
         .offset(offset);
-      const totalCount: any = await db('pipeline_validations')
+      const totalCount = (await db('pipeline_validations')
         .where('schema_id', schemaId)
         .count('* as total')
-        .first();
+        .first()) as { total: number };
       return {
-        validations: results,
+        validations: results as ValidationHistoryResult[],
         pagination: {
           page: parseInt(String(page)),
           limit: parseInt(String(limit)),
@@ -526,16 +615,16 @@ class PipelineSchemaService {
     }
   }
 
-  async getSchemaCategories() {
+  async getSchemaCategories(): Promise<string[]> {
     try {
       const cacheKey = 'categories';
-      return await (cmsCacheService as any).getOrSet(this.CACHE_SCOPE, cacheKey, async () => {
+      return await cmsCacheService.getOrSet(this.CACHE_SCOPE, cacheKey, async () => {
         const categories = await db('pipeline_schemas')
           .distinct('category')
           .select('category')
           .whereNotNull('category')
           .orderBy('category');
-        return categories.map((c: any) => c.category);
+        return categories.map((c: { category: string }) => c.category);
       });
     } catch (error) {
       logger.error('[PipelineSchemaService] Get categories failed:', error);
@@ -543,10 +632,10 @@ class PipelineSchemaService {
     }
   }
 
-  async getSchemaStats() {
+  async getSchemaStats(): Promise<SchemaStatsResult> {
     try {
       const cacheKey = 'stats';
-      return await (cmsCacheService as any).getOrSet(
+      return await cmsCacheService.getOrSet(
         this.CACHE_SCOPE,
         cacheKey,
         async () => {
@@ -562,7 +651,7 @@ class PipelineSchemaService {
             .select('category', db.raw('COUNT(*) as count'))
             .groupBy('category')
             .orderBy('count', 'desc');
-          return { ...stats, category_distribution: categoryStats } as any;
+          return { ...stats, category_distribution: categoryStats } as SchemaStatsResult;
         },
         { ttl: 300 }
       );
