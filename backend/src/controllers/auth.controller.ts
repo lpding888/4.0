@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
 import * as userRepo from '../repositories/users.repo.js';
-import authService from '../services/auth.service.js';
+import authService from '../services/auth.service.ts';
 import tokenService from '../services/token.service.js';
 import { verifyToken } from '../utils/jwt.js';
 

@@ -1,17 +1,22 @@
 /**
  * 认证服务 - TS ESM版本
  * 艹，这个tm管理所有登录认证逻辑！
- * 支持两种登录方式：
+ * 支持三种登录方式：
  * 1. 验证码登录（主要方式）
  * 2. 密码登录（备用方式）
+ * 3. 微信登录（P1核心功能）
  */
 
 import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
+import axios from 'axios';
+import crypto from 'crypto';
 import db from '../db/index.js';
 import tokenService, { TokenPair, UserForToken } from './token.service.js';
 import logger from '../utils/logger.js';
 import * as userRepo from '../repositories/users.repo.js';
+import AppError from '../utils/AppError.js';
+import { ERROR_CODES } from '../config/error-codes.js';
 
 export interface TokenSigner {
   generateTokenPair(user: UserForToken): TokenPair;
@@ -345,6 +350,180 @@ class AuthService implements AuthProvider {
     }
 
     return true;
+  }
+
+  /**
+   * 微信登录 (P1核心功能)
+   * 艹！调用微信API获取用户信息并自动注册/登录
+   */
+  async wechatLogin(code: string): Promise<AuthResult> {
+    try {
+      // 1. 调用微信API code2Session获取openid和unionid
+      const wxAppId = process.env.WECHAT_APP_ID;
+      const wxAppSecret = process.env.WECHAT_APP_SECRET;
+
+      if (!wxAppId || !wxAppSecret) {
+        throw new Error('微信配置不完整');
+      }
+
+      const wxApiUrl = `https://api.weixin.qq.com/sns/jscode2session`;
+      const response = await axios.get(wxApiUrl, {
+        params: {
+          appid: wxAppId,
+          secret: wxAppSecret,
+          js_code: code,
+          grant_type: 'authorization_code'
+        }
+      });
+
+      if (response.data.errcode) {
+        logger.error(`微信code2Session失败: ${response.data.errmsg}`);
+        throw new Error('微信登录失败: ' + response.data.errmsg);
+      }
+
+      const { openid, unionid } = response.data;
+
+      // 2. 查询或创建用户（通过openid）
+      let user = await db('users').where('wechat_openid', openid).first();
+
+      if (!user) {
+        // 新用户，自动注册
+        await db.transaction(async (trx) => {
+          const userId = generateId();
+
+          await trx('users').insert({
+            id: userId,
+            phone: null, // 微信登录时phone为空，后续可绑定
+            wechat_openid: openid,
+            wechat_unionid: unionid || null,
+            isMember: false,
+            quota_remaining: 0,
+            quota_expireAt: null,
+            role: 'user',
+            created_at: new Date(),
+            updated_at: new Date()
+          });
+
+          logger.info(`微信新用户注册: userId=${userId}, openid=${openid}`);
+        });
+
+        user = await db('users').where('wechat_openid', openid).first();
+      }
+
+      // 3. 生成访问令牌
+      const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+
+      logger.info(`微信登录成功: userId=${user.id}, openid=${openid}`);
+
+      return {
+        ...tokens,
+        user: userRepo.toSafeUser(user)
+      };
+    } catch (error: any) {
+      if (error.statusCode) {
+        throw error;
+      }
+      logger.error(`微信登录异常: ${error.message}`, error);
+      throw new Error('微信登录失败');
+    }
+  }
+
+  /**
+   * 设置/修改密码 (P1核心功能)
+   * 艹！用户可以设置或修改密码
+   */
+  async setPassword(
+    userId: string,
+    newPassword: string,
+    oldPassword: string | null = null
+  ): Promise<{ success: boolean }> {
+    // 1. 查询用户
+    const user = await db('users').where('id', userId).first();
+
+    if (!user) {
+      throw new AppError(ERROR_CODES.USER_NOT_FOUND);
+    }
+
+    // 2. 如果用户已有密码,验证旧密码
+    if (user.password && oldPassword) {
+      const isOldPasswordValid = await this.verifyPassword(oldPassword, user.password);
+      if (!isOldPasswordValid) {
+        throw new Error('旧密码错误');
+      }
+    } else if (user.password && !oldPassword) {
+      throw new Error('修改密码需要提供旧密码');
+    }
+
+    // 3. 密码强度校验（至少6位）
+    if (newPassword.length < 6) {
+      throw new Error('密码长度至少6位');
+    }
+
+    // 4. 加密新密码
+    const hashedPassword = await this.hashPassword(newPassword);
+
+    // 5. 更新数据库
+    await db('users')
+      .where('id', userId)
+      .update({
+        password: hashedPassword,
+        updated_at: new Date()
+      });
+
+    logger.info(`用户设置密码成功: userId=${userId}`);
+
+    return {
+      success: true
+    };
+  }
+
+  /**
+   * 验证推荐人有效性 (P1-017)
+   * 艹！防止用户填写无效的推荐人ID
+   */
+  async validateReferrer(referrerId: string): Promise<boolean> {
+    // 1. 检查推荐人是否存在
+    const referrer = await db('users').where('id', referrerId).first();
+
+    if (!referrer) {
+      throw new Error('推荐人不存在');
+    }
+
+    // 2. 检查推荐人账号状态
+    if (referrer.deleted_at) {
+      throw new Error('推荐人账号已被删除');
+    }
+
+    // 3. 检查推荐人是否是分销员（可选）
+    const distributor = await db('distributors')
+      .where('user_id', referrerId)
+      .where('status', 'active')
+      .first();
+
+    if (distributor) {
+      logger.info(`推荐人验证通过（分销员）: referrerId=${referrerId}`);
+    } else {
+      logger.info(`推荐人验证通过（普通用户）: referrerId=${referrerId}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * 密码加密 (私有方法)
+   * 艹！使用bcrypt加密密码
+   */
+  private async hashPassword(password: string): Promise<string> {
+    const saltRounds = 10;
+    return await bcrypt.hash(password, saltRounds);
+  }
+
+  /**
+   * 密码验证 (私有方法)
+   * 艹！验证密码是否匹配
+   */
+  private async verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+    return await bcrypt.compare(password, hashedPassword);
   }
 }
 
