@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+import swaggerUi from 'swagger-ui-express';
 
 import { requestIdMiddleware } from './middlewares/request-id.middleware.js';
 import { appErrorHandler, notFoundHandler } from './middlewares/error-handler.js';
@@ -11,6 +13,12 @@ import { loggerStream } from './utils/logger.js';
 import { startAnnouncementScheduler } from './services/announcementScheduler.service.js';
 import { startBannerScheduler } from './services/bannerScheduler.service.js';
 import cronJobsService from './services/cronJobs.service.js';
+import swaggerSpec from './config/swagger.config.js';
+import logger from './utils/logger.js';
+
+// P1-014: Prometheus监控依赖（艹！这两个还是JS的，暂时用require）
+const metricsMiddleware = require('./middlewares/metrics.middleware.js');
+const metricsService = require('./services/metrics.service.js');
 
 type RouterModule = { default?: express.Router } | express.Router;
 
@@ -110,6 +118,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
   app.use(requestIdMiddleware);
   app.use(helmet());
 
+  // 防止NoSQL注入（艹！虽然用的是MySQL，但防患于未然）
+  app.use(mongoSanitize());
+
   const allowedOrigins =
     options.corsOrigins ??
     (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ['http://localhost:3001']);
@@ -129,6 +140,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
   app.use(morgan('combined', { stream: loggerStream }));
   app.use(createRateLimiter());
 
+  // P1-014: Prometheus指标收集中间件（艹！监控HTTP请求）
+  app.use(metricsMiddleware);
+
   app.get('/', (_req, res) => {
     res.json({
       message: '欢迎使用AI照片处理后端API',
@@ -140,6 +154,40 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // P1-014: Prometheus指标暴露端点（艹！Prometheus从这个接口抓取指标）
+  app.get('/metrics', async (req, res) => {
+    try {
+      res.set('Content-Type', metricsService.getContentType());
+      const metrics = await metricsService.getMetrics();
+      res.end(metrics);
+    } catch (error) {
+      logger.error('[Metrics] 获取指标失败:', error);
+      res.status(500).end('Error collecting metrics');
+    }
+  });
+
+  // P1-013: Swagger API文档（艹！所有API文档一目了然，访问 /api-docs 查看）
+  app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      customSiteTitle: 'AI Photo API文档',
+      customCss: '.swagger-ui .topbar { display: none }',
+      swaggerOptions: {
+        persistAuthorization: true, // 持久化认证信息
+        docExpansion: 'none', // 默认折叠所有接口
+        filter: true, // 启用搜索过滤
+        tryItOutEnabled: true // 启用"Try it out"功能
+      }
+    })
+  );
+
+  // Swagger JSON规范
+  app.get('/api-docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
   });
 
   await registerRoutes(app);
