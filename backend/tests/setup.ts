@@ -39,6 +39,7 @@ jest.mock('../src/utils/redis.js', () => ({
     zcard: jest.fn(),
     zremrangebyscore: jest.fn(),
     ttl: jest.fn(),
+    // @ts-expect-error - Mock类型兼容性
     keys: jest.fn().mockResolvedValue([])
   })),
   default: {
@@ -46,6 +47,7 @@ jest.mock('../src/utils/redis.js', () => ({
     set: jest.fn(),
     setex: jest.fn(),
     del: jest.fn(),
+    // @ts-expect-error - Mock类型兼容性
     keys: jest.fn().mockResolvedValue([])
   }
 }));
@@ -83,6 +85,7 @@ jest.mock('tencentcloud-sdk-nodejs', () => ({
   scf: {
     v20180416: {
       Client: jest.fn().mockImplementation(() => ({
+        // @ts-expect-error - Mock类型兼容性
         Invoke: jest.fn().mockResolvedValue({
           Result: {
             RetMsg: JSON.stringify({ success: true })
@@ -94,6 +97,7 @@ jest.mock('tencentcloud-sdk-nodejs', () => ({
   ims: {
     v20201229: {
       Client: jest.fn().mockImplementation(() => ({
+        // @ts-expect-error - Mock类型兼容性
         ImageModeration: jest.fn().mockResolvedValue({
           Suggestion: 'Pass',
           Label: 'Normal'
@@ -102,6 +106,7 @@ jest.mock('tencentcloud-sdk-nodejs', () => ({
     },
     v20200307: {
       Client: jest.fn().mockImplementation(() => ({
+        // @ts-expect-error - Mock类型兼容性
         ImageModeration: jest.fn().mockResolvedValue({
           Suggestion: 'Pass',
           Label: 'Normal'

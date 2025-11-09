@@ -17,7 +17,9 @@
       "Bash(npm install:*)",
       "Bash(do echo \"=== $branch ===\")",
       "Bash(do echo '=== $branch ===')",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm run lint:*)",
+      "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\" && grep -n \"\"quota\"\" {} | head -5\")"
     ],
     "deny": [],
     "ask": []

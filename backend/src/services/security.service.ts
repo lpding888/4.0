@@ -6,7 +6,7 @@
 
 // 艹！全部改用ESM import，避免CommonJS/ESM混用导致Mock失效！
 import crypto from 'crypto';
-import redis from '../utils/redis.js';
+import { redis } from '../config/redis.js'; // 使用ioredis实例，有完整的Redis命令
 import logger from '../utils/logger.js';
 import { db as knex } from '../db/index.js';
 

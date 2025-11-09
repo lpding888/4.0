@@ -36,7 +36,8 @@ import {
   Avatar,
   Tabs,
   Divider,
-  Badge
+  Badge,
+  Alert
 } from 'antd';
 import {
   FileTextOutlined,

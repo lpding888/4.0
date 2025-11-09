@@ -43,6 +43,7 @@ import {
   NodeIndexOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import type { Rule, Trigger, Condition, Action, RuleStatus } from '@/lib/rules/types';
 import { ruleEngine } from '@/lib/rules/engine';

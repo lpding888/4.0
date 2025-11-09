@@ -72,7 +72,7 @@ const createApp = (): Express => {
 };
 
 describe('Admin API Integration Tests', () => {
-  let app;
+  let app: Express;
 
   beforeAll(() => {
     app = createApp();
@@ -188,7 +188,7 @@ describe('Admin API Integration Tests', () => {
   describe('并发请求', () => {
     it('应该能处理多个并发请求', async () => {
       const requests = Array(10)
-        .fill()
+        .fill(null)
         .map(() => request(app).get('/api/admin/features/stats'));
 
       const responses = await Promise.all(requests);

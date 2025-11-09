@@ -35,9 +35,9 @@ describe('ProviderLoader - 单元测试', () => {
         fail('应该抛出ProviderError');
       } catch (error) {
         expect(error).toBeInstanceOf(ProviderError);
-        expect(error.code).toBe(ProviderErrorCode.ERR_PROVIDER_NOT_ALLOWED);
-        expect(error.message).toContain('不在白名单中');
-        expect(error.details.handlerKey).toBe('MALICIOUS_PROVIDER');
+        expect((error as any).code).toBe(ProviderErrorCode.ERR_PROVIDER_NOT_ALLOWED);
+        expect((error as Error).message).toContain('不在白名单中');
+        expect((error as any).details.handlerKey).toBe('MALICIOUS_PROVIDER');
       }
     });
 
@@ -142,20 +142,20 @@ describe('ProviderLoader - 单元测试', () => {
         fail('应该抛出ProviderError');
       } catch (error) {
         expect(error).toBeInstanceOf(ProviderError);
-        expect(error.code).toBe(ProviderErrorCode.ERR_PROVIDER_NOT_ALLOWED);
+        expect((error as any).code).toBe(ProviderErrorCode.ERR_PROVIDER_NOT_ALLOWED);
       }
     });
 
     test('null/undefined handlerKey应该抛出错误', async () => {
       try {
-        await loader.loadProvider(null);
+        await loader.loadProvider(null as any);
         fail('应该抛出ProviderError');
       } catch (error) {
         expect(error).toBeInstanceOf(ProviderError);
       }
 
       try {
-        await loader.loadProvider(undefined);
+        await loader.loadProvider(undefined as any);
         fail('应该抛出ProviderError');
       } catch (error) {
         expect(error).toBeInstanceOf(ProviderError);
@@ -203,7 +203,7 @@ describe('ProviderLoader - 单元测试', () => {
 });
 
 describe('GenericHttpProvider - 单元测试', () => {
-  let provider;
+  let provider: any;
 
   beforeEach(async () => {
     const loader = new ProviderLoader();

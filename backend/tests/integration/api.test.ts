@@ -32,11 +32,13 @@ function createTestApp(): Express {
       return res.status(401).json({ error: '缺少访问令牌' });
     }
 
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET || 'test-secret', (err, user) => {
       if (err) {
         return res.status(403).json({ error: '无效的访问令牌' });
       }
-      req.userId = user.userId;
+      if (user && typeof user !== 'string') {
+        (req as any).userId = (user as any).userId;
+      }
       next();
     });
   };
@@ -54,7 +56,7 @@ function createTestApp(): Express {
   app.use('/membership', authenticateToken, membershipRoutes);
 
   // 错误处理中间件
-  app.use((error, req, res, next) => {
+  app.use((error: any, req: Request, res: Response, next: NextFunction) => {
     const statusCode = error.statusCode || 500;
     const errorCode = error.errorCode || 'INTERNAL_ERROR';
     const message = error.message || '服务器内部错误';
@@ -259,7 +261,7 @@ describe('API集成测试', () => {
     });
 
     describe('GET /task/:taskId', () => {
-      let testTask;
+      let testTask: any;
 
       beforeEach(async () => {
         testTask = await global.createTestTask(testUser.id, {
@@ -349,7 +351,7 @@ describe('API集成测试', () => {
           .set('Authorization', `Bearer ${authToken}`);
 
         expect(response.status).toBe(200);
-        response.body.data.tasks.forEach((task) => {
+        response.body.data.tasks.forEach((task: any) => {
           expect(task.status).toBe('success');
         });
       });

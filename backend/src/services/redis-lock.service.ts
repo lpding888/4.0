@@ -9,7 +9,7 @@
  */
 
 import crypto from 'crypto';
-import redis from '../config/redis.js';
+import { redis } from '../config/redis.js';
 import logger from '../utils/logger.js';
 
 interface LockOptions {

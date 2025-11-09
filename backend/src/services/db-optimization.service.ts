@@ -1,6 +1,27 @@
-// @ts-nocheck
+/**
+ * 数据库优化服务 - TypeScript ESM版本
+ * 艹！提供EXPLAIN分析、性能监控和优化建议
+ */
+
 import logger from '../utils/logger.js';
 import dbMetrics from '../utils/db-metrics.js';
+import type { MetricsReport, SlowQuery } from '../utils/db-metrics.js';
+import { db } from '../config/database.js';
+
+interface QueryAnalysis {
+  sql: string;
+  analysis: any;
+  timestamp: Date;
+  analysisTime: number;
+}
+
+interface IndexSuggestion {
+  table: string;
+  columns: string[];
+  type: string;
+  reason: string;
+  priority: string;
+}
 
 /**
  * 数据库优化服务
@@ -8,6 +29,10 @@ import dbMetrics from '../utils/db-metrics.js';
  * 提供EXPLAIN分析、性能监控和优化建议
  */
 class DatabaseOptimizationService {
+  private baselineQueries: Map<string, QueryAnalysis>;
+  private analysisQueue: any[];
+  private isAnalyzing: boolean;
+
   constructor() {
     this.baselineQueries = new Map();
     this.analysisQueue = [];
@@ -20,7 +45,7 @@ class DatabaseOptimizationService {
    * @param {Array} params - 参数
    * @returns {Promise<Object>} 分析结果
    */
-  async analyzeQueryExecution(sql, params = []) {
+  async analyzeQueryExecution(sql: string, params: any[] = []): Promise<any> {
     try {
       logger.info('[DB Optimization] 开始分析查询', {
         sql: this.sanitizeSQL(sql)
@@ -53,7 +78,7 @@ class DatabaseOptimizationService {
     } catch (error) {
       logger.error('[DB Optimization] 查询分析失败', {
         sql: this.sanitizeSQL(sql),
-        error: error.message
+        error: (error as Error).message
       });
       throw error;
     }
@@ -101,7 +126,7 @@ class DatabaseOptimizationService {
         logger.error(`[DB Optimization] ${query.name} 分析失败`, error);
         results.push({
           name: query.name,
-          error: error.message,
+          error: (error as Error).message,
           sql: this.sanitizeSQL(query.sql)
         });
       }
@@ -114,8 +139,8 @@ class DatabaseOptimizationService {
    * 获取索引建议
    * @returns {Promise<Array>} 索引建议列表
    */
-  async getIndexSuggestions() {
-    const suggestions = [];
+  async getIndexSuggestions(): Promise<IndexSuggestion[]> {
+    const suggestions: IndexSuggestion[] = [];
 
     try {
       // 检查核心表的索引情况
@@ -123,8 +148,8 @@ class DatabaseOptimizationService {
 
       for (const table of tables) {
         const indexes = await this.getTableIndexes(table);
-        const suggestions = this.generateIndexSuggestions(table, indexes);
-        suggestions.push(...suggestions);
+        const tableSuggestions = this.generateIndexSuggestions(table, indexes);
+        suggestions.push(...tableSuggestions);
       }
     } catch (error) {
       logger.error('[DB Optimization] 获取索引建议失败', error);
@@ -137,13 +162,13 @@ class DatabaseOptimizationService {
    * 获取表的索引信息
    * @param {string} tableName - 表名
    */
-  async getTableIndexes(tableName) {
+  async getTableIndexes(tableName: string): Promise<any[]> {
     try {
       const result = await db.raw(`
         SHOW INDEX FROM ${tableName}
       `);
 
-      return result.map((row) => ({
+      return result.map((row: any) => ({
         table: row.Table,
         nonUnique: row.Non_unique === 0,
         keyName: row.Key_name,
@@ -170,16 +195,19 @@ class DatabaseOptimizationService {
    * @param {string} table - 表名
    * @param {Array} indexes - 现有索引
    */
-  generateIndexSuggestions(table, indexes) {
-    const suggestions = [];
-    const indexMap = new Map();
+  generateIndexSuggestions(table: string, indexes: any[]): IndexSuggestion[] {
+    const suggestions: IndexSuggestion[] = [];
+    const indexMap = new Map<string, string[]>();
 
     // 创建索引映射
-    indexes.forEach((idx) => {
+    indexes.forEach((idx: any) => {
       if (!indexMap.has(idx.keyName)) {
         indexMap.set(idx.keyName, []);
       }
-      indexMap.get(idx.keyName).push(idx.columnName);
+      const columns = indexMap.get(idx.keyName);
+      if (columns) {
+        columns.push(idx.columnName);
+      }
     });
 
     // 建议的核心索引
@@ -213,18 +241,17 @@ class DatabaseOptimizationService {
       ]
     };
 
-    const recommended = recommendedIndexes[table] || [];
+    const recommended = (recommendedIndexes as any)[table] || [];
 
-    recommended.forEach((rec) => {
+    recommended.forEach((rec: any) => {
       const exists = Array.from(indexMap.values()).some(
-        (cols) =>
-          cols.length === rec.columns.length && cols.every((col) => rec.columns.includes(col))
+        (cols: string[]) =>
+          cols.length === rec.columns.length && cols.every((col: string) => rec.columns.includes(col))
       );
 
       if (!exists) {
         suggestions.push({
           table,
-          indexName: `idx_${rec.columns.join('_')}`,
           columns: rec.columns,
           type: rec.type,
           reason: rec.reason,
@@ -240,8 +267,8 @@ class DatabaseOptimizationService {
    * 获取索引优先级
    * @param {string} indexType - 索引类型
    */
-  getIndexPriority(indexType) {
-    const priorities = {
+  getIndexPriority(indexType: string): string {
+    const priorities: Record<string, string> = {
       PRIMARY: 'high',
       UNIQUE: 'high',
       INDEX: 'medium'
@@ -257,14 +284,17 @@ class DatabaseOptimizationService {
     try {
       const startTime = Date.now();
 
-      const [coreQueriesAnalysis, indexSuggestions, metricsReport, slowQueries] = await Promise.all(
-        [
-          this.analyzeCoreQueries(),
-          this.getIndexSuggestions(),
-          Promise.resolve(dbMetrics.getMetricsReport()),
-          Promise.resolve(this.getRecentSlowQueries())
-        ]
-      );
+      const [
+        coreQueriesAnalysis,
+        indexSuggestions,
+        metricsReport,
+        slowQueries
+      ]: [any[], IndexSuggestion[], MetricsReport, SlowQuery[]] = await Promise.all([
+        this.analyzeCoreQueries(),
+        this.getIndexSuggestions(),
+        Promise.resolve(dbMetrics.getMetricsReport()),
+        Promise.resolve(this.getRecentSlowQueries())
+      ]);
 
       const reportTime = Date.now() - startTime;
 
@@ -305,18 +335,18 @@ class DatabaseOptimizationService {
   /**
    * 获取最近的慢查询
    */
-  getRecentSlowQueries() {
-    return dbMetrics.metrics.performance.slowQueries.slice(-20);
+  getRecentSlowQueries(): SlowQuery[] {
+    return dbMetrics.getRecentSlowQueries(20);
   }
 
   /**
    * 生成整体优化建议
    */
-  generateOverallRecommendations(queries, indexes, metrics) {
+  generateOverallRecommendations(queries: any[], indexes: any[], metrics: any): any[] {
     const recommendations = [];
 
     // 连接池建议
-    if (metrics.pool.utilization > 80) {
+    if (Number(metrics.pool.utilization.replace('%', '')) > 80) {
       recommendations.push({
         category: 'connection-pool',
         priority: 'high',
@@ -338,7 +368,7 @@ class DatabaseOptimizationService {
     }
 
     // 索引建议
-    const highPriorityIndexes = indexes.filter((idx) => idx.priority === 'high');
+    const highPriorityIndexes = indexes.filter((idx: any) => idx.priority === 'high');
     if (highPriorityIndexes.length > 0) {
       recommendations.push({
         category: 'indexes',
@@ -355,15 +385,15 @@ class DatabaseOptimizationService {
   /**
    * 清理SQL语句中的敏感信息
    */
-  sanitizeSQL(sql) {
-    return dbMetrics.sanitizeSQL(sql);
+  sanitizeSQL(sql: string): string {
+    return dbMetrics.publicSanitize(sql);
   }
 
   /**
    * 生成SQL哈希
    */
-  hashQuery(sql) {
-    return dbMetrics.hashSQL(sql);
+  hashQuery(sql: string): string {
+    return String(dbMetrics.publicHash(sql));
   }
 
   /**

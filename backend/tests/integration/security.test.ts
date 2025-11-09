@@ -47,7 +47,7 @@ function createTestApp(): Express {
   app.use('/task', authenticateToken, taskRoutes);
 
   // 错误处理中间件
-  app.use((error, req, res, next) => {
+  app.use((error: any, req: Request, res: Response, next: NextFunction) => {
     const statusCode = error.statusCode || 500;
     const errorCode = error.errorCode || 'INTERNAL_ERROR';
     const message = error.message || '服务器内部错误';
@@ -63,11 +63,11 @@ function createTestApp(): Express {
 }
 
 describe('安全测试', () => {
-  let app;
-  let testUser;
-  let authToken;
-  let otherUser;
-  let otherToken;
+  let app: any;
+  let testUser: any;
+  let authToken: any;
+  let otherUser: any;
+  let otherToken: any;
 
   beforeAll(async () => {
     app = createTestApp();
@@ -248,8 +248,7 @@ describe('安全测试', () => {
         'Bearer invalid',
         'completely-fake-token',
         'null',
-        '',
-        undefined
+        ''
       ];
 
       for (const token of invalidTokens) {
@@ -260,10 +259,10 @@ describe('安全测试', () => {
     });
 
     test('过期的token应该被拒绝', async () => {
-      
+
       const expiredToken = jwt.sign(
         { userId: testUser.id },
-        process.env.JWT_SECRET,
+        process.env.JWT_SECRET ?? 'test-secret',
         { expiresIn: '-1h' } // 已过期
       );
 

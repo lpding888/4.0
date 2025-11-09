@@ -41,9 +41,9 @@ function createTestApp(): Express {
 }
 
 describe('性能测试', () => {
-  let app;
-  let testUsers = [];
-  let authTokens = [];
+  let app: any;
+  let testUsers: any[] = [];
+  let authTokens: any[] = [];
 
   beforeAll(async () => {
     app = createTestApp();

@@ -1,8 +1,8 @@
-import { TaskService } from '../src/services/task.service';
-import { QuotaService } from '../src/services/quota.service';
-import { PipelineEngine } from '../src/services/pipelineEngine.service';
-import db from '../src/config/database';
-import logger from '../src/utils/logger';
+import taskService from '../src/services/task.service.js';
+import quotaService from '../src/services/quota.service.js';
+import pipelineEngine from '../src/services/pipelineEngine.service.js';
+import { db } from '../src/config/database.js';
+import logger from '../src/utils/logger.js';
 
 // Mock logger
 jest.mock('../src/utils/logger', () => ({
@@ -193,16 +193,12 @@ jest.mock('../src/db', () => {
 });
 
 describe('配额Saga流程集成测试', () => {
-  let taskService: TaskService;
-  let quotaService: QuotaService;
   const mockDb = db as any;
   const userId = 'test-user-id';
   const featureId = 'test-feature-id';
 
   beforeAll(async () => {
-    // 初始化服务
-    taskService = new TaskService();
-    quotaService = new QuotaService();
+    // 使用导入的服务实例
 
     // 创建测试用户
     await mockDb('users').insert({
@@ -449,7 +445,7 @@ describe('配额Saga流程集成测试', () => {
       const originalUserQuery = mockDb('users').where;
 
       // 修改用户查询，确保confirm操作能找到用户
-      mockDb('users').where.mockImplementation((query) => {
+      mockDb('users').where.mockImplementation((query: any) => {
         if (query.id === userId) {
           return {
             first: jest.fn().mockReturnValue({
@@ -507,7 +503,7 @@ describe('配额Saga流程集成测试', () => {
           }
           
           if (table === 'quota_transactions') {
-            mockTrxTable.where.mockImplementation((query) => {
+            mockTrxTable.where.mockImplementation((query: any) => {
               if (query.task_id === taskId && query.phase === 'reserved') {
                 return {
                   first: jest.fn().mockReturnValue({
@@ -562,7 +558,7 @@ describe('配额Saga流程集成测试', () => {
       const originalUserQuery = mockDb('users').where;
 
       // 修改用户查询，确保cancel操作能找到用户
-      mockDb('users').where.mockImplementation((query) => {
+      mockDb('users').where.mockImplementation((query: any) => {
         if (query.id === userId) {
           return {
             first: jest.fn().mockReturnValue({
@@ -620,7 +616,7 @@ describe('配额Saga流程集成测试', () => {
           }
           
           if (table === 'quota_transactions') {
-            mockTrxTable.where.mockImplementation((query) => {
+            mockTrxTable.where.mockImplementation((query: any) => {
               if (query.task_id === taskId && query.phase === 'reserved') {
                 return {
                   first: jest.fn().mockReturnValue({

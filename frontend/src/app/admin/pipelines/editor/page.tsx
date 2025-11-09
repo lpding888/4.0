@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag } from 'antd';
+import { Card, Button, Space, message, Drawer, Input, Modal, Form, Select, Tag, Row, Col } from 'antd';
 import {
   BranchesOutlined,
   SaveOutlined,

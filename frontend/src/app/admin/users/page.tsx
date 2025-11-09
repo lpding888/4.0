@@ -970,7 +970,7 @@ export default function UserManagement() {
                       {currentUser.profile?.bio && (
                         <div style={{ marginBottom: 16 }}>
                           <Text strong>个人简介：</Text>
-                          <Paragraph>{currentUser.profile.bio}</Paragraph>
+                          <Typography.Paragraph>{currentUser.profile.bio}</Typography.Paragraph>
                         </div>
                       )}
                     </TabPane>

@@ -1,6 +1,10 @@
-import { QuotaService } from '../src/services/quota.service';
-import db from '../src/config/database';
-import { AppError, ErrorCode } from '../src/utils/errors';
+import quotaService from '../src/services/quota.service.js';
+import { db } from '../src/config/database.js';
+import { AppError } from '../src/utils/AppError.js';
+import { ERROR_CODES } from '../src/config/error-codes.js';
+
+// 兼容旧代码中的ErrorCode引用
+const ErrorCode = ERROR_CODES;
 
 // Mock数据库
 jest.mock('../src/config/database', () => ({
@@ -24,11 +28,9 @@ jest.mock('uuid', () => ({
 }));
 
 describe('QuotaService', () => {
-  let quotaService: QuotaService;
   const mockDb = db as any;
 
   beforeEach(() => {
-    quotaService = new QuotaService();
     jest.clearAllMocks();
   });
 
@@ -49,7 +51,7 @@ describe('QuotaService', () => {
         update: jest.fn().mockResolvedValue(undefined),
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
@@ -87,13 +89,13 @@ describe('QuotaService', () => {
         first: jest.fn().mockResolvedValue(mockUser),
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
       // 执行测试并验证异常
       await expect(quotaService.reserve(userId, taskId, amount)).rejects.toThrow(
-        new AppError(ErrorCode.QUOTA_INSUFFICIENT, '配额不足,请续费', 403)
+        new AppError(ErrorCode.USER_QUOTA_EXCEEDED, '配额不足,请续费')
       );
     });
 
@@ -110,13 +112,13 @@ describe('QuotaService', () => {
         first: jest.fn().mockResolvedValue(null), // 用户不存在
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
       // 执行测试并验证异常
       await expect(quotaService.reserve(userId, taskId, amount)).rejects.toThrow(
-        new AppError(ErrorCode.QUOTA_INSUFFICIENT, '配额不足,请续费', 403)
+        new AppError(ErrorCode.USER_QUOTA_EXCEEDED, '配额不足,请续费')
       );
     });
   });
@@ -213,8 +215,8 @@ describe('QuotaService', () => {
       };
 
       // Mock数据库事务
-      const whereCalls = [];
-      const whereMock = jest.fn().mockImplementation((query) => {
+      const whereCalls: any[] = [];
+      const whereMock = jest.fn().mockImplementation((query: any) => {
         whereCalls.push(query);
         return {
           first: jest.fn().mockResolvedValue(mockRecord),
@@ -230,7 +232,7 @@ describe('QuotaService', () => {
         update: jest.fn().mockResolvedValue(undefined),
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
@@ -253,7 +255,7 @@ describe('QuotaService', () => {
         first: jest.fn().mockResolvedValue(null), // 记录不存在
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
@@ -281,7 +283,7 @@ describe('QuotaService', () => {
         first: jest.fn().mockResolvedValue(mockRecord),
       } as any;
 
-      mockDb.transaction.mockImplementation(async (callback) => {
+      mockDb.transaction.mockImplementation(async (callback: any) => {
         await callback(mockTrx);
       });
 
