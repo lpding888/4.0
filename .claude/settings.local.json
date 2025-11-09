@@ -13,7 +13,8 @@
       "Bash(do ts_file=\"$f%.js.ts\")",
       "Bash(then echo \"✅ $f → $ts_file (已有TS版本)\")",
       "Bash(else echo \"❌ $f (仅JS版本)\")",
-      "Bash(/tmp/redis-lock-original.js)"
+      "Bash(/tmp/redis-lock-original.js)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

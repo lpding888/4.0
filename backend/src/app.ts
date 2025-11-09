@@ -15,10 +15,8 @@ import { startBannerScheduler } from './services/bannerScheduler.service.js';
 import cronJobsService from './services/cronJobs.service.js';
 import swaggerSpec from './config/swagger.config.js';
 import logger from './utils/logger.js';
-
-// P1-014: Prometheus监控依赖（艹！这两个还是JS的，暂时用require）
-const metricsMiddleware = require('./middlewares/metrics.middleware.js');
-const metricsService = require('./services/metrics.service.js');
+import metricsMiddleware from './middlewares/metrics.middleware.js';
+import metricsService from './services/metrics.service.js';
 
 type RouterModule = { default?: express.Router } | express.Router;
 
