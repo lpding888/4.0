@@ -4,4 +4,3 @@ declare const controller: {
   getHelpers: any;
 };
 export default controller;
-

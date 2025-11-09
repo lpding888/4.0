@@ -49,7 +49,7 @@ import {
   ReloadOutlined,
   EyeOutlined,
   FileImageOutlined,
-  CompareOutlined,
+  SwapOutlined,
   ZoomInOutlined,
   DownloadOutlined,
   SettingOutlined,
@@ -609,10 +609,12 @@ export default function DewrinklePage() {
         dataSource={tasks.slice(0, 10)}
         renderItem={(task) => (
           <List.Item
+            key={task.id}
             actions={task.status === 'completed' ? [
               <Button
+                key="compare"
                 type="link"
-                icon={<CompareOutlined />}
+                icon={<SwapOutlined />}
                 onClick={() => openComparison(task)}
               >
                 对比
@@ -683,15 +685,11 @@ export default function DewrinklePage() {
                   />
                 }
                 actions={[
-                  <Tooltip title="对比查看">
-                    <CompareOutlined
-                      key="compare"
-                      onClick={() => openComparison(task)}
-                    />
+                  <Tooltip key="compare" title="对比查看">
+                    <SwapOutlined onClick={() => openComparison(task)} />
                   </Tooltip>,
-                  <Tooltip title="下载">
+                  <Tooltip key="download" title="下载">
                     <DownloadOutlined
-                      key="download"
                       onClick={() => {
                         const link = document.createElement('a');
                         link.href = task.resultImage || task.imageUrl;
@@ -805,7 +803,7 @@ export default function DewrinklePage() {
       <Modal
         title={
           <Space>
-            <CompareOutlined />
+            <SwapOutlined />
             <span>去皱对比 - {selectedTask?.imageName}</span>
           </Space>
         }

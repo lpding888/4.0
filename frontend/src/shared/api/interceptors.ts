@@ -159,7 +159,7 @@ apiClient.interceptors.response.use(
 
     return response;
   },
-  async (error: AxiosError) => {
+  async (error: AxiosError<ApiResponse>) => {
     // 艹，处理缓存命中（这不是真正的错误）
     if ((error as any).__cached) {
       return Promise.resolve({

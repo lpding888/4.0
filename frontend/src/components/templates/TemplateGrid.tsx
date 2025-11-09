@@ -18,8 +18,9 @@ import {
   DeleteOutlined,
   MoreOutlined,
   StarFilled,
+  AppstoreOutlined,
 } from '@ant-design/icons';
-import type { Template } from '@/app/workspace/templates/page';
+import type { Template } from './types';
 
 const { Text, Paragraph } = Typography;
 
@@ -49,9 +50,39 @@ export default function TemplateGrid({
   onCopy,
   onDelete,
 }: TemplateGridProps) {
+  const getTypeStyle = (type?: string) => {
+    if (type && typeConfig?.[type]) {
+      return typeConfig[type];
+    }
+    if (typeConfig?.default) {
+      return typeConfig.default;
+    }
+    return {
+      color: '#1890ff',
+      icon: <AppstoreOutlined />,
+    };
+  };
+  const getCategoryStyle = (category?: string) => {
+    if (category && categoryConfig?.[category]) {
+      return categoryConfig[category];
+    }
+    return categoryConfig?.default || { color: '#d9d9d9', label: '未分类' };
+  };
+  const getComplexityStyle = (complexity?: string) => {
+    if (complexity && complexityConfig?.[complexity]) {
+      return complexityConfig[complexity];
+    }
+    return complexityConfig?.default || { color: '#d9d9d9', label: '未知难度' };
+  };
+
   return (
     <Row gutter={[16, 16]}>
-      {templates.map(template => (
+      {templates.map(template => {
+        const typeStyle = getTypeStyle(template.type);
+        const categoryStyle = getCategoryStyle(template.category);
+        const complexityStyle = getComplexityStyle(template.complexity);
+
+        return (
         <Col key={template.id} xs={24} sm={12} lg={8} xl={6}>
           <Card
             hoverable
@@ -59,7 +90,7 @@ export default function TemplateGrid({
               <div
                 style={{
                   height: 160,
-                  background: `linear-gradient(135deg, ${typeConfig[template.type].color} 0%, ${typeConfig[template.type].color}dd 100%)`,
+                  background: `linear-gradient(135deg, ${typeStyle.color} 0%, ${typeStyle.color}dd 100%)`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -67,7 +98,7 @@ export default function TemplateGrid({
                   fontSize: 48
                 }}
               >
-                {typeConfig[template.type].icon}
+                {typeStyle.icon}
               </div>
             }
             actions={[
@@ -120,7 +151,7 @@ export default function TemplateGrid({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Text strong style={{ flex: 1 }}>{template.name}</Text>
                   {template.isOfficial && (
-                    <Tag color="gold" size="small">官方</Tag>
+                    <Tag color="gold">官方</Tag>
                   )}
                 </div>
               }
@@ -133,11 +164,11 @@ export default function TemplateGrid({
                     {template.description}
                   </Paragraph>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <Tag color={categoryConfig[template.category].color}>
-                      {categoryConfig[template.category].label}
+                    <Tag color={categoryStyle.color}>
+                      {categoryStyle.label}
                     </Tag>
-                    <Tag color={complexityConfig[template.complexity].color}>
-                      {complexityConfig[template.complexity].label}
+                    <Tag color={complexityStyle.color}>
+                      {complexityStyle.label}
                     </Tag>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -150,14 +181,15 @@ export default function TemplateGrid({
                         {template.usageCount} 次使用
                       </Text>
                     </Space>
-                    <Avatar size="small" src={template.author.avatar} />
+                    <Avatar size="small" src={template.author?.avatar} />
                   </div>
                 </div>
               }
             />
           </Card>
         </Col>
-      ))}
+        );
+      })}
     </Row>
   );
 }

@@ -21,7 +21,11 @@ function createTestApp(): Express {
   app.use(express.json());
 
   // JWT验证中间件
-  const authenticateToken = (req: Request & { userId?: string }, res: Response, next: NextFunction) => {
+  const authenticateToken = (
+    req: Request & { userId?: string },
+    res: Response,
+    next: NextFunction
+  ) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -29,7 +33,6 @@ function createTestApp(): Express {
       return res.status(401).json({ error: '缺少访问令牌' });
     }
 
-    
     jwt.verify(token, process.env.JWT_SECRET ?? '', (err, user: any) => {
       if (err) {
         return res.status(403).json({ error: '无效的访问令牌' });
@@ -40,8 +43,6 @@ function createTestApp(): Express {
   };
 
   // 导入路由
-  
-  
 
   app.use('/auth', authRoutes);
   app.use('/task', authenticateToken, taskRoutes);
@@ -259,7 +260,6 @@ describe('安全测试', () => {
     });
 
     test('过期的token应该被拒绝', async () => {
-
       const expiredToken = jwt.sign(
         { userId: testUser.id },
         process.env.JWT_SECRET ?? 'test-secret',

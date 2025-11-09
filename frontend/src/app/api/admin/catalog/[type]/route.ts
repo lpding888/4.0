@@ -150,7 +150,7 @@ export async function GET(
     const status = searchParams.get('status');
     const category = searchParams.get('category');
 
-    let filteredData = data;
+    let filteredData: any[] = data as any[];
 
     // 搜索过滤
     if (search) {

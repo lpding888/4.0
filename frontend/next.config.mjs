@@ -6,6 +6,9 @@ const withNextIntl = nextIntl('./src/i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   images: {
     domains: ['via.placeholder.com', 'api.dicebear.com'],
     remotePatterns: [

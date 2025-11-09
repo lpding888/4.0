@@ -65,7 +65,7 @@ export default function NodeConfigDrawer({
   const loadProviders = async () => {
     setLoadingProviders(true);
     try {
-      const response = await adminProviders.list({ page: 1, pageSize: 100 });
+      const response = await adminProviders.list({ limit: 100, offset: 0 });
       setProviders(response.items || []);
     } catch (error: any) {
       console.error('[加载Provider失败]', error);

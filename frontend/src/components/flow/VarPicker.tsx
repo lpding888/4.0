@@ -325,7 +325,10 @@ export const validateVarReferences = (
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    references.push(match[1].trim());
+    const ref = match[1];
+    if (ref) {
+      references.push(ref.trim());
+    }
   }
 
   // 收集所有可用的叶子节点路径

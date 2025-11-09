@@ -50,7 +50,7 @@ import {
   ReloadOutlined,
   EyeOutlined,
   FileImageOutlined,
-  CompareOutlined,
+  SwapOutlined,
   ZoomInOutlined,
   DownloadOutlined,
   SettingOutlined,
@@ -555,7 +555,7 @@ export default function CutoutPage() {
               </div>
               <ColorPicker
                 value={backgroundColor}
-                onChange={setBackgroundColor}
+                onChange={(color) => setBackgroundColor(color.toHexString())}
                 showText
                 format="hex"
                 style={{ width: '100%' }}
@@ -653,10 +653,12 @@ export default function CutoutPage() {
         dataSource={tasks.slice(0, 10)}
         renderItem={(task) => (
           <List.Item
+            key={task.id}
             actions={task.status === 'completed' ? [
               <Button
+                key="compare"
                 type="link"
-                icon={<CompareOutlined />}
+                icon={<SwapOutlined />}
                 onClick={() => openComparison(task)}
               >
                 对比
@@ -724,11 +726,10 @@ export default function CutoutPage() {
                       <div style={{
                         width: '100%',
                         height: '100%',
-                        backgroundImage: `url(${task.thumbnailImage || task.resultImage})`,
-                        backgroundSize: 'cover',
+                        backgroundImage: `repeating-conic-gradient(#f0f0f0 0% 25%, white 0% 50%), url(${task.thumbnailImage || task.resultImage})`,
+                        backgroundSize: '20px 20px, cover',
                         backgroundPosition: 'center',
-                        backgroundColor: '#f0f0f0',
-                        backgroundImage: `repeating-conic-gradient(#f0f0f0 0% 25%, white 0% 50%) 50% / 20px 20px`
+                        backgroundColor: '#f0f0f0'
                       }}>
                         <Image
                           src={task.resultImage}
@@ -748,15 +749,11 @@ export default function CutoutPage() {
                   </div>
                 }
                 actions={[
-                  <Tooltip title="对比查看">
-                    <CompareOutlined
-                      key="compare"
-                      onClick={() => openComparison(task)}
-                    />
+                  <Tooltip key="compare" title="对比查看">
+                    <SwapOutlined onClick={() => openComparison(task)} />
                   </Tooltip>,
-                  <Tooltip title="下载">
+                  <Tooltip key="download" title="下载">
                     <DownloadOutlined
-                      key="download"
                       onClick={() => {
                         const link = document.createElement('a');
                         link.href = task.resultImage!;
@@ -871,7 +868,7 @@ export default function CutoutPage() {
       <Modal
         title={
           <Space>
-            <CompareOutlined />
+            <SwapOutlined />
             <span>抠图对比 - {selectedTask?.imageName}</span>
           </Space>
         }

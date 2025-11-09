@@ -34,11 +34,11 @@ describe('FeatureCatalogService permissions', () => {
 
     const permissionSpy = jest
       .spyOn(service, 'getFeaturePermissions')
-      .mockResolvedValue([{ permission_type: 'user', permission_value: 'user-3', is_granted: true }] as never);
+      .mockResolvedValue([
+        { permission_type: 'user', permission_value: 'user-3', is_granted: true }
+      ] as never);
 
-    const evaluateSpy = jest
-      .spyOn(service, 'evaluatePermission')
-      .mockResolvedValue(true);
+    const evaluateSpy = jest.spyOn(service, 'evaluatePermission').mockResolvedValue(true);
 
     const allowed = await featureCatalogService.checkFeatureAccess('feature-x', 'user-3', {});
 

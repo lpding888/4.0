@@ -84,11 +84,12 @@ export default function FeatureCard({ feature, disabled = false, onUpgrade }: Fe
     if (!match) return null;
 
     const [, period, limit] = match;
-    const periodText = {
+    const PERIOD_TEXT: Record<'hourly' | 'daily' | 'monthly', string> = {
       hourly: '每小时',
       daily: '每天',
       monthly: '每月'
-    }[period] || '';
+    };
+    const periodText = PERIOD_TEXT[period as keyof typeof PERIOD_TEXT] || '';
 
     return `${periodText}最多${limit}次`;
   };

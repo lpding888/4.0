@@ -270,7 +270,7 @@ export function COSBatchUploader({
       }
     }
 
-    return FILE_TYPE_CONFIGS.other;
+    return (FILE_TYPE_CONFIGS.other ?? FILE_TYPE_CONFIGS.image)!;
   };
 
   // 格式化文件大小
@@ -673,8 +673,6 @@ export function COSBatchUploader({
         handleFileSelect(e.dataTransfer.files);
       }
     },
-    onDragEnter: () => setIsDragging(true),
-    onDragLeave: () => setIsDragging(false),
     accept: Object.values(FILE_TYPE_CONFIGS)
       .flatMap(config => config.accept)
       .filter(ext => ext !== '*')
@@ -803,18 +801,28 @@ export function COSBatchUploader({
           </Space>
         }
       >
-        <Dragger {...dragProps} className={isDragging ? 'dragging' : ''}>
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined />
-          </p>
-          <p className="ant-upload-text">
-            点击或拖拽文件到此区域上传
-          </p>
-          <p className="ant-upload-hint">
-            支持批量上传，最大文件大小 {uploadConfig.maxFileSize}MB，
-            总大小不超过 {uploadConfig.maxTotalSize}MB
-          </p>
-        </Dragger>
+        <div
+          onDragEnter={() => setIsDragging(true)}
+          onDragLeave={(e) => {
+            const nextTarget = e.relatedTarget as Node | null;
+            if (!nextTarget || !e.currentTarget.contains(nextTarget)) {
+              setIsDragging(false);
+            }
+          }}
+        >
+          <Dragger {...dragProps} className={isDragging ? 'dragging' : ''}>
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">
+              点击或拖拽文件到此区域上传
+            </p>
+            <p className="ant-upload-hint">
+              支持批量上传，最大文件大小 {uploadConfig.maxFileSize}MB，
+              总大小不超过 {uploadConfig.maxTotalSize}MB
+            </p>
+          </Dragger>
+        </div>
       </Card>
 
       {/* 统计信息 */}
@@ -906,7 +914,6 @@ export function COSBatchUploader({
                           <Alert
                             message={file.error}
                             type="error"
-                            size="small"
                             showIcon
                             closable
                           />

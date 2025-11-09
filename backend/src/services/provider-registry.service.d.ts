@@ -7,4 +7,3 @@ declare const providerRegistryService: {
 };
 
 export default providerRegistryService;
-

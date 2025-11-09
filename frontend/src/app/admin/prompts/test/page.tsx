@@ -24,7 +24,7 @@ import {
 import {
   PlayCircleOutlined,
   ReloadOutlined,
-  CompareOutlined,
+  SwapOutlined,
   CodeOutlined,
   RocketOutlined,
 } from '@ant-design/icons';
@@ -404,7 +404,7 @@ export default function PromptTestPage() {
                   测试当前版本
                 </Button>
                 <Button
-                  icon={<CompareOutlined />}
+                icon={<SwapOutlined />}
                   onClick={handleComparePublished}
                   loading={testing}
                 >

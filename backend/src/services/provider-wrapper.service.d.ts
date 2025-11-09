@@ -6,4 +6,3 @@ declare const providerWrapperService: {
 };
 
 export default providerWrapperService;
-

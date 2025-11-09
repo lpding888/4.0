@@ -122,7 +122,12 @@ export class VecClient {
    * 生成文本embedding
    */
   async embed(text: string): Promise<number[]> {
-    return (await this.embedBatch([text]))[0];
+    const [embedding] = await this.embedBatch([text]);
+    if (!embedding) {
+      console.warn('[VecClient] 未获取到embedding结果');
+      return [];
+    }
+    return embedding;
   }
 
   /**
@@ -191,6 +196,10 @@ export class VecClient {
         batch.forEach((text, index) => {
           const cacheKey = this.getCacheKey(text);
           const embedding = data.embeddings[index];
+          if (!embedding) {
+            console.warn('[VecClient] 缓存写入时缺少embedding', { text });
+            return;
+          }
           this.embeddingCache.set(cacheKey, { embedding, expireAt });
         });
       }
@@ -198,7 +207,12 @@ export class VecClient {
 
     // 合并结果
     uncachedIndices.forEach((index, i) => {
-      results[index] = uncachedResults[i];
+      const embedding = uncachedResults[i];
+      if (!embedding) {
+        console.warn('[VecClient] 未获取到对应的embedding结果', { index });
+        return;
+      }
+      results[index] = embedding;
     });
 
     console.log(
@@ -464,7 +478,7 @@ export class VecClient {
    */
   private euclideanDistance(vec1: number[], vec2: number[]): number {
     const distance = Math.sqrt(
-      vec1.reduce((sum, val, i) => sum + Math.pow(val - vec2[i], 2), 0)
+      vec1.reduce((sum, val, i) => sum + Math.pow(val - vec2[i]!, 2), 0)
     );
     // 转换为相似度 [0, 1]
     return 1 / (1 + distance);
@@ -474,7 +488,7 @@ export class VecClient {
    * 点积
    */
   private dotProduct(vec1: number[], vec2: number[]): number {
-    return vec1.reduce((sum, val, i) => sum + val * vec2[i], 0);
+    return vec1.reduce((sum, val, i) => sum + val * vec2[i]!, 0);
   }
 
   /**

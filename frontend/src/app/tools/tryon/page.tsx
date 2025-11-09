@@ -16,6 +16,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import NextImage from 'next/image';
 import {
   Card,
   Row,
@@ -52,7 +53,6 @@ import {
   EyeOutlined,
   FileImageOutlined,
   SwapOutlined,
-  CompareOutlined,
   ZoomInOutlined,
   DownloadOutlined,
   SettingOutlined,
@@ -281,7 +281,7 @@ export default function TryOnPage() {
               preserve_hair: preserveHair,
               tryon_mode: 'professional'
             },
-            files: [personImage, clothing.url],
+            files: [personImage, task.clothingImage],
             toolKey: 'ai_tryon'
           })
         });
@@ -379,16 +379,20 @@ export default function TryOnPage() {
       case 'slider':
         return (
           <div style={{ position: 'relative', width: '100%', height: 400 }}>
-            <img
+            <NextImage
               src={task.originalClothingImage}
               alt="Original"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              fill
+              style={{ objectFit: 'cover' }}
+              unoptimized
             />
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '100%', overflow: 'hidden' }}>
-              <img
+              <NextImage
                 src={task.resultImage}
                 alt="TryOn Result"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                fill
+                style={{ objectFit: 'cover' }}
+                unoptimized
               />
             </div>
             <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(0,0,0,0.7)', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
@@ -403,20 +407,26 @@ export default function TryOnPage() {
             <Col span={12}>
               <div style={{ textAlign: 'center' }}>
                 <Text strong>原服装</Text>
-                <img
+                <NextImage
                   src={task.originalClothingImage}
                   alt="Original"
+                  width={600}
+                  height={350}
                   style={{ width: '100%', height: 350, objectFit: 'cover', marginTop: 8 }}
+                  unoptimized
                 />
               </div>
             </Col>
             <Col span={12}>
               <div style={{ textAlign: 'center' }}>
                 <Text strong>试穿效果</Text>
-                <img
+                <NextImage
                   src={task.resultImage}
                   alt="TryOn Result"
+                  width={600}
+                  height={350}
                   style={{ width: '100%', height: 350, objectFit: 'cover', marginTop: 8 }}
+                  unoptimized
                 />
               </div>
             </Col>
@@ -426,15 +436,19 @@ export default function TryOnPage() {
       case 'overlay':
         return (
           <div style={{ position: 'relative', width: '100%', height: 400 }}>
-            <img
+            <NextImage
               src={task.originalClothingImage}
               alt="Original"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5 }}
+              fill
+              style={{ objectFit: 'cover', opacity: 0.5 }}
+              unoptimized
             />
-            <img
+            <NextImage
               src={task.resultImage}
               alt="TryOn Result"
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
+              fill
+              style={{ objectFit: 'cover', opacity: 0.8 }}
+              unoptimized
             />
             <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(0,0,0,0.7)', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
               <Text style={{ color: 'white', fontSize: 12 }}>叠加对比模式</Text>
@@ -672,10 +686,12 @@ export default function TryOnPage() {
         dataSource={tasks}
         renderItem={(task) => (
           <List.Item
+            key={task.id}
             actions={task.status === 'completed' ? [
               <Button
+                key="compare"
                 type="link"
-                icon={<CompareOutlined />}
+                icon={<SwapOutlined />}
                 onClick={() => openComparison(task)}
               >
                 对比
@@ -745,15 +761,11 @@ export default function TryOnPage() {
                   />
                 }
                 actions={[
-                  <Tooltip title="对比查看">
-                    <CompareOutlined
-                      key="compare"
-                      onClick={() => openComparison(task)}
-                    />
+                  <Tooltip key="compare" title="对比查看">
+                    <SwapOutlined onClick={() => openComparison(task)} />
                   </Tooltip>,
-                  <Tooltip title="下载">
+                  <Tooltip key="download" title="下载">
                     <DownloadOutlined
-                      key="download"
                       onClick={() => {
                         const link = document.createElement('a');
                         link.href = task.resultImage!;
@@ -863,7 +875,7 @@ export default function TryOnPage() {
       <Modal
         title={
           <Space>
-            <CompareOutlined />
+            <SwapOutlined />
             <span>试衣对比 - {selectedTask?.clothingName}</span>
           </Space>
         }

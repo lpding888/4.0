@@ -36,6 +36,7 @@ export function trackChatSuccess(
 ) {
   businessMetrics.trackChat({
     eventName: 'chat_success',
+    category: 'chat',
     action: 'success',
     properties: {
       messageType,
@@ -82,6 +83,7 @@ export function trackUploadStart(
 ) {
   businessMetrics.trackUpload({
     eventName: 'upload_start',
+    category: 'upload',
     action: 'start',
     properties: {
       fileType,
@@ -105,6 +107,7 @@ export function trackUploadSuccess(
 ) {
   businessMetrics.trackUpload({
     eventName: 'upload_success',
+    category: 'upload',
     action: 'success',
     duration: processingTime,
     properties: {
@@ -129,6 +132,7 @@ export function trackUploadError(
 ) {
   businessMetrics.trackUpload({
     eventName: 'upload_error',
+    category: 'upload',
     action: 'failure',
     properties: {
       fileType,
@@ -156,6 +160,7 @@ export function trackCommerceTaskStart(
 ) {
   businessMetrics.trackCommerce({
     eventName: 'commerce_task_start',
+    category: 'commerce',
     action: 'start',
     properties: {
       toolType,
@@ -178,6 +183,7 @@ export function trackCommerceTaskComplete(
 ) {
   businessMetrics.trackCommerce({
     eventName: 'commerce_task_complete',
+    category: 'commerce',
     action: 'success',
     duration: processingTime,
     properties: {
@@ -202,6 +208,7 @@ export function trackCommerceTaskError(
 ) {
   businessMetrics.trackCommerce({
     eventName: 'commerce_task_error',
+    category: 'commerce',
     action: 'failure',
     duration: processingTime,
     properties: {
@@ -229,6 +236,7 @@ export function trackToolOperationStart(
 ) {
   businessMetrics.trackTool({
     eventName: 'tool_operation_start',
+    category: 'tool',
     action: 'start',
     properties: {
       toolName,
@@ -252,6 +260,7 @@ export function trackToolOperationSuccess(
 ) {
   businessMetrics.trackTool({
     eventName: 'tool_operation_success',
+    category: 'tool',
     action: 'success',
     duration: processingTime,
     properties: {
@@ -276,6 +285,7 @@ export function trackToolOperationError(
 ) {
   businessMetrics.trackTool({
     eventName: 'tool_operation_error',
+    category: 'tool',
     action: 'failure',
     duration: processingTime,
     properties: {

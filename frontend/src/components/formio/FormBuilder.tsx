@@ -38,8 +38,8 @@ export default function FormBuilder({ schema, onChange, options }: FormBuilderPr
     const initFormioBuilder = async () => {
       try {
         // 动态导入formiojs（关键！避免SSR）
-        const Formio = (await import('formiojs')).default;
-        const FormioUtils = (await import('formiojs/utils')).default;
+        const Formio = (await import('formiojs')).default as any;
+        const FormioUtils = (await import('formiojs/utils')).default as any;
 
         // 加载formio样式
         await import('formiojs/dist/formio.full.min.css');

@@ -77,7 +77,7 @@ export default function PrivacyPolicyPage() {
             <ul>
               <li><Text strong>访问</Text>：请求访问您的个人信息</li>
               <li><Text strong>更正</Text>：更正不准确的信息</li>
-              <li><Text strong>删除</Text>：请求删除您的信息（"被遗忘权"）</li>
+              <li><Text strong>删除</Text>：请求删除您的信息（&ldquo;被遗忘权&rdquo;）</li>
               <li><Text strong>导出</Text>：以机器可读格式导出数据</li>
               <li><Text strong>反对</Text>：反对某些数据处理</li>
               <li><Text strong>撤回同意</Text>：随时撤回您的同意</li>

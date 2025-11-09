@@ -200,6 +200,7 @@ export default function RollbackManagementPage() {
       dryRun: boolean;
       reason: string;
     }) => {
+      const { dryRun } = params;
       // Mock - 实际应该调用API
       await new Promise(resolve => setTimeout(resolve, dryRun ? 500 : 3000));
       return {
@@ -575,7 +576,7 @@ export default function RollbackManagementPage() {
           </Form.Item>
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={createPointMutation.isLoading}>
+              <Button type="primary" htmlType="submit" loading={createPointMutation.isPending}>
                 创建
               </Button>
               <Button onClick={() => setCreateModalVisible(false)}>
@@ -708,7 +709,7 @@ export default function RollbackManagementPage() {
                     type="primary"
                     danger={!dryRunMode}
                     htmlType="submit"
-                    loading={rollbackMutation.isLoading}
+                    loading={rollbackMutation.isPending}
                     icon={dryRunMode ? <PlayCircleOutlined /> : <ThunderboltOutlined />}
                   >
                     {dryRunMode ? '模拟回滚' : '立即回滚'}

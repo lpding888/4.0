@@ -334,7 +334,9 @@ export const CollabPanel: React.FC<CollabPanelProps> = ({
               placeholder="输入评论，使用 @ 提醒团队成员"
               autoSize={{ minRows: 3, maxRows: 6 }}
               onSelect={(option) => {
-                setMentions((prev) => [...prev, option.value]);
+                if (option.value) {
+                  setMentions((prev) => [...prev, option.value as string]);
+                }
               }}
               style={{ marginBottom: 8 }}
               options={TEAM_MEMBERS.map((member) => ({

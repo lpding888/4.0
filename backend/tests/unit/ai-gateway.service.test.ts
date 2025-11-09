@@ -23,7 +23,7 @@ jest.mock('../../src/utils/logger.js');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 // 🟢 已修复：Mock函数名匹配实际repo导出！
-const mockedProviderRepo = (providerEndpointsRepo as any) as {
+const mockedProviderRepo = providerEndpointsRepo as any as {
   getProviderEndpoint: jest.MockedFunction<any>;
   listProviderEndpoints: jest.MockedFunction<any>;
   createProviderEndpoint: jest.MockedFunction<any>;

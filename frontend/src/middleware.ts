@@ -53,7 +53,7 @@ export function middleware(request: NextRequest) {
   });
 
   // 获取语言前缀（如 /zh 或 /en）
-  const locale = pathname.split('/')[1];
+  const locale = pathname.split('/')[1] ?? '';
   const isValidLocale = ['zh', 'en'].includes(locale);
 
   // 去除语言前缀后的真实路径

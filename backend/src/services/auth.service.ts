@@ -17,6 +17,7 @@ import logger from '../utils/logger.js';
 import * as userRepo from '../repositories/users.repo.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
+import { setCache, getCache, delCache } from '../config/redis.js';
 
 export interface TokenSigner {
   generateTokenPair(user: UserForToken): TokenPair;
@@ -92,6 +93,9 @@ class AuthService implements AuthProvider {
 
     // 4. 调用短信服务发送验证码
     await this.sendSMS(phone, code);
+
+    // 5. 写入缓存用于后续校验
+    await setCache(`sms:${phone}`, code, 5 * 60);
 
     logger.info(`[AuthService] 验证码已发送: phone=${phone}, ip=${ip}`);
 
@@ -463,12 +467,10 @@ class AuthService implements AuthProvider {
     const hashedPassword = await this.hashPassword(newPassword);
 
     // 5. 更新数据库
-    await db('users')
-      .where('id', userId)
-      .update({
-        password: hashedPassword,
-        updated_at: new Date()
-      });
+    await db('users').where('id', userId).update({
+      password: hashedPassword,
+      updated_at: new Date()
+    });
 
     logger.info(`用户设置密码成功: userId=${userId}`);
 

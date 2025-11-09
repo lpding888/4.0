@@ -190,7 +190,7 @@ export class AlertManager {
 
     // 计算中位数
     const sorted = [...windowValues].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const median = sorted[Math.floor(sorted.length / 2)]!;
 
     // 检查是否超过阈值
     if (median > config.threshold) {

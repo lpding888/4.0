@@ -164,6 +164,7 @@ export interface RuleContext {
   event_data?: any; // 事件数据
   user_id?: string;
   tenant_id?: string;
+  user_email?: string;
   timestamp: number;
   metadata?: Record<string, any>;
 }

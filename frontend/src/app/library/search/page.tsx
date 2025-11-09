@@ -48,7 +48,7 @@ import {
 import { vecClient, VecSearchRequest, VecSearchResult } from '@/lib/vec/client';
 import type { Color } from 'antd/es/color-picker';
 
-const { Text, Title } = Typography;
+const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
 /**
@@ -554,9 +554,9 @@ export default function LibrarySearchPage() {
                   description={
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
                       {result.metadata?.description && (
-                        <Text type="secondary" ellipsis={{ rows: 2 }}>
+                        <Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 0 }}>
                           {result.metadata.description}
-                        </Text>
+                        </Paragraph>
                       )}
                       {result.metadata?.tags && (
                         <Space size={4} wrap>

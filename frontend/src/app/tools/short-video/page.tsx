@@ -14,6 +14,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import Image from 'next/image';
 import {
   Card,
   Button,
@@ -66,6 +67,8 @@ const { Title, Text, Paragraph } = Typography;
 const { Step } = Steps;
 const { TextArea } = Input;
 const { Option } = Select;
+const EMPTY_STORYBOARD_IMAGE =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 // 分镜接口
 export interface Storyboard {
@@ -530,10 +533,13 @@ export default function ShortVideoPage() {
                   >
                     <Row gutter={16}>
                       <Col span={8}>
-                        <img
-                          src={storyboard.image}
+                        <Image
+                          src={storyboard.image ?? EMPTY_STORYBOARD_IMAGE}
                           alt={storyboard.title}
-                          style={{ width: '100%', borderRadius: 4 }}
+                          width={160}
+                          height={120}
+                          style={{ width: '100%', height: 'auto', borderRadius: 4 }}
+                          unoptimized
                         />
                       </Col>
                       <Col span={16}>
@@ -643,7 +649,15 @@ export default function ShortVideoPage() {
                 maxWidth: 640,
                 borderRadius: 8
               }}
-            />
+            >
+              <track
+                kind="captions"
+                src="data:text/vtt,WEBVTT"
+                srcLang="zh"
+                label="自动字幕"
+                default
+              />
+            </video>
           ) : (
             <Empty description="视频生成中..." />
           )}

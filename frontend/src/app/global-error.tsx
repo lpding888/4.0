@@ -22,7 +22,7 @@ export default function GlobalError({
   reset?: () => void;
 }) {
   return (
-    <html>
+    <html lang="zh-CN">
       <body>
         <div style={{ padding: 24, minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
           <Result

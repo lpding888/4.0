@@ -207,7 +207,7 @@ class ExperimentManager {
     }
 
     // 默认返回第一个变体
-    return variants[0].id;
+    return variants[0]!.id;
   }
 
   /**

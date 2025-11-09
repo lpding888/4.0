@@ -139,7 +139,7 @@ export async function startSSE<T>({
           const lines = buf.split('\n');
 
           for (let i = 0; i < lines.length - 1; i++) {
-            const line = lines[i].trim();
+            const line = lines[i]!.trim();
             if (!line) continue;
 
             if (line.startsWith('data:')) {
@@ -175,7 +175,7 @@ export async function startSSE<T>({
               }
             }
           }
-          buf = lines[lines.length - 1];
+          buf = lines[lines.length - 1] ?? '';
         }
       } finally {
         clearInterval(heartbeat);

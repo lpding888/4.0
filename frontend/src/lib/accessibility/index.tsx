@@ -3,6 +3,8 @@
  * 提供键盘导航、焦点管理、ARIA属性等辅助功能
  */
 
+import React from 'react';
+
 /**
  * 键盘导航钩子
  * 支持方向键、Tab、Escape等常用键盘操作
@@ -210,13 +212,16 @@ export const getContrastRatio = (foreground: string, background: string): number
   // 将hex转为RGB
   const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result
-      ? {
-          r: parseInt(result[1], 16),
-          g: parseInt(result[2], 16),
-          b: parseInt(result[3], 16),
-        }
-      : null;
+    if (!result) return null;
+
+    const [, rHex, gHex, bHex] = result;
+    if (!rHex || !gHex || !bHex) return null;
+
+    return {
+      r: parseInt(rHex, 16),
+      g: parseInt(gHex, 16),
+      b: parseInt(bHex, 16)
+    };
   };
 
   // 计算相对亮度
@@ -226,7 +231,7 @@ export const getContrastRatio = (foreground: string, background: string): number
       c = c / 255;
       return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
     });
-    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+    return 0.2126 * rs! + 0.7152 * gs! + 0.0722 * bs!;
   };
 
   const fg = hexToRgb(foreground);

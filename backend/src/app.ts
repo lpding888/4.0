@@ -28,6 +28,7 @@ interface RouteDefinition {
 const routeDefinitions: RouteDefinition[] = [
   { mountPath: '/', modulePath: './routes/health.routes.js' },
   { mountPath: '/api/auth', modulePath: './routes/auth.routes.js' },
+  { mountPath: '/api/account', modulePath: './routes/account.routes.js' },
   { mountPath: '/api/users', modulePath: './routes/users.routes.js' },
   { mountPath: '/api', modulePath: './routes/providers.routes.js' },
   { mountPath: '/api', modulePath: './routes/announcements.routes.js' },

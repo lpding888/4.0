@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 import { message, Modal, Form, Input, Select, Button, Space } from 'antd';
 import { PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import TemplateGrid from './TemplateGrid';
-import type { Template, TemplateFormData } from '@/app/workspace/templates/page';
+import type { Template } from './types';
 
 const { TextArea } = Input;
 
@@ -68,7 +68,7 @@ export default function TemplateClientWrapper({
     setUseModalVisible(true);
     // 预填充变量默认值
     const initialValues: Record<string, any> = {};
-    template.variables?.forEach(variable => {
+    template.variables?.forEach((variable: any) => {
       if (variable.defaultValue) {
         initialValues[variable.name] = variable.defaultValue;
       }
@@ -100,7 +100,7 @@ export default function TemplateClientWrapper({
 
     let content = currentTemplate.content;
     // 替换变量
-    currentTemplate.variables?.forEach(variable => {
+    currentTemplate.variables?.forEach((variable: any) => {
       const value = values[variable.name] || '';
       const regex = new RegExp(`{{${variable.name}}}`, 'g');
       content = content.replace(regex, value);
@@ -145,7 +145,7 @@ export default function TemplateClientWrapper({
               </span>
             </div>
 
-            {currentTemplate.variables?.map(variable => (
+            {currentTemplate.variables?.map((variable: any) => (
               <Form.Item
                 key={variable.name}
                 name={variable.name}
@@ -159,7 +159,7 @@ export default function TemplateClientWrapper({
                   />
                 ) : variable.type === 'select' ? (
                   <Select placeholder={`请选择${variable.label}`}>
-                    {variable.options?.map(option => (
+                    {variable.options?.map((option: any) => (
                       <Select.Option key={option} value={option}>
                         {option}
                       </Select.Option>

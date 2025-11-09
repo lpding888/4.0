@@ -528,9 +528,11 @@ test.describe('Admin知识库管理', () => {
           if (await fileInput.count() > 0) {
             // 模拟选择无效文件
             await page.evaluate(() => {
-              const input = document.querySelector('input[type="file"]');
+              const input = document.querySelector('input[type="file"]') as HTMLInputElement;
               if (input) {
-                input.files = [];
+                // 创建空的DataTransfer对象来模拟清空文件
+                const dataTransfer = new DataTransfer();
+                input.files = dataTransfer.files;
                 input.dispatchEvent(new Event('change', { bubbles: true }));
               }
             });

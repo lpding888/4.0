@@ -239,15 +239,17 @@ export function estimateRollbackImpact(
   const affectedFeatures: string[] = [];
   const warnings: string[] = [];
   let impactLevel: 'low' | 'medium' | 'high' = 'low';
+  const [currentMajor = '0', currentMinor = '0'] = currentVersion.split('.');
+  const [targetMajor = '0', targetMinor = '0'] = targetVersion.split('.');
 
   // 主版本回滚 (1.x.x -> 0.x.x)
-  if (Math.abs(parseInt(currentVersion.split('.')[0]) - parseInt(targetVersion.split('.')[0])) > 0) {
+  if (Math.abs(parseInt(currentMajor) - parseInt(targetMajor)) > 0) {
     impactLevel = 'high';
     warnings.push('跨主版本回滚,可能存在重大功能变更');
     warnings.push('建议先在测试环境验证');
   }
   // 次版本回滚 (x.2.x -> x.1.x)
-  else if (Math.abs(parseInt(currentVersion.split('.')[1]) - parseInt(targetVersion.split('.')[1])) > 0) {
+  else if (Math.abs(parseInt(currentMinor) - parseInt(targetMinor)) > 0) {
     impactLevel = 'medium';
     warnings.push('次版本回滚,可能影响部分功能');
   }

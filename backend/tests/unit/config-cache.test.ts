@@ -181,7 +181,9 @@ describe('ConfigCacheService', () => {
 
       mockLRUCache.get.mockReturnValue(null); // LRU未命中
       mockRedis.get.mockResolvedValue(null); // Redis未命中
-      mockFS.readFileSync.mockImplementation(() => { throw new Error('File not found'); }); // 快照未命中
+      mockFS.readFileSync.mockImplementation(() => {
+        throw new Error('File not found');
+      }); // 快照未命中
 
       const fetcher = jest.fn().mockResolvedValue(mockData);
 
@@ -244,7 +246,9 @@ describe('ConfigCacheService', () => {
       // Arrange
       mockLRUCache.get.mockReturnValue(null);
       mockRedis.get.mockResolvedValue(null);
-      mockFS.readFileSync.mockImplementation(() => { throw new Error('File not found'); });
+      mockFS.readFileSync.mockImplementation(() => {
+        throw new Error('File not found');
+      });
 
       const dbError = new Error('DB connection failed');
       const fetcher = jest.fn().mockRejectedValue(dbError);
@@ -327,7 +331,9 @@ describe('ConfigCacheService', () => {
 
       mockLRUCache.get.mockReturnValue(null);
       mockRedis.get.mockResolvedValue(null);
-      mockFS.readFileSync.mockImplementation(() => { throw new Error('Not found'); });
+      mockFS.readFileSync.mockImplementation(() => {
+        throw new Error('Not found');
+      });
       mockFS.writeFileSync.mockReturnValue(undefined);
 
       const fetcher = jest.fn().mockResolvedValue(mockData);

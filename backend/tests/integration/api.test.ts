@@ -24,7 +24,11 @@ function createTestApp(): Express {
   app.use(express.json());
 
   // JWT验证中间件
-  const authenticateToken = (req: Request & { userId?: string }, res: Response, next: NextFunction) => {
+  const authenticateToken = (
+    req: Request & { userId?: string },
+    res: Response,
+    next: NextFunction
+  ) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -44,12 +48,6 @@ function createTestApp(): Express {
   };
 
   // 导入路由
-
-
-
-
-
-
 
   app.use('/auth', authRoutes);
   app.use('/task', authenticateToken, taskRoutes);

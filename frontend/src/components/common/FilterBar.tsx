@@ -14,6 +14,7 @@ export interface FilterConfig {
   type: 'input' | 'select' | 'date' | 'dateRange';
   options?: { label: string; value: string | number }[];
   placeholder?: string;
+  allowClear?: boolean;
 }
 
 export interface FilterBarProps {

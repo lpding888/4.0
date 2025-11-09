@@ -104,7 +104,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({
         Papa.parse(content, {
           header: true,
           skipEmptyLines: true,
-          complete: (results) => {
+          complete: (results: any) => {
             if (results.data.length === 0) {
               message.error('CSV文件为空');
               return;
@@ -116,7 +116,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({
             setCurrentStep(1);
             message.success(`成功解析 ${results.data.length} 条记录`);
           },
-          error: (error) => {
+          error: (error: any) => {
             message.error(`CSV解析失败: ${error.message}`);
           },
         });

@@ -82,7 +82,10 @@ function extractReferencedVariables(text: string | undefined): string[] {
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    vars.push(match[1]);
+    const variableName = match[1];
+    if (variableName) {
+      vars.push(variableName);
+    }
   }
 
   return vars;

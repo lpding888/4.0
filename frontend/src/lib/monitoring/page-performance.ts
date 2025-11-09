@@ -11,7 +11,7 @@
  * @author 老王
  */
 
-import { onCLS, onFID, onLCP, onFCP, onTTFB, Metric } from 'web-vitals';
+import { onCLS, onINP, onLCP, onFCP, onTTFB, Metric } from 'web-vitals';
 import { logger } from './logger';
 
 /**
@@ -206,8 +206,8 @@ class PagePerformanceMonitor {
       });
     });
 
-    // FID - 首次输入延迟
-    onFID((metric: Metric) => {
+    // INP (使用历史FID看板)
+    onINP((metric: Metric) => {
       this.recordMetric({
         page: currentPage,
         metric_name: 'FID',
@@ -461,7 +461,7 @@ class PagePerformanceMonitor {
 
     metrics.forEach((m) => {
       if (metricsByType[m.metric_name]) {
-        metricsByType[m.metric_name].push(m.metric_value);
+        metricsByType[m.metric_name]!.push(m.metric_value);
       }
     });
 
@@ -493,11 +493,11 @@ class PagePerformanceMonitor {
         end: endDate || new Date().toISOString(),
       },
       metrics: {
-        lcp: calculatePercentiles(metricsByType.LCP),
-        fcp: calculatePercentiles(metricsByType.FCP),
-        ttfb: calculatePercentiles(metricsByType.TTFB),
-        cls: calculatePercentiles(metricsByType.CLS),
-        fid: calculatePercentiles(metricsByType.FID),
+        lcp: calculatePercentiles(metricsByType.LCP ?? []),
+        fcp: calculatePercentiles(metricsByType.FCP ?? []),
+        ttfb: calculatePercentiles(metricsByType.TTFB ?? []),
+        cls: calculatePercentiles(metricsByType.CLS ?? []),
+        fid: calculatePercentiles(metricsByType.FID ?? []),
       },
       error_rate: errorRate,
       pv_count: pvCount,

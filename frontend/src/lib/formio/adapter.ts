@@ -12,6 +12,9 @@ import {
 } from '../types/ufs';
 import { validateUFSSchema } from '../validators';
 
+// 重新导出验证函数供测试使用
+export { validateUFSSchema };
+
 /**
  * Formio组件类型到UFS字段类型的映射表
  * 艹，这个映射表是核心！
@@ -179,7 +182,7 @@ function convertFormioComponentToUFSField(component: FormioComponent): UFSField 
   // 选项（select/radio/checkbox）
   if (component.data?.values || component.values) {
     const values = component.data?.values || component.values;
-    field.options = values.map((v) => ({
+    field.options = values!.map((v) => ({
       label: v.label,
       value: v.value,
     }));

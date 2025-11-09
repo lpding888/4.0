@@ -41,7 +41,7 @@ class ErrorBoundary extends Component<Props, State> {
       // 动态导入logger（避免SSR问题）
       import('@/lib/monitoring/logger').then(({ logger }) => {
         logger.error('React Error Boundary捕获错误', error, {
-          component: errorInfo.componentStack,
+          component: errorInfo.componentStack || undefined,
         });
       });
     } catch (err) {

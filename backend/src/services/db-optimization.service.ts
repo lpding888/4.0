@@ -246,7 +246,8 @@ class DatabaseOptimizationService {
     recommended.forEach((rec: any) => {
       const exists = Array.from(indexMap.values()).some(
         (cols: string[]) =>
-          cols.length === rec.columns.length && cols.every((col: string) => rec.columns.includes(col))
+          cols.length === rec.columns.length &&
+          cols.every((col: string) => rec.columns.includes(col))
       );
 
       if (!exists) {
@@ -284,12 +285,12 @@ class DatabaseOptimizationService {
     try {
       const startTime = Date.now();
 
-      const [
-        coreQueriesAnalysis,
-        indexSuggestions,
-        metricsReport,
-        slowQueries
-      ]: [any[], IndexSuggestion[], MetricsReport, SlowQuery[]] = await Promise.all([
+      const [coreQueriesAnalysis, indexSuggestions, metricsReport, slowQueries]: [
+        any[],
+        IndexSuggestion[],
+        MetricsReport,
+        SlowQuery[]
+      ] = await Promise.all([
         this.analyzeCoreQueries(),
         this.getIndexSuggestions(),
         Promise.resolve(dbMetrics.getMetricsReport()),

@@ -96,6 +96,10 @@ export async function verifyCsrfToken(token: string | null): Promise<boolean> {
 
   // 验证签名
   const [tokenPart, signaturePart] = csrfToken.split('.');
+  if (!tokenPart || !signaturePart) {
+    console.error('[CSRF] Token格式不正确!');
+    return false;
+  }
   const expectedSignature = generateSignature(tokenPart, secret);
 
   if (signaturePart !== expectedSignature) {
@@ -122,7 +126,8 @@ export function getCsrfTokenFromCookie(): string | null {
     return null;
   }
 
-  return csrfCookie.split('=')[1];
+  const [, value] = csrfCookie.split('=');
+  return value?.trim() ?? null;
 }
 
 /**

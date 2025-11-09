@@ -123,9 +123,9 @@ export class AdminTestBase {
   /**
    * 安全填写表单
    */
-  async safeFill(selector: string, value: string): Promise<void> {
+  async safeFill(selector: string, value?: string | null): Promise<void> {
     await this.waitForElement(selector);
-    await this.page.fill(selector, value);
+    await this.page.fill(selector, value ?? '');
   }
 
   /**

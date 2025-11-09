@@ -409,10 +409,10 @@ export default function CatalogPage() {
       title: '材质',
       dataIndex: 'materials',
       key: 'materials',
-      render: (materials) => (
+      render: (materials: string[] = []) => (
         <Space wrap>
           {materials.map((material, index) => (
-            <Tag key={index} size="small">{material}</Tag>
+            <Tag key={index}>{material}</Tag>
           ))}
         </Space>
       )
@@ -571,10 +571,10 @@ export default function CatalogPage() {
       title: '特性',
       dataIndex: 'properties',
       key: 'properties',
-      render: (properties) => (
+      render: (properties: string[] = []) => (
         <Space wrap>
           {properties.map((prop, index) => (
-            <Tag key={index} size="small">{prop}</Tag>
+            <Tag key={index}>{prop}</Tag>
           ))}
         </Space>
       )
@@ -662,10 +662,10 @@ export default function CatalogPage() {
       title: '用途',
       dataIndex: 'usage',
       key: 'usage',
-      render: (usage) => (
+      render: (usage: string[] = []) => (
         <Space wrap>
           {usage.map((item, index) => (
-            <Tag key={index} size="small">{item}</Tag>
+            <Tag key={index}>{item}</Tag>
           ))}
         </Space>
       )
@@ -1304,7 +1304,7 @@ export default function CatalogPage() {
           </Space>
         </div>
 
-        <Table
+        <Table<any>
           columns={tableColumns}
           dataSource={tableData}
           rowKey="id"

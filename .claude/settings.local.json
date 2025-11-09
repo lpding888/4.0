@@ -19,7 +19,9 @@
       "Bash(do echo '=== $branch ===')",
       "Bash(ls:*)",
       "Bash(npm run lint:*)",
-      "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\" && grep -n \"\"quota\"\" {} | head -5\")"
+      "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\" && grep -n \"\"quota\"\" {} | head -5\")",
+      "Bash(npx eslint:*)",
+      "Bash(cut:*)"
     ],
     "deny": [],
     "ask": []

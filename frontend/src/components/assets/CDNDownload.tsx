@@ -93,7 +93,7 @@ export const CDNDownload: React.FC<CDNDownloadProps> = ({
         throw new Error('无法读取响应流');
       }
 
-      const chunks: Uint8Array[] = [];
+      const chunks: BlobPart[] = [];
       let loaded = 0;
 
       while (true) {
@@ -101,7 +101,11 @@ export const CDNDownload: React.FC<CDNDownloadProps> = ({
 
         if (done) break;
 
-        chunks.push(value);
+        if (!value) {
+          continue;
+        }
+
+        chunks.push(value.buffer.slice(0));
         loaded += value.length;
 
         if (total > 0) {

@@ -10,9 +10,14 @@ const jobName = '__diagnostic__';
 
 async function main() {
   console.log(`[queue-stress] 准备向 ${queueName} 注入 ${totalJobs} 个任务 (并发=${concurrency})`);
-  queueService.registerProcessor(queueName, jobName, async () => {
-    await wait(50);
-  }, { concurrency });
+  queueService.registerProcessor(
+    queueName,
+    jobName,
+    async () => {
+      await wait(50);
+    },
+    { concurrency }
+  );
 
   const payloads = Array.from({ length: totalJobs }).map((_, index) => ({
     name: jobName,

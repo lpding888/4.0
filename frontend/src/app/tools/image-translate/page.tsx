@@ -247,10 +247,12 @@ export default function ImageTranslatePage() {
     };
 
     // 更新翻译结果（使用第一个目标语言）
+    const primaryTarget = targetLanguages[0];
     const translated = textRegions.map((region) => ({
       ...region,
       translated:
-        translationMap[region.text]?.[targetLanguages[0]] || region.text,
+        (primaryTarget && translationMap[region.text]?.[primaryTarget]) ||
+        region.text,
     }));
 
     setTextRegions(translated);

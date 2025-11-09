@@ -16,7 +16,11 @@ function createTestApp(): Express {
   app.use(express.json());
 
   // JWT验证中间件
-  const authenticateToken = (req: Request & { userId?: string }, res: Response, next: NextFunction) => {
+  const authenticateToken = (
+    req: Request & { userId?: string },
+    res: Response,
+    next: NextFunction
+  ) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -24,7 +28,6 @@ function createTestApp(): Express {
       return res.status(401).json({ error: '缺少访问令牌' });
     }
 
-    
     jwt.verify(token, process.env.JWT_SECRET ?? '', (err, user: any) => {
       if (err) {
         return res.status(403).json({ error: '无效的访问令牌' });
@@ -34,7 +37,6 @@ function createTestApp(): Express {
     });
   };
 
-  
   app.use('/task', authenticateToken, taskRoutes);
 
   return app;

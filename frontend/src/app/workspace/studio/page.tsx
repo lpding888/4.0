@@ -86,13 +86,14 @@ interface TaskResult {
     prompt?: string;
     model?: string;
     parameters?: any;
+    files?: string[];
   };
   status: TaskStatus;
   error?: string;
   createdAt: Date;
   completedAt?: Date;
   // 新增字段
-  isFavorite?: boolean;
+  isFavorite?: number[];
   shareUrl?: string;
 }
 
@@ -107,7 +108,8 @@ enum StepStatus {
 export default function StudioPage() {
   // 步骤管理
   const [currentStep, setCurrentStep] = useState<StepStatus>(StepStatus.SELECT_TOOL);
-  const [selectedTool, setSelectedTool] = useState<string>(bootstrap.tools[0].key);
+  const defaultToolKey = bootstrap.tools?.[0]?.key ?? 'try-on';
+  const [selectedTool, setSelectedTool] = useState<string>(defaultToolKey);
 
   // 文件和参数
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);

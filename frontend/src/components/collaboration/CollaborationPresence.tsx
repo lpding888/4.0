@@ -23,7 +23,8 @@ import {
   Modal,
   Form,
   Input,
-  Select
+  Select,
+  Divider
 } from 'antd';
 import {
   UserOutlined,
@@ -96,8 +97,10 @@ const UserCursor: React.FC<{
         </Text>
         {user.cursor.selection && (
           <Text style={{ color: 'white', fontSize: 10, opacity: 0.8 }}>
-          "{user.cursor.selection.substring(0, 20)}{user.cursor.selection.length > 20 ? '...' : ''}"
-        </Text>
+            “{user.cursor.selection.substring(0, 20)}
+            {user.cursor.selection.length > 20 ? '...' : ''}
+            ”
+          </Text>
         )}
       </div>
     </div>
@@ -168,7 +171,7 @@ export const CollaborationPresence: React.FC<CollaborationPresenceProps> = ({
     <>
       {/* 在线用户列表 */}
       <Card
-        size="small"
+        size="default"
         title={
           <Space>
             <TeamOutlined />
@@ -294,7 +297,7 @@ export const CollaborationPresence: React.FC<CollaborationPresenceProps> = ({
           </Space>
         }
         placement="right"
-        size="small"
+        size="default"
         onClose={() => setDrawerVisible(false)}
         open={drawerVisible}
         width={320}

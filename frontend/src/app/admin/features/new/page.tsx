@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Steps, Card, Button, Space, message } from 'antd';
+import { Steps, Card, Button, message } from 'antd';
 import {
   InfoCircleOutlined,
   FormOutlined,
@@ -23,29 +23,17 @@ import FormDesignStep from '@/components/admin/FeatureWizard/FormDesignStep';
 import PipelineEditorStep from '@/components/admin/FeatureWizard/PipelineEditorStep';
 import PreviewPublishStep from '@/components/admin/FeatureWizard/PreviewPublishStep';
 
+type FeatureWizardPayload = Parameters<
+  (typeof api)['admin']['createFeatureFromWizard']
+>[0];
+
 /**
  * Feature数据结构
+ * 艹，向导内部用Partial来逐步填充！
  */
-interface FeatureData {
-  // Step 1: 基本信息
-  feature_id: string;
-  display_name: string;
-  description: string;
-  category: string;
-  icon: string;
-  plan_required: string;
-  access_scope: string;
-  quota_cost: number;
-  rate_limit_policy?: string;
-
-  // Step 2: 表单Schema
-  form_schema_id?: string;
+type FeatureData = Partial<FeatureWizardPayload> & {
   form_schema_data?: any;
-
-  // Step 3: Pipeline Schema
-  pipeline_schema_id?: string;
-  pipeline_schema_data?: any;
-}
+};
 
 export default function FeatureWizardPage() {
   const router = useRouter();
@@ -87,10 +75,60 @@ export default function FeatureWizardPage() {
    */
   const handleFinish = async () => {
     try {
-      // 调用Feature Wizard API创建Feature
-      console.log('[Feature创建] 数据:', featureData);
+      const {
+        feature_id,
+        display_name,
+        description,
+        category,
+        icon,
+        plan_required,
+        access_scope,
+        quota_cost,
+        rate_limit_policy,
+        form_schema_id,
+        pipeline_schema_id,
+        pipeline_schema_data,
+      } = featureData;
 
-      const response: any = await api.admin.createFeatureFromWizard(featureData);
+      if (!feature_id?.trim()) {
+        message.error('艹，Feature ID不能空着！');
+        return;
+      }
+
+      if (!display_name?.trim()) {
+        message.error('艹，功能名称也得填！');
+        return;
+      }
+
+      if (!description?.trim()) {
+        message.error('艹，功能描述写一下，别偷懒！');
+        return;
+      }
+
+      if (!pipeline_schema_id || !pipeline_schema_data) {
+        message.error('流程编排还没保存，先去把Pipeline搞定！');
+        return;
+      }
+
+      const payload: FeatureWizardPayload = {
+        feature_id,
+        display_name,
+        description,
+        category,
+        icon,
+        plan_required,
+        access_scope,
+        quota_cost,
+        rate_limit_policy,
+        form_schema_id,
+        pipeline_schema_id,
+        pipeline_schema_data,
+      };
+
+      // 调用Feature Wizard API创建Feature
+      console.log('[Feature创建] 数据:', payload);
+
+      const response: any = await api.admin.createFeatureFromWizard(payload);
 
       if (response.success) {
         message.success(`Feature "${featureData.display_name}" 创建成功！`);
@@ -154,6 +192,9 @@ export default function FeatureWizardPage() {
     },
   ];
 
+  const safeStepIndex = Math.min(Math.max(currentStep, 0), steps.length - 1);
+  const activeStep = steps[safeStepIndex];
+
   return (
     <div style={{ padding: '24px' }}>
       {/* 顶部导航 */}
@@ -171,7 +212,7 @@ export default function FeatureWizardPage() {
       {/* 步骤导航 */}
       <Card style={{ marginBottom: '24px' }}>
         <Steps
-          current={currentStep}
+          current={safeStepIndex}
           items={steps.map((step) => ({
             title: step.title,
             icon: step.icon,
@@ -180,7 +221,7 @@ export default function FeatureWizardPage() {
       </Card>
 
       {/* 步骤内容 */}
-      <div>{steps[currentStep].content}</div>
+      <div>{activeStep?.content}</div>
     </div>
   );
 }

@@ -16,10 +16,7 @@ declare const wechatLoginService: {
     code: string,
     userInfo?: Record<string, unknown>
   ): Promise<WechatLoginResult>;
-  generateOpenPlatformOAuthUrl(
-    redirectUri: string,
-    state?: string | null
-  ): WechatOAuthUrlResult;
+  generateOpenPlatformOAuthUrl(redirectUri: string, state?: string | null): WechatOAuthUrlResult;
   handleOpenPlatformCallback(code: string, state: string): Promise<WechatLoginResult>;
   getUserWechatBindings(userId: string): Promise<Record<string, unknown>>;
   unbindWechat(userId: string): Promise<boolean>;

@@ -309,7 +309,7 @@ export default function ProvidersPage() {
         try {
           await adminProviders.delete(provider.provider_ref);
           message.success('Provider已删除');
-          tableData.reload();
+          tableData.refresh();
         } catch (error: any) {
           message.error(`删除失败: ${error.message}`);
         }
@@ -378,7 +378,7 @@ export default function ProvidersPage() {
 
       setDrawerVisible(false);
       form.resetFields();
-      tableData.reload();
+      tableData.refresh();
     } catch (error: any) {
       if (error.errorFields) {
         message.error('请检查表单填写是否正确');
@@ -420,15 +420,14 @@ export default function ProvidersPage() {
     <div style={{ padding: '24px' }}>
       {/* 新框架：FilterBar */}
       <FilterBar
-        config={filterConfig}
+        filters={filterConfig}
         onFilter={tableData.setFilters}
-        initialValues={{}}
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-            新建Provider
-          </Button>
-        }
       />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+          新建Provider
+        </Button>
+      </div>
 
       {/* 新框架：DataTable */}
       <DataTable
@@ -437,10 +436,10 @@ export default function ProvidersPage() {
         loading={tableData.loading}
         rowKey="provider_ref"
         pagination={{
-          current: tableData.pagination.page,
-          pageSize: tableData.pagination.pageSize,
+          current: tableData.currentPage,
+          pageSize: tableData.pageSize,
           total: tableData.total,
-          onChange: tableData.handlePageChange,
+          onChange: tableData.onPageChange,
         }}
         scroll={{ x: 1200 }}
       />

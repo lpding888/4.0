@@ -18,13 +18,13 @@ jest.mock('../src/config/database', () => ({
     update: jest.fn().mockReturnThis(),
     insert: jest.fn().mockReturnThis(),
     del: jest.fn().mockReturnThis(),
-    increment: jest.fn().mockReturnThis(),
-  },
+    increment: jest.fn().mockReturnThis()
+  }
 }));
 
 // Mock UUID
 jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-1234'),
+  v4: jest.fn(() => 'mock-uuid-1234')
 }));
 
 describe('QuotaService', () => {
@@ -48,7 +48,7 @@ describe('QuotaService', () => {
         forUpdate: jest.fn().mockReturnThis(),
         first: jest.fn().mockResolvedValue(mockUser),
         insert: jest.fn().mockResolvedValue(undefined),
-        update: jest.fn().mockResolvedValue(undefined),
+        update: jest.fn().mockResolvedValue(undefined)
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {
@@ -63,7 +63,7 @@ describe('QuotaService', () => {
       expect(mockTrx.forUpdate).toHaveBeenCalled();
       expect(mockTrx.first).toHaveBeenCalled();
       expect(mockTrx.update).toHaveBeenCalledWith({
-        quota_remaining: 8, // 10 - 2
+        quota_remaining: 8 // 10 - 2
       });
       expect(mockTrx.insert).toHaveBeenCalledWith({
         id: 'mock-uuid-1234',
@@ -71,7 +71,7 @@ describe('QuotaService', () => {
         user_id: userId,
         amount,
         phase: 'reserved',
-        idempotent_done: true,
+        idempotent_done: true
       });
     });
 
@@ -86,7 +86,7 @@ describe('QuotaService', () => {
       const mockTrx = {
         where: jest.fn().mockReturnThis(),
         forUpdate: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(mockUser),
+        first: jest.fn().mockResolvedValue(mockUser)
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {
@@ -109,7 +109,7 @@ describe('QuotaService', () => {
       const mockTrx = {
         where: jest.fn().mockReturnThis(),
         forUpdate: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(null), // 用户不存在
+        first: jest.fn().mockResolvedValue(null) // 用户不存在
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {
@@ -130,14 +130,14 @@ describe('QuotaService', () => {
       const mockRecord = {
         task_id: taskId,
         phase: 'reserved',
-        idempotent_done: true,
+        idempotent_done: true
       };
 
       // Mock数据库查询
       const whereMock = jest.fn().mockReturnThis();
       const firstMock = jest.fn().mockResolvedValue(mockRecord);
       const updateMock = jest.fn().mockResolvedValue(undefined);
-      
+
       mockDb.where = whereMock;
       mockDb.first = firstMock;
       mockDb.update = updateMock;
@@ -159,7 +159,7 @@ describe('QuotaService', () => {
       const whereMock = jest.fn().mockReturnThis();
       const firstMock = jest.fn().mockResolvedValue(null); // 记录不存在
       const updateMock = jest.fn().mockResolvedValue(undefined);
-      
+
       mockDb.where = whereMock;
       mockDb.first = firstMock;
       mockDb.update = updateMock;
@@ -179,14 +179,14 @@ describe('QuotaService', () => {
       const mockRecord = {
         task_id: taskId,
         phase: 'confirmed', // 不是reserved状态
-        idempotent_done: false,
+        idempotent_done: false
       };
 
       // Mock数据库查询
       const whereMock = jest.fn().mockReturnThis();
       const firstMock = jest.fn().mockResolvedValue(mockRecord);
       const updateMock = jest.fn().mockResolvedValue(undefined);
-      
+
       mockDb.where = whereMock;
       mockDb.first = firstMock;
       mockDb.update = updateMock;
@@ -211,7 +211,7 @@ describe('QuotaService', () => {
         task_id: taskId,
         user_id: userId,
         amount,
-        phase: 'reserved',
+        phase: 'reserved'
       };
 
       // Mock数据库事务
@@ -221,15 +221,15 @@ describe('QuotaService', () => {
         return {
           first: jest.fn().mockResolvedValue(mockRecord),
           increment: jest.fn().mockResolvedValue(undefined),
-          update: jest.fn().mockResolvedValue(undefined),
+          update: jest.fn().mockResolvedValue(undefined)
         };
       });
-      
+
       const mockTrx = {
         where: whereMock,
         first: jest.fn().mockResolvedValue(mockRecord),
         increment: jest.fn().mockResolvedValue(undefined),
-        update: jest.fn().mockResolvedValue(undefined),
+        update: jest.fn().mockResolvedValue(undefined)
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {
@@ -252,7 +252,7 @@ describe('QuotaService', () => {
       // Mock数据库事务
       const mockTrx = {
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(null), // 记录不存在
+        first: jest.fn().mockResolvedValue(null) // 记录不存在
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {
@@ -274,13 +274,13 @@ describe('QuotaService', () => {
       const taskId = 'task123';
       const mockRecord = {
         task_id: taskId,
-        phase: 'confirmed', // 状态不是reserved
+        phase: 'confirmed' // 状态不是reserved
       };
 
       // Mock数据库事务
       const mockTrx = {
         where: jest.fn().mockReturnThis(),
-        first: jest.fn().mockResolvedValue(mockRecord),
+        first: jest.fn().mockResolvedValue(mockRecord)
       } as any;
 
       mockDb.transaction.mockImplementation(async (callback: any) => {

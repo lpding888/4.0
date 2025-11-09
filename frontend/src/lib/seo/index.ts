@@ -4,6 +4,7 @@
  */
 
 import type { Metadata } from 'next';
+import { createElement } from 'react';
 
 /**
  * 网站基础信息
@@ -140,7 +141,7 @@ export function generateProductMetadata(product: {
       image: product.image,
     }),
     openGraph: {
-      type: 'product',
+      type: 'website',
       locale: SITE_CONFIG.locale,
       url: SITE_CONFIG.url,
       title: product.name,
@@ -346,12 +347,10 @@ export function generateArticleSchema(article: {
  * 注入JSON-LD到页面
  */
 export function injectJsonLd(data: Record<string, any>) {
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
-    />
-  );
+  return createElement('script', {
+    type: 'application/ld+json',
+    dangerouslySetInnerHTML: { __html: JSON.stringify(data) },
+  });
 }
 
 /**

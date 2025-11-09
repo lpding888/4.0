@@ -452,7 +452,7 @@ function calculateAverageSessionDuration(events: any[]): number {
     if (!sessionGroups[event.sessionId]) {
       sessionGroups[event.sessionId] = [];
     }
-    sessionGroups[event.sessionId].push(event);
+    sessionGroups[event.sessionId]!.push(event);
   });
 
   // 计算每个会话的时长

@@ -12,7 +12,7 @@ jest.mock('../../src/utils/logger.js');
 
 const mockedSTS = STS as jest.Mocked<typeof STS>;
 const mockedLogger = logger as jest.Mocked<typeof logger>;
-let cosSTSService: typeof import('../../src/services/cos-sts.service.js')['cosSTSService'];
+let cosSTSService: (typeof import('../../src/services/cos-sts.service.js'))['cosSTSService'];
 
 // 保存原始环境变量
 const originalEnv = process.env;
@@ -53,7 +53,8 @@ describe('CosSTSService', () => {
       };
 
       // Mock STS.getCredential
-      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => { // 艹，强制as any避免类型推导问题！
+      (mockedSTS.getCredential as any) = jest.fn((config: any, callback: any) => {
+        // 艹，强制as any避免类型推导问题！
         callback(null as any, mockSTSResult); // 艹，null也要as any！
       });
 

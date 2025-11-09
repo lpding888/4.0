@@ -270,10 +270,10 @@ class APIClient {
       this.client.post<APIResponse>('/auth/login', { phone, code }),
 
     loginWithPassword: (phone: string, password: string) =>
-      this.client.post<APIResponse>('/auth/password-login', { phone, password }),
+      this.client.post<APIResponse>('/auth/login/password', { phone, password }),
 
     passwordLogin: (phone: string, password: string) =>
-      this.client.post<APIResponse>('/auth/password-login', { phone, password }),
+      this.client.post<APIResponse>('/auth/login/password', { phone, password }),
 
     wechatLogin: (code: string) =>
       this.client.post<APIResponse>('/auth/wechat-login', { code }),

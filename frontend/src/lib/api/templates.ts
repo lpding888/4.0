@@ -5,7 +5,7 @@
  * @author 老王
  */
 
-import { Template } from '@/app/workspace/templates/page';
+import { Template } from '@/components/templates/types';
 
 /**
  * 艹!获取所有模板数据(支持ISR缓存)
@@ -140,6 +140,6 @@ export async function getTemplateStats() {
     totalTemplates: templates.length,
     officialTemplates: templates.filter(t => t.isOfficial).length,
     favoriteTemplates: templates.filter(t => t.isFavorite).length,
-    totalUsage: templates.reduce((sum, t) => sum + t.usageCount, 0),
+    totalUsage: templates.reduce((sum, t) => sum + (t.usageCount ?? 0), 0),
   };
 }

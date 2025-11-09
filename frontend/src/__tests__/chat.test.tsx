@@ -185,9 +185,9 @@ describe('IndexedDB聊天存储', () => {
     mockIndexedDB.open = jest.fn().mockImplementation((dbName, version) => {
       const mockRequest = {
         result: mockDB,
-        onsuccess: null,
-        onerror: null,
-        onupgradeneeded: null
+        onsuccess: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        onupgradeneeded: null as ((event: any) => void) | null
       };
 
       setTimeout(() => {
@@ -215,8 +215,8 @@ describe('IndexedDB聊天存储', () => {
         get: jest.fn().mockImplementation((key) => {
           const mockRequest = {
             result: key === 'test-session-1' ? chatSession : undefined,
-            onsuccess: null,
-            onerror: null
+            onsuccess: null as ((event: any) => void) | null,
+            onerror: null as ((event: any) => void) | null
           };
 
           setTimeout(() => {
@@ -242,8 +242,8 @@ describe('IndexedDB聊天存储', () => {
           get: jest.fn().mockImplementation((key) => {
             const mockRequest = {
               result: undefined,
-              onsuccess: null,
-              onerror: null
+              onsuccess: null as ((event: any) => void) | null,
+              onerror: null as ((event: any) => void) | null
             };
 
             setTimeout(() => {
@@ -259,9 +259,9 @@ describe('IndexedDB聊天存储', () => {
     mockIndexedDB.open = jest.fn().mockImplementation((dbName, version) => {
       const mockRequest = {
         result: mockDB,
-        onsuccess: null,
-        onerror: null,
-        onupgradeneeded: null
+        onsuccess: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        onupgradeneeded: null as ((event: any) => void) | null
       };
 
       setTimeout(() => {
@@ -288,8 +288,8 @@ describe('IndexedDB聊天存储', () => {
           getAll: jest.fn().mockImplementation(() => {
             const mockRequest = {
               result: mockSessions,
-              onsuccess: null,
-              onerror: null
+              onsuccess: null as ((event: any) => void) | null,
+              onerror: null as ((event: any) => void) | null
             };
 
             setTimeout(() => {
@@ -305,9 +305,9 @@ describe('IndexedDB聊天存储', () => {
     mockIndexedDB.open = jest.fn().mockImplementation((dbName, version) => {
       const mockRequest = {
         result: mockDB,
-        onsuccess: null,
-        onerror: null,
-        onupgradeneeded: null
+        onsuccess: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        onupgradeneeded: null as ((event: any) => void) | null
       };
 
       setTimeout(() => {

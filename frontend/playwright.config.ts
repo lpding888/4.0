@@ -151,14 +151,6 @@ export default defineConfig({
   globalSetup: path.join(__dirname, 'tests/e2e/global-setup.ts'),
   globalTeardown: path.join(__dirname, 'tests/e2e/global-teardown.ts'),
 
-  // 环境变量
-  env: {
-    TEST_ENV: testEnv,
-    NODE_ENV: 'test',
-    ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
-    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'admin123'
-  },
-
   // Web服务器配置（用于开发环境）
   webServer: testEnv === 'development' ? {
     command: 'npm run dev',

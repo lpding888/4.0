@@ -15,9 +15,16 @@ import {
   FallOutlined,
 } from '@ant-design/icons';
 import type { ColumnType } from 'antd/es/table';
-import type { Experiment, ExperimentVariant } from '../app/admin/experiments/page';
 
 const { Title, Text } = Typography;
+
+interface Experiment {
+  traffic_allocation: number;
+  variants: Array<{ id: string }>;
+  start_date?: string | null;
+  end_date?: string | null;
+  description?: string;
+}
 
 /**
  * 变体数据

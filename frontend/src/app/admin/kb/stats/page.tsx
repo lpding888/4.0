@@ -485,7 +485,7 @@ export default function KBStatsPage() {
                   type="primary"
                   icon={<SearchOutlined />}
                   onClick={handleSearch}
-                  loading={searchMutation.isLoading}
+                  loading={searchMutation.isPending}
                 >
                   开始检索
                 </Button>
@@ -516,7 +516,7 @@ export default function KBStatsPage() {
                         <Space>
                           <Text strong>相似度: {(item.score * 100).toFixed(1)}%</Text>
                           <Tag color="blue">{item.documentName}</Tag>
-                          <Tag type="secondary">分块 {item.chunkIndex + 1}</Tag>
+                          <Tag color="default">分块 {item.chunkIndex + 1}</Tag>
                         </Space>
                       }
                       description={
@@ -533,7 +533,7 @@ export default function KBStatsPage() {
             </Card>
           )}
 
-          {searchResults.length === 0 && searchMutation.isLoading && (
+          {searchResults.length === 0 && searchMutation.isPending && (
             <Card>
               <div className="text-center py-8">
                 <Spin size="large" />
@@ -544,7 +544,7 @@ export default function KBStatsPage() {
             </Card>
           )}
 
-          {searchResults.length === 0 && !searchMutation.isLoading && searchMutation.data && (
+          {searchResults.length === 0 && !searchMutation.isPending && searchMutation.data && (
             <Card>
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}

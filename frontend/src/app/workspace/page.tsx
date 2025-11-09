@@ -60,7 +60,7 @@ export default function WorkspacePage() {
         setMembershipStatus(response.data);
         // 同步更新用户信息
         if (user) {
-          setUser({
+          updateUser({
             ...user,
             isMember: response.data.isMember,
             quota_remaining: response.data.quotaRemaining || response.data.quota_remaining,

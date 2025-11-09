@@ -17,6 +17,7 @@ export type FieldSelect = FieldCommon & {
   type: 'select';
   options: string[];
   default?: string;
+  placeholder?: string;
 };
 
 export type FieldNumber = FieldCommon & {
@@ -25,6 +26,7 @@ export type FieldNumber = FieldCommon & {
   max?: number;
   step?: number;
   default?: number;
+  placeholder?: string;
 };
 
 export type FieldText = FieldCommon & {

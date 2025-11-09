@@ -602,7 +602,7 @@ export class ACL {
       // 邮箱脱敏
       if (value.includes('@')) {
         const [name, domain] = value.split('@');
-        return `${name.slice(0, 2)}***@${domain}`;
+        return `${name!.slice(0, 2)}***@${domain}`;
       }
 
       // 手机号脱敏

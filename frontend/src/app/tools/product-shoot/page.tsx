@@ -376,9 +376,10 @@ export default function ProductShootPage() {
 
       // 获取文件名
       const contentDisposition = response.headers.get('Content-Disposition');
-      const filename = contentDisposition
-        ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-        : `product_shoot_${Date.now()}.zip`;
+      const filenameFromHeader = contentDisposition
+        ?.split('filename=')[1]
+        ?.replace(/"/g, '');
+      const filename = filenameFromHeader || `product_shoot_${Date.now()}.zip`;
 
       // 创建下载链接
       const blob = await response.blob();
@@ -487,8 +488,9 @@ export default function ProductShootPage() {
           </div>
           <Space wrap>
             {['#FFFFFF', '#F5F5F5', '#000000', '#2C3E50'].map(color => (
-              <div
+              <button
                 key={color}
+                type="button"
                 style={{
                   width: 32,
                   height: 32,
@@ -500,10 +502,11 @@ export default function ProductShootPage() {
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}
+                aria-label={`选择背景颜色 ${color}`}
                 onClick={() => handleColorChange(color)}
               >
                 {selectedColor === color && <CheckCircleOutlined style={{ color: '#1890ff', fontSize: 16 }} />}
-              </div>
+              </button>
             ))}
           </Space>
         </Col>
@@ -623,12 +626,11 @@ export default function ProductShootPage() {
                   />
                 }
                 actions={[
-                  <Tooltip title="预览">
-                    <EyeOutlined key="preview" />
+                  <Tooltip key="preview" title="预览">
+                    <EyeOutlined />
                   </Tooltip>,
-                  <Tooltip title="下载">
+                  <Tooltip key="download" title="下载">
                     <DownloadOutlined
-                      key="download"
                       onClick={() => {
                         const link = document.createElement('a');
                         link.href = task.resultUrl!;

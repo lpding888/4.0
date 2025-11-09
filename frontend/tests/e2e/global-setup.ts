@@ -53,7 +53,7 @@ async function globalSetup(config: FullConfig) {
       }
     },
     timeouts: {
-      default: config.timeout,
+      default: 30000,
       action: 15000,
       navigation: 30000
     }

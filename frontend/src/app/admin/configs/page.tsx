@@ -16,6 +16,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { Key } from 'react';
 import {
   Card,
   Button,
@@ -58,7 +59,7 @@ import {
   CopyOutlined
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DataTablePro } from '@/components/base/DataTablePro';
+import { DataTablePro, type DataTableColumn } from '@/components/base/DataTablePro';
 import { api } from '@/lib/api/client';
 import { MSWInitializer } from '@/components/MSWInitializer';
 import type { ColumnsType } from 'antd/es/table';
@@ -502,7 +503,7 @@ export default function ConfigsPage() {
                 type="text"
                 danger
                 icon={<DeleteOutlined />}
-                loading={deleteMutation.isLoading}
+                loading={deleteMutation.isPending}
               />
             </Tooltip>
           </Popconfirm>
@@ -610,7 +611,7 @@ export default function ConfigsPage() {
       {/* 配置列表 */}
       <Card>
         <DataTablePro
-          columns={columns}
+          columns={columns as DataTableColumn<ConfigItem>[]}
           dataSource={configs}
           loading={isLoading}
           pagination={{
@@ -639,7 +640,7 @@ export default function ConfigsPage() {
           }}
           rowSelection={{
             type: 'checkbox',
-            onChange: (selectedRowKeys, selectedRows) => {
+            onChange: (selectedRowKeys: Key[], selectedRows: ConfigItem[]) => {
               console.log('Selected:', selectedRowKeys, selectedRows);
             }
           }}
@@ -724,7 +725,7 @@ export default function ConfigsPage() {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={createMutation.isLoading}>
+              <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
                 创建
               </Button>
               <Button onClick={() => setCreateModalVisible(false)}>
@@ -811,7 +812,7 @@ export default function ConfigsPage() {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isLoading}>
+              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>
                 更新
               </Button>
               <Button onClick={() => setEditModalVisible(false)}>
@@ -879,10 +880,11 @@ export default function ConfigsPage() {
         open={snapshotModalVisible}
         onCancel={() => setSnapshotModalVisible(false)}
         footer={[
-          <Button onClick={() => setSnapshotModalVisible(false)}>
+          <Button key="close" onClick={() => setSnapshotModalVisible(false)}>
             关闭
           </Button>,
           <Button
+            key="create"
             type="primary"
             onClick={() => {
               Modal.confirm({
@@ -891,7 +893,8 @@ export default function ConfigsPage() {
                   <Input
                     placeholder="输入快照描述（可选）"
                     onPressEnter={(e) => {
-                      createSnapshotMutation.mutate(e.target.value);
+                      const value = (e.target as HTMLInputElement).value;
+                      createSnapshotMutation.mutate(value);
                     }}
                   />
                 ),

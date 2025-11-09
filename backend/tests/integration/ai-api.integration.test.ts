@@ -275,8 +275,10 @@ describe('AI API Integration Tests', () => {
       ];
 
       // Mock stream response
-      const mockStream: any = { // 艹，显式声明any类型避免隐式推导！
-        on: jest.fn((event: string, callback: any): any => { // 艹，显式声明返回类型！
+      const mockStream: any = {
+        // 艹，显式声明any类型避免隐式推导！
+        on: jest.fn((event: string, callback: any): any => {
+          // 艹，显式声明返回类型！
           if (event === 'data') {
             mockStreamChunks.forEach((chunk) => {
               callback(Buffer.from(chunk));

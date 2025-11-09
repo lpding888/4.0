@@ -87,7 +87,7 @@ export default function PreviewPublishStep({
     >
       <Alert
         message="操作提示"
-        description="请仔细检查所有配置，确认无误后点击"发布Feature"按钮。"
+        description="请仔细检查所有配置，确认无误后点击“发布Feature”按钮。"
         type="success"
         showIcon
         style={{ marginBottom: '24px' }}

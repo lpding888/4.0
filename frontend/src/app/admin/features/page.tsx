@@ -13,13 +13,16 @@ import {
   DeleteOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import type { ColumnType } from 'antd/es/table';
 
 // 新框架组件和Hooks
-import { DataTable } from '@/components/common/DataTable';
-import { FilterBar } from '@/components/common/FilterBar';
-import { useTableData } from '@/hooks/useTableData';
-import type { FilterConfig } from '@/components/common/FilterBar';
+import {
+  DataTable,
+  FilterBar,
+  FilterType,
+  type DataTableColumn,
+  type FilterConfig,
+} from '@/shared/ui/DataTable';
+import { useTableData } from '@/shared/hooks/useTableData';
 
 // API和类型
 import { api } from '@/lib/api';
@@ -27,43 +30,49 @@ import { Feature } from '@/types';
 
 const { confirm } = Modal;
 
+const DEFAULT_FILTERS = {
+  category: '',
+  is_enabled: '',
+};
+
 export default function AdminFeaturesPage() {
   const router = useRouter();
 
   // ========== 新框架：使用useTableData Hook统一管理状态 ==========
   const tableData = useTableData<Feature>({
-    fetcher: async (params) => {
+    fetcher: async ({ filters }) => {
       const response: any = await api.admin.getFeatures();
 
       if (!response.success || !response.features) {
         throw new Error('获取功能列表失败');
       }
 
-      let features = response.features;
+      let features = response.features as Feature[];
 
       // 前端筛选
-      if (params.filters.category) {
-        features = features.filter((f: Feature) => f.category === params.filters.category);
+      if (filters.category) {
+        features = features.filter((f) => f.category === filters.category);
       }
-      if (params.filters.is_enabled !== undefined) {
+      if (filters.is_enabled !== undefined) {
         features = features.filter(
-          (f: Feature) => f.is_enabled === (params.filters.is_enabled === 'true')
+          (f) => f.is_enabled === (filters.is_enabled === 'true')
         );
       }
 
       return {
-        data: features,
+        items: features,
         total: features.length,
       };
     },
     autoLoad: true,
+    initialFilters: DEFAULT_FILTERS,
   });
 
   // ========== 新框架：FilterBar配置 ==========
   const filterConfig: FilterConfig[] = [
     {
-      type: 'select',
-      name: 'category',
+      type: FilterType.SELECT,
+      key: 'category',
       label: '功能分类',
       placeholder: '筛选分类',
       options: [
@@ -76,8 +85,8 @@ export default function AdminFeaturesPage() {
       allowClear: true,
     },
     {
-      type: 'select',
-      name: 'is_enabled',
+      type: FilterType.SELECT,
+      key: 'is_enabled',
       label: '启用状态',
       placeholder: '筛选状态',
       options: [
@@ -121,7 +130,7 @@ export default function AdminFeaturesPage() {
     try {
       await api.admin.toggleFeature(featureId, { is_enabled: enabled });
       message.success(enabled ? '已启用' : '已禁用');
-      tableData.reload();
+      tableData.refresh();
     } catch (error: any) {
       message.error('操作失败');
     }
@@ -141,7 +150,7 @@ export default function AdminFeaturesPage() {
         try {
           await api.admin.deleteFeature(featureId);
           message.success('删除成功');
-          tableData.reload();
+          tableData.refresh();
         } catch (error: any) {
           message.error('删除失败');
         }
@@ -150,7 +159,7 @@ export default function AdminFeaturesPage() {
   };
 
   // ========== 新框架：DataTable列配置 ==========
-  const columns: ColumnType<Feature>[] = [
+  const columns: DataTableColumn<Feature>[] = [
     {
       title: 'Feature ID',
       dataIndex: 'feature_id',
@@ -260,19 +269,25 @@ export default function AdminFeaturesPage() {
     <div style={{ padding: '24px' }}>
       {/* 新框架：FilterBar */}
       <FilterBar
-        config={filterConfig}
-        onFilter={tableData.setFilters}
-        initialValues={{}}
-        extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => router.push('/admin/features/new')}
-          >
-            新增功能卡片
-          </Button>
-        }
+        filters={filterConfig}
+        onFilterChange={(key, value) => {
+          tableData.filters.setFilter(key, value);
+          tableData.pagination.reset();
+        }}
+        onReset={() => {
+          tableData.filters.setFilters({ ...DEFAULT_FILTERS });
+          tableData.pagination.reset();
+        }}
       />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => router.push('/admin/features/new')}
+        >
+          新增功能卡片
+        </Button>
+      </div>
 
       {/* 新框架：DataTable */}
       <DataTable
@@ -281,10 +296,10 @@ export default function AdminFeaturesPage() {
         loading={tableData.loading}
         rowKey="feature_id"
         pagination={{
-          current: tableData.pagination.page,
+          page: tableData.pagination.page,
           pageSize: tableData.pagination.pageSize,
-          total: tableData.total,
-          onChange: tableData.handlePageChange,
+          total: tableData.pagination.total,
+          onChange: tableData.pagination.goToPage,
         }}
         scroll={{ x: 1200 }}
       />

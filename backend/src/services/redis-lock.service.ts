@@ -13,9 +13,9 @@ import { redis } from '../config/redis.js';
 import logger from '../utils/logger.js';
 
 interface LockOptions {
-  ttl?: number;         // 锁的过期时间(秒),默认10秒
-  retry?: number;       // 重试次数,默认3次
-  retryDelay?: number;  // 重试延迟(毫秒),默认100ms
+  ttl?: number; // 锁的过期时间(秒),默认10秒
+  retry?: number; // 重试次数,默认3次
+  retryDelay?: number; // 重试延迟(毫秒),默认100ms
 }
 
 class RedisLockService {
@@ -32,7 +32,7 @@ class RedisLockService {
         // SET key value NX EX ttl
         // NX: 只在key不存在时设置
         // EX: 设置过期时间(秒)
-        const result = await redis.set(lockKey, lockValue, 'NX', 'EX', ttl);
+        const result = await redis.set(lockKey, lockValue, 'EX', ttl, 'NX');
 
         if (result === 'OK') {
           logger.debug(`[REDIS-LOCK] ✅ 获取锁成功: ${lockKey}`);
@@ -70,7 +70,7 @@ class RedisLockService {
         end
       `;
 
-      const result = await redis.eval(script, 1, lockKey, lockValue) as number;
+      const result = (await redis.eval(script, 1, lockKey, lockValue)) as number;
 
       if (result === 1) {
         logger.debug(`[REDIS-LOCK] ✅ 释放锁成功: ${lockKey}`);
@@ -149,7 +149,7 @@ class RedisLockService {
         end
       `;
 
-      const result = await redis.eval(script, 1, lockKey, lockValue, ttl) as number;
+      const result = (await redis.eval(script, 1, lockKey, lockValue, ttl)) as number;
 
       if (result === 1) {
         logger.debug(`[REDIS-LOCK] ✅ 续租锁成功: ${lockKey}, ttl=${ttl}s`);
@@ -169,7 +169,7 @@ class RedisLockService {
    * 艹！等待后重试,避免疯狂轮询
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

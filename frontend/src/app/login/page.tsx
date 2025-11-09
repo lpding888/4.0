@@ -331,80 +331,14 @@ export default function LoginPage() {
           ]}
         />
 
-        <div
-          style={{
-            marginTop: 24,
-            padding: 16,
-            background: '#f5f5f5',
-            borderRadius: 12,
-          }}
-        >
-          <Form.Item
-            name="phone"
-            rules={[
-              { required: true, message: '请输入手机号' },
-              { 
-                pattern: /^1[3-9]\d{9}$/, 
-                message: '请输入正确的手机号' 
-              }
-            ]}
-          >
-            <Input
-              prefix={<MobileOutlined />}
-              placeholder="请输入手机号"
-              maxLength={11}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="code"
-            rules={[
-              { required: true, message: '请输入验证码' },
-              { 
-                pattern: /^\d{6}$/, 
-                message: '验证码为6位数字' 
-              }
-            ]}
-          >
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Input
-                prefix={<SafetyOutlined />}
-                placeholder="请输入6位验证码"
-                maxLength={6}
-                style={{ flex: 1 }}
-              />
-              <Button
-                onClick={handleSendCode}
-                disabled={countdown > 0}
-                loading={sendingCode}
-                style={{ width: '120px' }}
-              >
-                {countdown > 0 ? `${countdown}秒后重试` : '获取验证码'}
-              </Button>
-            </div>
-          </Form.Item>
-
-          <Form.Item style={{ marginBottom: '16px' }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={loading}
-              block
-              style={{ height: '44px' }}
-            >
-              登录 / 注册
-            </Button>
-          </Form.Item>
-
-          <div style={{ textAlign: 'center' }}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-              登录即代表同意
-              <a href="#" style={{ color: '#92400E' }}> 用户协议 </a>
-              和
-              <a href="#" style={{ color: '#92400E' }}> 隐私政策</a>
-            </Text>
-          </div>
-        </Form>
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            登录即代表同意
+            <a href="/legal/terms" style={{ color: '#92400E' }}> 用户协议 </a>
+            和
+            <a href="/legal/privacy" style={{ color: '#92400E' }}> 隐私政策</a>
+          </Text>
+        </div>
 
         <div style={{
           marginTop: '24px',

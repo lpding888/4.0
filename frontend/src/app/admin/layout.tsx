@@ -127,14 +127,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* 艹！使用新的 SideNav 组件！ */}
       <SideNav
         items={menuItems}
-        title="AI照 - 管理后台"
-        onTitleClick={() => router.push('/workspace')}
         width={240}
         enablePermission={false} // Admin不需要权限检查，都能看到
-        headerStyle={{
-          background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
-          color: '#92400E',
-          borderBottom: '1px solid var(--border-primary)',
+        logo={{
+          src: '/logo.svg',
+          title: 'AI照 - 管理后台',
+          onClick: () => router.push('/workspace'),
         }}
       />
 

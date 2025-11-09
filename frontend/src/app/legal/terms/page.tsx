@@ -79,7 +79,7 @@ export default function TermsOfServicePage() {
 
           <Title level={3}>8. 免责声明</Title>
           <Paragraph>
-            服务按"原样"提供，不提供任何明示或暗示的保证。我们不对服务中断、数据丢失或其他损失负责。
+            服务按&ldquo;原样&rdquo;提供，不提供任何明示或暗示的保证。我们不对服务中断、数据丢失或其他损失负责。
           </Paragraph>
 
           <Title level={3}>9. 责任限制</Title>

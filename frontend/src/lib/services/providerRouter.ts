@@ -164,6 +164,9 @@ class ProviderRouter {
     }
 
     // 兜底：返回第一个
+    if (!providers[0]) {
+      throw new Error('加权选择失败: Provider列表为空');
+    }
     return providers[0];
   }
 

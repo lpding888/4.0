@@ -301,7 +301,12 @@ export default function PipelinesPage() {
 
     if (targetIndex < 0 || targetIndex >= newSteps.length) return;
 
-    [newSteps[index], newSteps[targetIndex]] = [newSteps[targetIndex], newSteps[index]];
+    const currentStep = newSteps[index];
+    const targetStep = newSteps[targetIndex];
+    if (!currentStep || !targetStep) return;
+
+    newSteps[index] = targetStep;
+    newSteps[targetIndex] = currentStep;
     setCurrentSteps(newSteps);
   };
 
@@ -416,6 +421,9 @@ export default function PipelinesPage() {
       // 逐步执行
       for (let i = 0; i < execution.steps.length; i++) {
         const step = execution.steps[i];
+        if (!step) {
+          continue;
+        }
         step.status = 'running';
         step.startTime = Date.now();
 
@@ -464,8 +472,11 @@ export default function PipelinesPage() {
       // 标记失败步骤
       const failedIndex = execution.steps.findIndex((s) => s.status === 'running');
       if (failedIndex >= 0) {
-        execution.steps[failedIndex].status = 'failed';
-        execution.steps[failedIndex].error = error.message;
+        const failedStep = execution.steps[failedIndex];
+        if (failedStep) {
+          failedStep.status = 'failed';
+          failedStep.error = error.message;
+        }
       }
 
       message.error(`执行失败: ${error.message}`);

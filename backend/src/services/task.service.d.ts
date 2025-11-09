@@ -6,4 +6,3 @@ declare const taskService: {
   updateStatus: (taskId: string, status: string, payload: any) => Promise<void>;
 };
 export default taskService;
-

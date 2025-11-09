@@ -62,7 +62,7 @@ import {
   LockOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import DataTablePro, { DataTableColumn } from '@/components/base/DataTablePro';
+import { DataTablePro, type DataTableColumn } from '@/components/base/DataTablePro';
 import BaseCard from '@/components/base/BaseCard';
 import dayjs from 'dayjs';
 
@@ -70,7 +70,7 @@ const { Title, Text } = Typography;
 const { TabPane } = Tabs;
 
 // 用户状态枚举
-export enum UserStatus {
+enum UserStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   SUSPENDED = 'suspended',
@@ -78,7 +78,7 @@ export enum UserStatus {
 }
 
 // 用户角色枚举
-export enum UserRole {
+enum UserRole {
   SUPER_ADMIN = 'super_admin',
   ADMIN = 'admin',
   MANAGER = 'manager',
@@ -87,7 +87,7 @@ export enum UserRole {
 }
 
 // 用户类型定义
-export interface User {
+interface User {
   id: string;
   username: string;
   email: string;
@@ -111,7 +111,7 @@ export interface User {
 }
 
 // 用户表单数据
-export interface UserFormData {
+interface UserFormData {
   username: string;
   email: string;
   phone?: string;
@@ -129,7 +129,7 @@ export interface UserFormData {
 }
 
 // 登录历史记录
-export interface LoginHistory {
+interface LoginHistory {
   id: string;
   userId: string;
   loginTime: string;
@@ -718,7 +718,7 @@ export default function UserManagement() {
             rowSelection={{
               selectedRowKeys: selectedUsers,
               onChange: setSelectedUsers,
-              getCheckboxProps: (record) => ({
+              getCheckboxProps: (record: User) => ({
                 disabled: record.role === UserRole.SUPER_ADMIN // 超级管理员不能被选中
               })
             }}

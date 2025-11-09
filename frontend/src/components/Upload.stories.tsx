@@ -1,3 +1,4 @@
+import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Upload, Button, message } from 'antd';
 import { UploadOutlined, InboxOutlined, PictureOutlined } from '@ant-design/icons';

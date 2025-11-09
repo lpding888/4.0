@@ -61,7 +61,7 @@ export interface ConflictResolution {
 export class PipelineCollaboration {
   private doc: Y.Doc;
   private provider: WebsocketProvider | null = null;
-  private awareness: Awareness<any>;
+  private awareness: Awareness;
   private yNodes: Y.Map<any>;
   private yEdges: Y.Map<any>;
   private yOperations: Y.Array<any>;
@@ -112,7 +112,9 @@ export class PipelineCollaboration {
       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'
     ];
     const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
+    const index = Math.abs(hash) % colors.length;
+    const paletteColor = colors[index];
+    return paletteColor ?? '#4ECDC4';
   }
 
   // 设置用户状态
@@ -128,32 +130,35 @@ export class PipelineCollaboration {
     });
 
     // 监听用户状态变化
-    this.awareness.on('update', ({ added, updated, removed }) => {
-      const states = this.awareness.getStates() as Map<string, any>;
+    this.awareness.on('update', ({ added, updated, removed }: { added: number[], updated: number[], removed: number[] }) => {
+      const states = this.awareness.getStates() as Map<number, any>;
 
       // 处理新加入的用户
-      added.forEach(userId => {
+      added.forEach((userId: number) => {
         const state = states.get(userId);
         if (state?.user) {
-          this.onlineUsers.set(userId, state.user);
+          const clientKey = String(userId);
+          this.onlineUsers.set(clientKey, state.user);
           this.emit('user_joined', state.user);
         }
       });
 
       // 处理更新的用户
-      updated.forEach(userId => {
+      updated.forEach((userId: number) => {
         const state = states.get(userId);
         if (state?.user) {
-          this.onlineUsers.set(userId, state.user);
+          const clientKey = String(userId);
+          this.onlineUsers.set(clientKey, state.user);
           this.emit('user_updated', state.user);
         }
       });
 
       // 处理离开的用户
-      removed.forEach(userId => {
-        const user = this.onlineUsers.get(userId);
+      removed.forEach((userId: number) => {
+        const clientKey = String(userId);
+        const user = this.onlineUsers.get(clientKey);
         if (user) {
-          this.onlineUsers.delete(userId);
+          this.onlineUsers.delete(clientKey);
           this.emit('user_left', user);
         }
       });
@@ -169,8 +174,10 @@ export class PipelineCollaboration {
       // 创建WebSocket Provider
       this.provider = new WebsocketProvider(
         `${serverUrl}/${pipelineId}`,
+        pipelineId,
         this.doc,
         {
+          awareness: this.awareness,
           params: {
             userId: this.userId,
             userName: this.userName
@@ -240,15 +247,15 @@ export class PipelineCollaboration {
   private setupDataListeners() {
     // 监听节点变化
     this.yNodes.observe((event: Y.YMapEvent<any>) => {
-      event.changes.keys.forEach((change) => {
+      event.changes.keys.forEach((change, key) => {
         const operation: CollaborationOperation = {
           type: change.action === 'add' ? 'node_add' :
                change.action === 'update' ? 'node_update' : 'node_delete',
           userId: this.userId,
           timestamp: Date.now(),
           data: {
-            nodeId: change.key,
-            node: change.action === 'delete' ? null : this.yNodes.get(change.key)
+            nodeId: key,
+            node: change.action === 'delete' ? null : this.yNodes.get(key)
           }
         };
 
@@ -259,15 +266,15 @@ export class PipelineCollaboration {
 
     // 监听边变化
     this.yEdges.observe((event: Y.YMapEvent<any>) => {
-      event.changes.keys.forEach((change) => {
+      event.changes.keys.forEach((change, key) => {
         const operation: CollaborationOperation = {
           type: change.action === 'add' ? 'edge_add' :
                change.action === 'update' ? 'edge_update' : 'edge_delete',
           userId: this.userId,
           timestamp: Date.now(),
           data: {
-            edgeId: change.key,
-            edge: change.action === 'delete' ? null : this.yEdges.get(change.key)
+            edgeId: key,
+            edge: change.action === 'delete' ? null : this.yEdges.get(key)
           }
         };
 
@@ -290,6 +297,9 @@ export class PipelineCollaboration {
 
   // 创建快照
   createSnapshot(description: string = '手动快照'): string {
+    const nodesState = this.yNodes.toJSON() as Record<string, any>;
+    const edgesState = this.yEdges.toJSON() as Record<string, any>;
+
     const snapshot: VersionSnapshot = {
       id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       version: this.operationCount,
@@ -297,8 +307,8 @@ export class PipelineCollaboration {
       userId: this.userId,
       description,
       data: {
-        nodes: this.yNodes.toJSON(),
-        edges: this.yEdges.toJSON()
+        nodes: Object.values(nodesState),
+        edges: Object.values(edgesState)
       },
       operations: this.operationCount - this.lastSnapshotVersion
     };
@@ -373,11 +383,17 @@ export class PipelineCollaboration {
 
   // 更新用户光标
   updateCursor(cursor: CollaborativeUser['cursor']) {
-    const currentState = this.awareness.getLocalState();
+    const currentState = this.awareness.getLocalState() || {};
+    const currentUser = (currentState as any).user || {
+      id: this.userId,
+      name: this.userName,
+      color: this.userColor,
+      status: 'online'
+    };
     this.awareness.setLocalState({
       ...currentState,
       user: {
-        ...currentState.user,
+        ...currentUser,
         cursor,
         status: 'editing'
       }
@@ -386,11 +402,17 @@ export class PipelineCollaboration {
 
   // 清除光标
   clearCursor() {
-    const currentState = this.awareness.getLocalState();
+    const currentState = this.awareness.getLocalState() || {};
+    const currentUser = (currentState as any).user || {
+      id: this.userId,
+      name: this.userName,
+      color: this.userColor,
+      status: 'online'
+    };
     this.awareness.setLocalState({
       ...currentState,
       user: {
-        ...currentState.user,
+        ...currentUser,
         cursor: null,
         status: 'online'
       }

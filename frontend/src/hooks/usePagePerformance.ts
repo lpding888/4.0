@@ -13,9 +13,7 @@
  * @author 老王
  */
 
-import { useEffect, useRef } from 'use
-
-';
+import { useEffect, useRef } from 'react';
 import { pagePerformanceMonitor } from '@/lib/monitoring/page-performance';
 
 /**

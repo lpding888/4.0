@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button, Space, Typography } from 'antd';
-import { CookieOutlined, SettingOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, SettingOutlined } from '@ant-design/icons';
 
 const { Text, Link } = Typography;
 
@@ -73,7 +73,7 @@ export const CookieConsent: React.FC = () => {
         <div style={{ flex: 1 }}>
           <Space direction="vertical" size={8}>
             <div>
-              <CookieOutlined style={{ color: '#fff', fontSize: 20, marginRight: 8 }} />
+              <InfoCircleOutlined style={{ color: '#fff', fontSize: 20, marginRight: 8 }} />
               <Text strong style={{ color: '#fff', fontSize: 16 }}>
                 我们使用Cookie
               </Text>

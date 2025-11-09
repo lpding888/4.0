@@ -285,7 +285,7 @@ export default function KnowledgeBasePage() {
                 type="text"
                 danger
                 icon={<DeleteOutlined />}
-                loading={deleteMutation.isLoading}
+                loading={deleteMutation.isPending}
               />
             </Tooltip>
           </Popconfirm>
@@ -466,7 +466,7 @@ export default function KnowledgeBasePage() {
                     <Button
                       danger
                       icon={<DeleteOutlined />}
-                      loading={batchDeleteMutation.isLoading}
+                      loading={batchDeleteMutation.isPending}
                     >
                       批量删除 ({selectedRowKeys.length})
                     </Button>

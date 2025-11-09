@@ -45,13 +45,12 @@ import {
   Tabs
 } from 'antd';
 import {
-  DropletOutlined,
   UploadOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   EyeOutlined,
   FileImageOutlined,
-  CompareOutlined,
+  SwapOutlined,
   ZoomInOutlined,
   DownloadOutlined,
   SettingOutlined,
@@ -62,8 +61,7 @@ import {
   PlusOutlined,
   BgColorsOutlined,
   EyeInvisibleOutlined,
-  EyeOutlined as EyeIcon,
-  SwapOutlined
+  EyeOutlined as EyeIcon
 } from '@ant-design/icons';
 import { COSBatchUploader } from '@/components/base/COSBatchUploader';
 import { useSSE } from '@/hooks/useSSE';
@@ -235,8 +233,11 @@ export default function RecolorPage() {
       for (let j = 0; j < 5; j++) {
         // 生成颜色变化
         const variation = (i - 2) * 0.1 + (j - 2) * 0.1;
-        const newRgb = rgb.map(c => Math.max(0, Math.min(255, c + variation * 50)));
-        row.push(rgbToHex(newRgb[0], newRgb[1], newRgb[2]));
+        const newRgb = rgb.map(
+          (c) => Math.max(0, Math.min(255, c + variation * 50))
+        ) as [number, number, number];
+        const [r, g, b] = newRgb;
+        row.push(rgbToHex(r, g, b));
       }
       matrix.push(row);
     }
@@ -247,11 +248,15 @@ export default function RecolorPage() {
   // 颜色转换工具
   const hexToRgb = (hex: string): [number, number, number] => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? [
-      parseInt(result[1], 16),
-      parseInt(result[2], 16),
-      parseInt(result[3], 16)
-    ] : [0, 0, 0];
+    if (!result) {
+      return [0, 0, 0];
+    }
+    const [, r = '00', g = '00', b = '00'] = result;
+    return [
+      parseInt(r, 16),
+      parseInt(g, 16),
+      parseInt(b, 16)
+    ];
   };
 
   const rgbToHex = (r: number, g: number, b: number): string => {
@@ -444,13 +449,18 @@ export default function RecolorPage() {
   // 渲染颜色选择器
   const renderColorSelector = () => (
     <Card title="颜色选择" style={{ marginBottom: 16 }}>
-      <Tabs activeKey={colorMode} onChange={setColorMode}>
+      <Tabs
+        activeKey={colorMode}
+        onChange={(key) => setColorMode(key as ColorSelectionMode)}
+      >
         <TabPane tab="色卡" key="palette">
           <Row gutter={[8, 8]}>
             {COLOR_PALETTE.map((color, index) => (
               <Col span={6} key={index}>
-                <div
+                <button
+                  type="button"
                   style={{
+                    width: '100%',
                     padding: 8,
                     border: selectedColor === color.hex ? '2px solid #1890ff' : '1px solid #d9d9d9',
                     borderRadius: 4,
@@ -459,6 +469,7 @@ export default function RecolorPage() {
                     backgroundColor: selectedColor === color.hex ? '#f0f8ff' : 'white'
                   }}
                   onClick={() => handlePaletteColorSelect(color)}
+                  aria-label={`选择颜色 ${color.name}`}
                 >
                   <div
                     style={{
@@ -470,7 +481,7 @@ export default function RecolorPage() {
                     }}
                   />
                   <Text style={{ fontSize: 12 }}>{color.name}</Text>
-                </div>
+                </button>
               </Col>
             ))}
           </Row>
@@ -693,16 +704,19 @@ export default function RecolorPage() {
         dataSource={tasks.slice(0, 10)}
         renderItem={(task) => (
           <List.Item
+            key={task.id}
             actions={task.status === 'completed' ? [
               <Button
+                key="compare"
                 type="link"
-                icon={<CompareOutlined />}
+                icon={<SwapOutlined />}
                 onClick={() => openComparison(task)}
               >
                 对比
               </Button>,
               task.colorMatrix && (
                 <Button
+                  key="matrix"
                   type="link"
                   icon={<BgColorsOutlined />}
                   onClick={() => openColorMatrix(task)}
@@ -784,21 +798,14 @@ export default function RecolorPage() {
                   />
                 }
                 actions={[
-                  <Tooltip title="对比查看">
-                    <CompareOutlined
-                      key="compare"
-                      onClick={() => openComparison(task)}
-                    />
+                  <Tooltip key="compare" title="对比查看">
+                    <SwapOutlined onClick={() => openComparison(task)} />
                   </Tooltip>,
-                  <Tooltip title="色矩阵">
-                    <BgColorsOutlined
-                      key="matrix"
-                      onClick={() => openColorMatrix(task)}
-                    />
+                  <Tooltip key="matrix" title="色矩阵">
+                    <BgColorsOutlined onClick={() => openColorMatrix(task)} />
                   </Tooltip>,
-                  <Tooltip title="下载">
+                  <Tooltip key="download" title="下载">
                     <DownloadOutlined
-                      key="download"
                       onClick={() => {
                         const link = document.createElement('a');
                         link.href = task.resultImages?.[0] || task.imageUrl;
@@ -845,7 +852,7 @@ export default function RecolorPage() {
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <Title level={2}>
-          <DropletOutlined style={{ marginRight: 8 }} />
+          <BgColorsOutlined style={{ marginRight: 8 }} />
           服装换色
         </Title>
         <Paragraph type="secondary">
@@ -912,7 +919,7 @@ export default function RecolorPage() {
       <Modal
         title={
           <Space>
-            <CompareOutlined />
+            <SwapOutlined />
             <span>换色对比 - {selectedTask?.imageName}</span>
           </Space>
         }
@@ -966,8 +973,10 @@ export default function RecolorPage() {
               {selectedTask.colorMatrix.map((row, i) =>
                 row.map((color, j) => (
                   <Col span={4} key={`${i}-${j}`}>
-                    <div
+                    <button
+                      type="button"
                       style={{
+                        width: '100%',
                         backgroundColor: color,
                         height: 60,
                         borderRadius: 4,
@@ -986,7 +995,7 @@ export default function RecolorPage() {
                       }}
                     >
                       {color}
-                    </div>
+                    </button>
                   </Col>
                 ))
               )}

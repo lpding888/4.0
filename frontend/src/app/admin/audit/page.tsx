@@ -257,7 +257,15 @@ export default function AuditLogPage() {
       render: (status: AuditEvent['status']) => {
         const config = STATUS_CONFIG[status];
         return (
-          <Badge status={config.color as any} text={config.label} icon={config.icon} />
+          <Badge
+            status={config.color as any}
+            text={
+              <Space size={4}>
+                {config.icon}
+                {config.label}
+              </Space>
+            }
+          />
         );
       },
     },

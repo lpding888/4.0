@@ -238,7 +238,7 @@ export default function QueuesMonitorPage() {
   const [activeTab, setActiveTab] = useState('overview');
 
   // SSE连接
-  const { connect, disconnect, isConnected, currentProgress } = useSSE();
+  const { connect, disconnect, isConnected } = useSSE();
 
   // 自动刷新
   useEffect(() => {

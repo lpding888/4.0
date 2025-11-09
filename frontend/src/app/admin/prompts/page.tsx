@@ -16,6 +16,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { Key } from 'react';
 import {
   Card,
   Button,
@@ -56,9 +57,9 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTablePro } from '@/components/base/DataTablePro';
+import type { DataTableColumn } from '@/components/base/DataTablePro';
 import { api } from '@/lib/api/client';
 import { MSWInitializer } from '@/components/MSWInitializer';
-import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text, Paragraph } = Typography;
 const { TabPane } = Tabs;
@@ -209,16 +210,13 @@ export default function PromptsPage() {
 
   // 复制Prompt
   const copyPrompt = (prompt: Prompt) => {
-    const copyData = {
-      ...prompt,
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = prompt;
+    const copyData: Partial<Prompt> = {
+      ...rest,
       name: `${prompt.name} (副本)`,
-      status: 'draft' as const,
-      version: 1
+      status: 'draft',
+      version: 1,
     };
-    delete copyData.id;
-    delete copyData.createdAt;
-    delete copyData.updatedAt;
-
     createMutation.mutate(copyData);
   };
 
@@ -255,8 +253,9 @@ export default function PromptsPage() {
     const variables: string[] = [];
     let match;
     while ((match = variablePattern.exec(content)) !== null) {
-      if (!variables.includes(match[1])) {
-        variables.push(match[1]);
+      const varName = match[1];
+      if (varName && !variables.includes(varName)) {
+        variables.push(varName);
       }
     }
     return variables;
@@ -329,7 +328,7 @@ export default function PromptsPage() {
   };
 
   // 表格列定义
-  const columns: ColumnsType<Prompt> = [
+  const columns: DataTableColumn<Prompt>[] = [
     {
       title: '名称',
       dataIndex: 'name',
@@ -465,7 +464,7 @@ export default function PromptsPage() {
                 type="text"
                 danger
                 icon={<DeleteOutlined />}
-                loading={deleteMutation.isLoading}
+                loading={deleteMutation.isPending}
               />
             </Tooltip>
           </Popconfirm>
@@ -579,7 +578,7 @@ export default function PromptsPage() {
           }}
           rowSelection={{
             type: 'checkbox',
-            onChange: (selectedRowKeys, selectedRows) => {
+            onChange: (selectedRowKeys: Key[], selectedRows: Prompt[]) => {
               console.log('Selected:', selectedRowKeys, selectedRows);
             }
           }}
@@ -645,7 +644,7 @@ export default function PromptsPage() {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={createMutation.isLoading}>
+              <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
                 创建
               </Button>
               <Button onClick={() => setCreateModalVisible(false)}>
@@ -727,7 +726,7 @@ export default function PromptsPage() {
 
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isLoading}>
+              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>
                 更新
               </Button>
               <Button onClick={() => setEditModalVisible(false)}>

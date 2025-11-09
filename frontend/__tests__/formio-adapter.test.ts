@@ -173,7 +173,7 @@ describe('Formio → UFS Adapter', () => {
         required: true,
       },
     });
-    expect(ufs.fields[0].options).toEqual([
+    expect(ufs.fields[0]!.options).toEqual([
       { label: '中国', value: 'cn' },
       { label: '美国', value: 'us' },
       { label: '日本', value: 'jp' },
@@ -206,7 +206,7 @@ describe('Formio → UFS Adapter', () => {
       type: UFSFieldType.RADIO,
       label: '性别',
     });
-    expect(ufs.fields[0].options).toEqual([
+    expect(ufs.fields[0]!.options).toEqual([
       { label: '男', value: 'male' },
       { label: '女', value: 'female' },
     ]);
@@ -265,7 +265,7 @@ describe('Formio → UFS Adapter', () => {
       type: UFSFieldType.CHECKBOX,
       label: '爱好',
     });
-    expect(ufs.fields[0].options).toHaveLength(3);
+    expect(ufs.fields[0]!.options).toHaveLength(3);
   });
 
   // ========== 测试9: datetime → date ==========
@@ -340,7 +340,7 @@ describe('Formio → UFS Adapter', () => {
 
     const ufs = convertFormioToUFS(formioSchema);
 
-    expect(ufs.fields[0].visibleWhen).toEqual({
+    expect(ufs.fields[0]!.visibleWhen).toEqual({
       field: 'hasCompany',
       operator: 'eq',
       value: true,
@@ -375,9 +375,9 @@ describe('Formio → UFS Adapter', () => {
     const ufs = convertFormioToUFS(formioSchema);
 
     expect(ufs.fields).toHaveLength(3);
-    expect(ufs.fields[0].key).toBe('name');
-    expect(ufs.fields[1].key).toBe('email');
-    expect(ufs.fields[2].key).toBe('age');
+    expect(ufs.fields[0]!.key).toBe('name');
+    expect(ufs.fields[1]!.key).toBe('email');
+    expect(ufs.fields[2]!.key).toBe('age');
   });
 
   // ========== 测试13: 跳过布局组件 ==========
@@ -412,8 +412,8 @@ describe('Formio → UFS Adapter', () => {
 
     // 只应该有2个字段，布局组件被跳过
     expect(ufs.fields).toHaveLength(2);
-    expect(ufs.fields[0].key).toBe('field1');
-    expect(ufs.fields[1].key).toBe('field2');
+    expect(ufs.fields[0]!.key).toBe('field1');
+    expect(ufs.fields[1]!.key).toBe('field2');
   });
 
   // ========== 测试14: 跳过按钮组件 ==========
@@ -436,7 +436,7 @@ describe('Formio → UFS Adapter', () => {
     const ufs = convertFormioToUFS(formioSchema);
 
     expect(ufs.fields).toHaveLength(1);
-    expect(ufs.fields[0].key).toBe('name');
+    expect(ufs.fields[0]!.key).toBe('name');
   });
 
   // ========== 测试15: 检测重复key ==========
@@ -514,8 +514,8 @@ describe('Formio → UFS Adapter', () => {
     };
 
     const result = validateUFSSchema(validSchema);
-    expect(result.valid).toBe(true);
-    expect(result.errors).toHaveLength(0);
+    expect(result.success).toBe(true);
+    expect(result.errors || []).toHaveLength(0);
   });
 
   // ========== 测试19: validateUFSSchema 检测缺少必要字段 ==========
@@ -531,7 +531,7 @@ describe('Formio → UFS Adapter', () => {
     };
 
     const result = validateUFSSchema(invalidSchema);
-    expect(result.valid).toBe(false);
+    expect(result.success).toBe(false);
     expect(result.errors).toContain('Missing version field');
   });
 
@@ -550,8 +550,8 @@ describe('Formio → UFS Adapter', () => {
     };
 
     const result = validateUFSSchema(invalidSchema);
-    expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes('must have options'))).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.errors?.some((e: string) => e.includes('must have options'))).toBe(true);
   });
 
   // ========== 测试21: 支持的类型列表 ==========

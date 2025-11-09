@@ -97,6 +97,8 @@ interface BrandColor {
   isPrimary: boolean;
 }
 
+type ComponentTab = 'colors' | 'fonts' | 'watermarks' | 'priceTags';
+
 interface BrandFont {
   id: string;
   name: string;
@@ -241,7 +243,7 @@ export default function StyleKitsPage() {
   const [form] = Form.useForm();
 
   // 样式组件编辑状态
-  const [activeComponent, setActiveComponent] = useState<'colors' | 'fonts' | 'watermarks' | 'priceTags'>('colors');
+  const [activeComponent, setActiveComponent] = useState<ComponentTab>('colors');
   const [tempColors, setTempColors] = useState<BrandColor[]>([]);
   const [tempFonts, setTempFonts] = useState<BrandFont[]>([]);
   const [tempWatermarks, setTempWatermarks] = useState<Watermark[]>([]);
@@ -561,8 +563,12 @@ export default function StyleKitsPage() {
                   onChange={(colorValue) => {
                     const hex = typeof colorValue === 'string' ? colorValue : colorValue.toHexString();
                     const newColors = [...tempColors];
+                    const existingColor = newColors[index];
+                    if (!existingColor) {
+                      return;
+                    }
                     newColors[index] = {
-                      ...newColors[index],
+                      ...existingColor,
                       hex,
                       rgb: {
                         r: parseInt(hex.slice(1, 3), 16),
@@ -580,7 +586,11 @@ export default function StyleKitsPage() {
                   value={color.name}
                   onChange={(e) => {
                     const newColors = [...tempColors];
-                    newColors[index] = { ...newColors[index], name: e.target.value };
+                    const existingColor = newColors[index];
+                    if (!existingColor) {
+                      return;
+                    }
+                    newColors[index] = { ...existingColor, name: e.target.value };
                     setTempColors(newColors);
                   }}
                 />
@@ -591,7 +601,11 @@ export default function StyleKitsPage() {
                   value={color.hex}
                   onChange={(e) => {
                     const newColors = [...tempColors];
-                    newColors[index] = { ...newColors[index], hex: e.target.value };
+                    const existingColor = newColors[index];
+                    if (!existingColor) {
+                      return;
+                    }
+                    newColors[index] = { ...existingColor, hex: e.target.value };
                     setTempColors(newColors);
                   }}
                 />
@@ -603,7 +617,11 @@ export default function StyleKitsPage() {
                   checked={color.isPrimary}
                   onChange={(checked) => {
                     const newColors = [...tempColors];
-                    newColors[index] = { ...newColors[index], isPrimary: checked };
+                    const existingColor = newColors[index];
+                    if (!existingColor) {
+                      return;
+                    }
+                    newColors[index] = { ...existingColor, isPrimary: checked };
                     setTempColors(newColors);
                   }}
                 />
@@ -643,7 +661,11 @@ export default function StyleKitsPage() {
                   value={font.name}
                   onChange={(e) => {
                     const newFonts = [...tempFonts];
-                    newFonts[index] = { ...newFonts[index], name: e.target.value };
+                    const existingFont = newFonts[index];
+                    if (!existingFont) {
+                      return;
+                    }
+                    newFonts[index] = { ...existingFont, name: e.target.value };
                     setTempFonts(newFonts);
                   }}
                 />
@@ -654,7 +676,11 @@ export default function StyleKitsPage() {
                   value={font.family}
                   onChange={(e) => {
                     const newFonts = [...tempFonts];
-                    newFonts[index] = { ...newFonts[index], family: e.target.value };
+                    const existingFont = newFonts[index];
+                    if (!existingFont) {
+                      return;
+                    }
+                    newFonts[index] = { ...existingFont, family: e.target.value };
                     setTempFonts(newFonts);
                   }}
                 />
@@ -668,7 +694,11 @@ export default function StyleKitsPage() {
                   step={0.1}
                   onChange={(value) => {
                     const newFonts = [...tempFonts];
-                    newFonts[index] = { ...newFonts[index], lineHeight: value || 1.5 };
+                    const existingFont = newFonts[index];
+                    if (!existingFont) {
+                      return;
+                    }
+                    newFonts[index] = { ...existingFont, lineHeight: value || 1.5 };
                     setTempFonts(newFonts);
                   }}
                 />
@@ -815,7 +845,7 @@ export default function StyleKitsPage() {
 
           <Divider>组件配置</Divider>
 
-          <Tabs activeKey={activeComponent} onChange={setActiveComponent}>
+          <Tabs activeKey={activeComponent} onChange={(key) => setActiveComponent(key as ComponentTab)}>
             <TabPane tab={`品牌色 (${tempColors.length})`} key="colors">
               {renderColorEditor()}
             </TabPane>

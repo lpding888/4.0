@@ -24,7 +24,7 @@ export function useWorkbench() {
    * 艹，没权限的功能自动过滤掉！
    */
   const filteredFeatures = useMemo(() => {
-    return config.features.filter((feature) => {
+    return config.features.filter((feature: FeatureCard) => {
       // 禁用的功能
       if (!config.showDisabled && !feature.enabled) {
         return false;
@@ -36,14 +36,14 @@ export function useWorkbench() {
       }
 
       return true;
-    }).sort((a, b) => a.order - b.order);
+    }).sort((a: FeatureCard, b: FeatureCard) => a.order - b.order);
   }, [config.features, config.showDisabled, hasPermission]);
 
   /**
    * 根据分类获取功能
    */
   const getFeaturesByCategory = (category: FeatureCategory): FeatureCard[] => {
-    return filteredFeatures.filter((f) => f.category === category);
+    return filteredFeatures.filter((f: FeatureCard) => f.category === category);
   };
 
   /**
@@ -51,9 +51,15 @@ export function useWorkbench() {
    */
   const getAllCategories = (): FeatureCategory[] => {
     const categories = new Set<FeatureCategory>();
-    filteredFeatures.forEach((f) => categories.add(f.category));
+    filteredFeatures.forEach((f: FeatureCard) => categories.add(f.category));
     return Array.from(categories);
   };
+
+  const {
+    getFeaturesByCategory: _storeGetFeaturesByCategory,
+    getFeatureById,
+    ...restActions
+  } = actions;
 
   return {
     // 配置
@@ -65,9 +71,9 @@ export function useWorkbench() {
     // 查询方法
     getFeaturesByCategory,
     getAllCategories,
-    getFeatureById: actions.getFeatureById,
+    getFeatureById,
 
     // 操作方法
-    ...actions,
+    ...restActions,
   };
 }

@@ -15,7 +15,13 @@ import { DistributorListItem } from '@/types';
 import StatusBadge from '@/components/distribution/StatusBadge';
 import { DataTable, FilterBar } from '@/shared/ui/DataTable';
 import { useTableData } from '@/shared/hooks/useTableData';
-import type { ColumnConfig, FilterConfig } from '@/shared/ui/DataTable';
+import type { DataTableColumn, FilterConfig } from '@/shared/ui/DataTable';
+import { FilterType } from '@/shared/ui/DataTable';
+
+const DEFAULT_FILTERS = {
+  keyword: '',
+  status: 'all',
+};
 
 /**
  * 管理端 - 分销员管理列表
@@ -43,13 +49,13 @@ export default function AdminDistributorsPage() {
           ? { status: params.filters.status }
           : {}),
         ...(params.filters.keyword ? { keyword: params.filters.keyword } : {}),
-        limit: params.pagination.pageSize,
-        offset: params.pagination.offset,
+        limit: params.pageSize,
+        offset: params.offset,
       });
 
       if (response.success && response.data) {
         return {
-          data: response.data.distributors || [],
+          items: response.data.distributors || [],
           total: response.data.total || 0,
         };
       }
@@ -57,6 +63,7 @@ export default function AdminDistributorsPage() {
       throw new Error(response.error?.message || '加载失败');
     },
     autoLoad: true,
+    initialFilters: DEFAULT_FILTERS,
   });
 
   /**
@@ -66,15 +73,15 @@ export default function AdminDistributorsPage() {
   const filterConfig: FilterConfig[] = useMemo(
     () => [
       {
-        type: 'SEARCH',
-        name: 'keyword',
+        type: FilterType.SEARCH,
+        key: 'keyword',
         label: '搜索',
         placeholder: '搜索手机号或姓名',
         width: 300,
       },
       {
-        type: 'SELECT',
-        name: 'status',
+        type: FilterType.SELECT,
+        key: 'status',
         label: '状态',
         placeholder: '选择状态',
         options: [
@@ -130,7 +137,7 @@ export default function AdminDistributorsPage() {
    * 表格列配置
    * 艹！DataTable会自动渲染这些列！
    */
-  const columns: ColumnConfig<DistributorListItem>[] = useMemo(
+  const columns: DataTableColumn<DistributorListItem>[] = useMemo(
     () => [
       {
         key: 'id',
@@ -210,11 +217,14 @@ export default function AdminDistributorsPage() {
       {/* 艹！使用新的 FilterBar 组件！ */}
       <FilterBar
         filters={filterConfig}
-        values={tableData.filters.values}
-        onChange={tableData.filters.setFilter}
-        onSearch={tableData.filters.applyFilters}
-        onReset={tableData.filters.resetFilters}
-        style={{ marginBottom: 16 }}
+        onFilterChange={(key, value) => {
+          tableData.filters.setFilter(key, value);
+          tableData.pagination.reset();
+        }}
+        onReset={() => {
+          tableData.filters.setFilters({ ...DEFAULT_FILTERS });
+          tableData.pagination.reset();
+        }}
       />
 
       {/* 艹！使用新的 DataTable 组件！ */}
@@ -224,16 +234,10 @@ export default function AdminDistributorsPage() {
         loading={tableData.loading}
         rowKey="id"
         pagination={{
-          current: tableData.pagination.page,
+          page: tableData.pagination.page,
           pageSize: tableData.pagination.pageSize,
           total: tableData.pagination.total,
           onChange: tableData.pagination.goToPage,
-          onShowSizeChange: (_current, size) => {
-            tableData.pagination.setPageSize(size);
-            tableData.pagination.goToPage(1);
-          },
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
         }}
       />
     </div>

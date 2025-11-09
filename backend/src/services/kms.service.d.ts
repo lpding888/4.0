@@ -7,4 +7,3 @@ declare const kmsService: {
   deleteKey: (keyNameOrId: string, options?: any) => Promise<boolean>;
 };
 export default kmsService;
-

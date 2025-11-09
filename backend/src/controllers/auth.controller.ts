@@ -407,6 +407,133 @@ export class AuthController {
       next(error);
     }
   }
+
+  /**
+   * 设置/修改密码
+   * POST /api/auth/set-password
+   * 艹！用户首次设置密码或修改密码！
+   */
+  async setPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { newPassword, oldPassword } = req.body;
+      const userId = (req.user as any)?.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: '未登录' }
+        });
+        return;
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PASSWORD', message: '密码至少6位' }
+        });
+        return;
+      }
+
+      const user = await userRepo.findUserById(userId);
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: '用户不存在' }
+        });
+        return;
+      }
+
+      // 如果已有密码，需要验证旧密码
+      if (user.password) {
+        if (!oldPassword) {
+          res.status(400).json({
+            success: false,
+            error: { code: 'OLD_PASSWORD_REQUIRED', message: '请输入旧密码' }
+          });
+          return;
+        }
+        const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+        if (!isOldPasswordValid) {
+          res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_OLD_PASSWORD', message: '旧密码错误' }
+          });
+          return;
+        }
+      }
+
+      // 设置新密码
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await userRepo.updateUser(userId, { password: hashedPassword });
+
+      res.json({
+        success: true,
+        message: user.password ? '密码修改成功' : '密码设置成功'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * 重置密码
+   * POST /api/auth/reset-password
+   * 艹！忘记密码用验证码重置！
+   */
+  async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { phone, code, newPassword } = req.body;
+
+      if (!phone || !code || !newPassword) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_PARAMS', message: '缺少必要参数' }
+        });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_PASSWORD', message: '密码至少6位' }
+        });
+        return;
+      }
+
+      // 验证验证码（从Redis读取）
+      const { getCache, delCache } = await import('../config/redis.js');
+      const cachedCode = await getCache<string>(`sms:${phone}`);
+      if (!cachedCode || cachedCode !== code) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_CODE', message: '验证码错误或已过期' }
+        });
+        return;
+      }
+
+      // 查找用户
+      const user = await userRepo.findUserByPhone(phone);
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: '用户不存在' }
+        });
+        return;
+      }
+
+      // 重置密码
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await userRepo.updateUser(user.id, { password: hashedPassword });
+      await delCache(`sms:${phone}`);
+
+      res.json({
+        success: true,
+        message: '密码重置成功'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new AuthController();

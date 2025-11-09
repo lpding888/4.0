@@ -10,4 +10,3 @@ declare const distributionService: {
 };
 
 export default distributionService;
-

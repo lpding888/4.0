@@ -22,6 +22,7 @@ import {
   Button,
   Tag,
   Switch,
+  Input,
   InputNumber,
   Tabs,
   List,
@@ -51,7 +52,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { SSEHook } from '@/lib/api/sse';
+import { startSSE } from '@/lib/api/sse';
 import { MSWInitializer } from '@/components/MSWInitializer';
 
 const { Title, Text } = Typography;
@@ -176,7 +177,7 @@ export default function ModelManagement() {
   const models = modelsData?.models || mockModels;
 
   // 过滤模型
-  const filteredModels = models.filter(model => {
+  const filteredModels = models.filter((model: AIModel) => {
     if (filterStatus === 'all') return true;
     return model.status === filterStatus;
   });
@@ -217,14 +218,14 @@ export default function ModelManagement() {
     setTestResponse('');
 
     try {
-      await SSEHook({
+      await startSSE({
         url: '/ai/chat',
         body: {
           message: testMessage,
           model: model.id,
           sessionId: `test_${Date.now()}`
         },
-        onDelta: (data) => {
+        onDelta: (data: { text?: string }) => {
           if (data.text) {
             setTestResponse(prev => prev + data.text);
           }
@@ -302,26 +303,26 @@ export default function ModelManagement() {
             type={filterStatus === 'available' ? 'primary' : 'default'}
             onClick={() => setFilterStatus('available')}
           >
-            可用 ({models.filter(m => m.status === 'available').length})
+            可用 ({models.filter((m: AIModel) => m.status === 'available').length})
           </Button>
           <Button
             type={filterStatus === 'testing' ? 'primary' : 'default'}
             onClick={() => setFilterStatus('testing')}
           >
-            测试中 ({models.filter(m => m.status === 'testing').length})
+            测试中 ({models.filter((m: AIModel) => m.status === 'testing').length})
           </Button>
           <Button
             type={filterStatus === 'unavailable' ? 'primary' : 'default'}
             onClick={() => setFilterStatus('unavailable')}
           >
-            不可用 ({models.filter(m => m.status === 'unavailable').length})
+            不可用 ({models.filter((m: AIModel) => m.status === 'unavailable').length})
           </Button>
         </div>
       </div>
 
       {/* 模型卡片网格 */}
       <Row gutter={[24, 24]}>
-        {filteredModels.map((model) => {
+        {filteredModels.map((model: AIModel) => {
           const stats = mockStats[model.id];
           return (
             <Col xs={24} sm={12} lg={8} xl={6} key={model.id}>
@@ -343,18 +344,16 @@ export default function ModelManagement() {
                   </div>
                 }
                 actions={[
-                  <Tooltip title="测试模型">
+                  <Tooltip key="test" title="测试模型">
                     <PlayCircleOutlined
-                      key="test"
                       onClick={() => {
                         setSelectedModel(model);
                         setTestModalVisible(true);
                       }}
                     />
                   </Tooltip>,
-                  <Tooltip title="配置模型">
+                  <Tooltip key="config" title="配置模型">
                     <SettingOutlined
-                      key="config"
                       onClick={() => {
                         setSelectedModel(model);
                         configForm.setFieldsValue(model);

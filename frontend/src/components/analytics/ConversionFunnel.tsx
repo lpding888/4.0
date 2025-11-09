@@ -28,7 +28,7 @@ export const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ steps, heigh
   }
 
   // 计算每个步骤的宽度（基于第一步的100%）
-  const maxCount = steps[0].count;
+  const maxCount = steps[0]?.count ?? 0;
   const stepHeight = (height - (steps.length - 1) * 20) / steps.length; // 每个步骤的高度（扣除间隔）
 
   return (
@@ -36,7 +36,7 @@ export const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ steps, heigh
       <svg width="100%" height={height} viewBox={`0 0 800 ${height}`}>
         {/* 绘制漏斗 */}
         {steps.map((step, index) => {
-          const widthPercentage = (step.count / maxCount) * 100;
+          const widthPercentage = maxCount > 0 ? (step.count / maxCount) * 100 : 0;
           const width = (widthPercentage / 100) * 600; // 最大宽度600
           const x = (800 - width) / 2; // 居中
           const y = index * (stepHeight + 20);
@@ -72,7 +72,9 @@ export const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ steps, heigh
                 // 后续步骤：梯形（使用polygon）
                 <>
                   {(() => {
-                    const prevWidthPercentage = (steps[index - 1].count / maxCount) * 100;
+                    const prevStep = steps[index - 1];
+                    const prevWidthPercentage =
+                      maxCount > 0 && prevStep ? (prevStep.count / maxCount) * 100 : 0;
                     const prevWidth = (prevWidthPercentage / 100) * 600;
                     const prevX = (800 - prevWidth) / 2;
 

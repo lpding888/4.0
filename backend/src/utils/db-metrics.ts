@@ -16,7 +16,7 @@ import type { Knex } from 'knex';
 /**
  * 连接池指标
  */
-interface ConnectionMetrics {
+export interface ConnectionMetrics {
   active: number;
   idle: number;
   total: number;
@@ -26,7 +26,7 @@ interface ConnectionMetrics {
 /**
  * 慢查询记录
  */
-interface SlowQuery {
+export interface SlowQuery {
   sql: string;
   params: any[];
   duration: number;
@@ -46,7 +46,7 @@ interface PerformanceMetrics {
 /**
  * EXPLAIN分析结果
  */
-interface ExplainAnalysis {
+export interface ExplainAnalysis {
   id: number;
   select_type: string;
   table: string;
@@ -99,7 +99,7 @@ interface ExplainMetrics {
 /**
  * 连接池状态
  */
-interface PoolStatus extends ConnectionMetrics {
+export interface PoolStatus extends ConnectionMetrics {
   healthy: boolean;
   utilization: string;
 }
@@ -107,7 +107,7 @@ interface PoolStatus extends ConnectionMetrics {
 /**
  * 健康问题
  */
-interface HealthIssue {
+export interface HealthIssue {
   type: string;
   severity: 'high' | 'medium' | 'low';
   message: string;
@@ -116,7 +116,7 @@ interface HealthIssue {
 /**
  * 指标报告
  */
-interface MetricsReport {
+export interface MetricsReport {
   timestamp: Date;
   pool: PoolStatus;
   performance: {
@@ -228,8 +228,7 @@ class DatabaseMetrics {
       total,
       waiting,
       healthy: waiting === 0,
-      utilization:
-        total > 0 ? ((active / total) * 100).toFixed(2) + '%' : '0%'
+      utilization: total > 0 ? ((active / total) * 100).toFixed(2) + '%' : '0%'
     };
   }
 
@@ -386,7 +385,14 @@ class DatabaseMetrics {
 
     return {
       usingIndex: true,
-      efficiency: efficiency > 0.8 ? 'excellent' : efficiency > 0.5 ? 'good' : efficiency > 0.3 ? 'medium' : 'poor',
+      efficiency:
+        efficiency > 0.8
+          ? 'excellent'
+          : efficiency > 0.5
+            ? 'good'
+            : efficiency > 0.3
+              ? 'medium'
+              : 'poor',
       indexName: row.key,
       keyLen: row.key_len
     };
@@ -562,6 +568,27 @@ class DatabaseMetrics {
     }
 
     return issues;
+  }
+
+  /**
+   * 获取最近的慢查询
+   */
+  public getRecentSlowQueries(limit = 20): SlowQuery[] {
+    return this.metrics.performance.slowQueries.slice(-limit);
+  }
+
+  /**
+   * 对外暴露的SQL脱敏方法
+   */
+  public publicSanitize(sql: string): string {
+    return this.sanitizeSQL(sql);
+  }
+
+  /**
+   * 对外暴露的SQL哈希方法
+   */
+  public publicHash(sql: string): number {
+    return this.hashSQL(sql);
   }
 }
 

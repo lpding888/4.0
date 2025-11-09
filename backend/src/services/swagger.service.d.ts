@@ -10,4 +10,3 @@ declare const swaggerService: {
 };
 
 export default swaggerService;
-

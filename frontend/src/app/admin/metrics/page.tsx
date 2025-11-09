@@ -47,8 +47,7 @@ import {
 } from 'recharts';
 import {
   ReloadOutlined,
-  TrendingUpOutlined,
-  TrendingDownOutlined,
+  RiseOutlined,
   ExclamationCircleOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -162,7 +161,7 @@ export default function MetricsDashboard() {
       {/* 页面标题 */}
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={2} style={{ margin: 0 }}>
-          <TrendingUpOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+          <RiseOutlined style={{ marginRight: 8, color: '#1890ff' }} />
           业务指标看板
         </Title>
 
@@ -335,7 +334,9 @@ export default function MetricsDashboard() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }: { name?: string; percent?: number }) =>
+                      `${name ?? ''} ${(((percent ?? 0) * 100).toFixed(0))}%`
+                    }
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"

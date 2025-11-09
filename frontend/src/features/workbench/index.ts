@@ -12,8 +12,6 @@ export type {
   WorkbenchSlice,
 } from './model/types';
 
-export { FeatureCategory, FeatureCardSize } from './model/types';
-
 // Default Features
 export { DEFAULT_FEATURES, getRecommendedFeaturesByRole } from './model/defaultFeatures';
 
@@ -21,5 +19,5 @@ export { DEFAULT_FEATURES, getRecommendedFeaturesByRole } from './model/defaultF
 export { useWorkbench } from './model/useWorkbench';
 
 // UI Components
-export { FeatureCard, FeatureGrid } from './ui';
+export { FeatureGrid } from './ui';
 export type { FeatureCardProps, FeatureGridProps } from './ui';

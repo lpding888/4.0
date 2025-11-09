@@ -9,7 +9,10 @@ import { useRef, useState } from 'react';
 import Editor, { Monaco, OnMount } from '@monaco-editor/react';
 import { Button, Space, message, Spin } from 'antd';
 import { CopyOutlined, CheckOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons';
-import type { editor } from 'monaco-editor';
+
+type EditorInstance = Parameters<OnMount>[0];
+type MonacoInstance = Parameters<OnMount>[1];
+type EditorOptions = Record<string, unknown>;
 
 /**
  * 变量节点（用于自动补全）
@@ -29,9 +32,9 @@ interface MonacoEditorProps {
   height?: string | number;
   theme?: 'vs-dark' | 'light' | 'vs';
   readOnly?: boolean;
-  options?: editor.IStandaloneEditorOptions;
+  options?: EditorOptions;
   showActions?: boolean; // 是否显示工具栏
-  onMount?: (editor: editor.IStandaloneCodeEditor, monaco: Monaco) => void;
+  onMount?: (editor: EditorInstance, monaco: MonacoInstance) => void;
 
   // CMS-302: 变量自动补全
   availableVars?: VarNode[]; // 可用变量树
@@ -65,7 +68,7 @@ export default function MonacoEditor({
   availableVars = [],
   enableVarCompletion = false,
 }: MonacoEditorProps) {
-  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<EditorInstance | null>(null);
   const [copied, setCopied] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -93,7 +96,7 @@ export default function MonacoEditor({
 
       monaco.languages.registerCompletionItemProvider(language, {
         triggerCharacters: ['{'], // 触发字符
-        provideCompletionItems: (model, position) => {
+        provideCompletionItems: (model: any, position: any) => {
           const textUntilPosition = model.getValueInRange({
             startLineNumber: position.lineNumber,
             startColumn: 1,
@@ -187,7 +190,7 @@ export default function MonacoEditor({
   };
 
   // 默认编辑器选项
-  const defaultOptions: editor.IStandaloneEditorOptions = {
+  const defaultOptions: EditorOptions = {
     readOnly,
     minimap: { enabled: !readOnly }, // 只读模式不显示小地图
     fontSize: 13,

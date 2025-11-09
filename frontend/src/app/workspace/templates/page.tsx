@@ -64,7 +64,7 @@ import {
   FileExcelOutlined,
   FilePdfOutlined
 } from '@ant-design/icons';
-import DataTablePro, { DataTableColumn } from '@/components/base/DataTablePro';
+import { DataTablePro, type DataTableColumn } from '@/components/base/DataTablePro';
 import BaseCard from '@/components/base/BaseCard';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 
@@ -72,7 +72,7 @@ const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 // 模板类型枚举
-export enum TemplateType {
+enum TemplateType {
   DOCUMENT = 'document',
   CODE = 'code',
   PRESENTATION = 'presentation',
@@ -84,7 +84,7 @@ export enum TemplateType {
 }
 
 // 模板分类枚举
-export enum TemplateCategory {
+enum TemplateCategory {
   BUSINESS = 'business',
   TECHNICAL = 'technical',
   CREATIVE = 'creative',
@@ -94,14 +94,14 @@ export enum TemplateCategory {
 }
 
 // 模板复杂度
-export enum TemplateComplexity {
+enum TemplateComplexity {
   BASIC = 'basic',
   INTERMEDIATE = 'intermediate',
   ADVANCED = 'advanced'
 }
 
 // 模板接口定义
-export interface Template {
+interface Template {
   id: string;
   name: string;
   description: string;
@@ -131,7 +131,7 @@ export interface Template {
 }
 
 // 模板变量定义
-export interface TemplateVariable {
+interface TemplateVariable {
   name: string;
   type: 'text' | 'number' | 'date' | 'select' | 'textarea';
   label: string;
@@ -142,7 +142,7 @@ export interface TemplateVariable {
 }
 
 // 模板表单数据
-export interface TemplateFormData {
+interface TemplateFormData {
   name: string;
   description: string;
   type: TemplateType;
@@ -456,6 +456,7 @@ export default function TemplateCenter() {
           rating: 0,
           ratingCount: 0,
           isFavorite: false,
+          isOfficial: false,
           version: '1.0.0'
         };
         setTemplates([...templates, newTemplate]);
@@ -735,7 +736,7 @@ export default function TemplateCenter() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Text strong style={{ flex: 1 }}>{template.name}</Text>
                           {template.isOfficial && (
-                            <Tag color="gold" size="small">官方</Tag>
+                            <Tag color="gold">官方</Tag>
                           )}
                         </div>
                       }
@@ -801,7 +802,7 @@ export default function TemplateCenter() {
                         <div style={{ fontWeight: 500, marginBottom: 4 }}>
                           {record.name}
                           {record.isOfficial && (
-                            <Tag color="gold" size="small" style={{ marginLeft: 8 }}>官方</Tag>
+                            <Tag color="gold" style={{ marginLeft: 8 }}>官方</Tag>
                           )}
                         </div>
                         <div style={{ fontSize: 12, color: '#666' }}>
@@ -937,7 +938,7 @@ export default function TemplateCenter() {
                 total={filteredTemplates.length}
                 showSizeChanger
                 showQuickJumper
-                showTotal
+                showTotal={(total) => `共 ${total} 个模板`}
                 onChange={setCurrentPage}
               />
             </div>

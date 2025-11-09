@@ -135,7 +135,7 @@ export interface BatchAction<T = any> {
 /**
  * DataTable Props
  */
-export interface DataTableProps<T = any> extends Omit<TableProps<T>, 'columns' | 'dataSource'> {
+export interface DataTableProps<T = any> extends Omit<TableProps<T>, 'columns' | 'dataSource' | 'title' | 'rowSelection'> {
   /** 表格列配置 */
   columns: DataTableColumn<T>[];
   /** 表格数据 */

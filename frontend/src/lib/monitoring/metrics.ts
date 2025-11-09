@@ -45,6 +45,7 @@ export interface UploadEvent extends Omit<BusinessEvent, 'category'> {
     uploadType: 'kb' | 'avatar' | 'chat' | 'other';
     chunkCount?: number;
     retryCount?: number;
+    errorType?: string;
   };
 }
 
@@ -57,6 +58,7 @@ export interface CommerceEvent extends Omit<BusinessEvent, 'category'> {
     imageCount: number;
     processingTime: number; // 处理时间（毫秒）
     outputFormat?: string;
+    errorType?: string;
   };
 }
 
@@ -69,6 +71,7 @@ export interface ToolEvent extends Omit<BusinessEvent, 'category'> {
     parameters: Record<string, any>;
     resultCount?: number;
     processingTime?: number;
+    errorType?: string;
   };
 }
 
@@ -445,13 +448,13 @@ class BusinessMetricsCollector {
     const sessionGroups: Record<string, BusinessEvent[]> = {};
     events.forEach(e => {
       if (!sessionGroups[e.sessionId]) sessionGroups[e.sessionId] = [];
-      sessionGroups[e.sessionId].push(e);
+      sessionGroups[e.sessionId]!.push(e);
     });
 
     // 计算每个会话的时长
     const durations = Object.values(sessionGroups).map(sessionEvents => {
       const timestamps = sessionEvents.map(e => e.timestamp).sort();
-      return timestamps.length > 1 ? timestamps[timestamps.length - 1] - timestamps[0] : 0;
+      return timestamps.length > 1 ? timestamps[timestamps.length - 1]! - timestamps[0]! : 0;
     });
 
     return durations.length > 0 ? durations.reduce((sum, d) => sum + d, 0) / durations.length : 0;
@@ -474,12 +477,3 @@ class BusinessMetricsCollector {
 // 单例实例
 export const businessMetrics = new BusinessMetricsCollector();
 
-// 导出类型
-export type {
-  BusinessEvent,
-  ChatEvent,
-  UploadEvent,
-  CommerceEvent,
-  ToolEvent,
-  BusinessMetrics
-};

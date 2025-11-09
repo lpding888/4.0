@@ -43,7 +43,7 @@ import ValidationPanel, { ValidationResult } from '@/components/flow/ValidationP
 import { usePipelineCollaboration } from '@/hooks/usePipelineCollaboration';
 import CollaborationPresence from '@/components/collaboration/CollaborationPresence';
 import { adminPipelines } from '@/lib/services/adminPipelines';
-import { PipelineSchema, PipelineDTO, PipelineEdge } from '@/lib/types/pipeline';
+import { PipelineSchema, PipelineDTO, PipelineEdge, PipelineNode } from '@/lib/types/pipeline';
 import { validatePipelineSchema } from '@/lib/validators';
 import { validatePipelineTopology } from '@/lib/utils/pipelineTopology';
 import api from '@/lib/api';
@@ -51,7 +51,7 @@ import api from '@/lib/api';
 /**
  * 初始节点示例
  */
-const initialNodes = [
+const initialNodes: Node[] = [
   {
     id: '1',
     type: 'provider',
@@ -83,6 +83,14 @@ const initialEdges = [
   { id: 'e2-3', source: '2', target: '3', sourceHandle: 'true' },
   { id: 'e2-4', source: '2', target: '4', sourceHandle: 'false' },
 ];
+
+const serializeNodes = (rfNodes: Node[]): PipelineNode[] =>
+  rfNodes.map((n) => ({
+    id: n.id,
+    type: n.type || 'provider',
+    position: n.position,
+    data: n.data as PipelineNode['data'],
+  }));
 
 /**
  * Pipeline编辑器内部组件
@@ -357,13 +365,7 @@ function PipelineEditor() {
     try {
       const pipelineSchema: PipelineSchema = {
         version: '1.0',
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          type: n.type || 'provider',
-          position: n.position,
-          data: n.data,
-        })),
-        // @ts-expect-error - 艹，老代码的React Flow Edge类型和我们的PipelineEdge不兼容，先绕过！
+        nodes: serializeNodes(nodes),
         edges: edges.map((e: any) => ({
           id: e.id,
           source: e.source,
@@ -497,13 +499,7 @@ function PipelineEditor() {
   const handleExportJSON = () => {
     const pipelineSchema: PipelineSchema = {
       version: '1.0',
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.type || 'provider',
-        position: n.position,
-        data: n.data,
-      })),
-      // @ts-expect-error - Edge类型兼容性
+      nodes: serializeNodes(nodes),
       edges: edges.map((e: any) => ({
         id: e.id,
         source: e.source,
@@ -667,10 +663,6 @@ function PipelineEditor() {
         if (n.id === nodeId) {
           return {
             ...n,
-            data: {
-              ...n.data,
-              highlighted: true,
-            },
             style: {
               ...n.style,
               border: '2px solid #ff4d4f',
@@ -680,10 +672,6 @@ function PipelineEditor() {
         }
         return {
           ...n,
-          data: {
-            ...n.data,
-            highlighted: false,
-          },
           style: {
             ...n.style,
             border: undefined,

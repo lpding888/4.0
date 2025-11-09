@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // 模拟应用记录
-let applicationHistory = [
+let applicationHistory: any[] = [
   {
     id: 'app_001',
     kitId: 'kit_001',
@@ -26,7 +26,7 @@ let applicationHistory = [
 ];
 
 // 回滚记录
-let rollbackHistory = [
+let rollbackHistory: any[] = [
   {
     id: 'rollback_001',
     applicationId: 'app_001',

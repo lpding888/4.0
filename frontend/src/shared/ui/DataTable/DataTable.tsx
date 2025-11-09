@@ -150,7 +150,7 @@ export function DataTable<T extends Record<string, any> = any>({
   /**
    * 渲染表格标题栏
    */
-  const renderTitle = () => {
+  const renderTitle: NonNullable<AntTableProps<T>['title']> = () => {
     if (!title && !toolbar) {
       return undefined;
     }
@@ -198,7 +198,7 @@ export function DataTable<T extends Record<string, any> = any>({
         size={size}
         showHeader={showHeader}
         locale={locale}
-        title={renderTitle()}
+        title={renderTitle}
         scroll={{ x: 'max-content' }}
         {...restProps}
       />

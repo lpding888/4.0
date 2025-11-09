@@ -125,7 +125,7 @@ function maskValue(value: any): string {
   // 邮箱脱敏
   if (str.includes('@')) {
     const [name, domain] = str.split('@');
-    return `${name.slice(0, 2)}***@${domain}`;
+    return `${name!.slice(0, 2)}***@${domain}`;
   }
 
   // 手机号脱敏

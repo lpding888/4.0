@@ -119,7 +119,7 @@ export const lightTheme: ThemeConfig = {
     Card: {
       borderRadiusLG: 12,
       paddingLG: 24,
-      boxShadowCard: '0 1px 3px 0 rgba(0, 0, 0, 0.08)',
+      boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.08)',
     },
 
     // 艹!输入框样式

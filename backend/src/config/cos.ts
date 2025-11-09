@@ -8,12 +8,13 @@ export interface CosConfig {
   bucket: string;
   region: string;
   imageDomain?: string;
-  cdnDomain?: string;      // P0-005: CDN加速域名(优先使用,降低成本)
-  cosDomain?: string;      // P0-005: COS源站域名
-  cacheControl: {          // P0-005: 缓存控制策略
-    input: string;         // 输入图片缓存策略
-    output: string;        // 输出结果缓存策略
-    temp: string;          // 临时文件缓存策略
+  cdnDomain?: string; // P0-005: CDN加速域名(优先使用,降低成本)
+  cosDomain?: string; // P0-005: COS源站域名
+  cacheControl: {
+    // P0-005: 缓存控制策略
+    input: string; // 输入图片缓存策略
+    output: string; // 输出结果缓存策略
+    temp: string; // 临时文件缓存策略
   };
 }
 

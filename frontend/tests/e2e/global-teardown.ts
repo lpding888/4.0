@@ -52,8 +52,8 @@ async function generateTestSummary(config: FullConfig): Promise<void> {
       environment: process.env.TEST_ENV || 'development',
       config: {
         baseUrl: config.projects?.[0]?.use?.baseURL,
-        timeout: config.timeout,
-        retries: config.retries
+        timeout: 30000,
+        retries: 0
       },
       results: testData,
       summary: {

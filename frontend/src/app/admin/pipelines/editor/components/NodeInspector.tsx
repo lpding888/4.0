@@ -5,10 +5,11 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, Form, Input, Select, Button, Space, message, Divider } from 'antd';
 import { VarPicker, buildDefaultVarTree, validateVarReferences } from '@/components/flow/VarPicker';
 import type { VarNode } from '@/components/flow/VarPicker';
+import type { VarNode as MonacoVarNode } from '@/components/common/MonacoEditor';
 import dynamic from 'next/dynamic';
 
 // 艹！动态导入Monaco编辑器，避免SSR问题！
@@ -18,6 +19,16 @@ const MonacoEditor = dynamic(() => import('@/components/common/MonacoEditor'), {
 });
 
 const { TextArea } = Input;
+
+const mapVarsToMonaco = (nodes: VarNode[]): MonacoVarNode[] => {
+  return nodes.map((node) => ({
+    label: node.title,
+    path: node.path,
+    type: (node.type as MonacoVarNode['type']) || 'string',
+    description: `${node.source}变量`,
+    children: node.children ? mapVarsToMonaco(node.children) : undefined,
+  }));
+};
 
 /**
  * 节点Inspector Props
@@ -62,10 +73,16 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
    * 构建可用变量树
    * 艹！根据上游节点和表单字段动态构建！
    */
-  const availableVars: VarNode[] = buildDefaultVarTree({
-    formFields,
-    nodeOutputs: upstreamNodes,
-  });
+  const availableVars: VarNode[] = useMemo(
+    () =>
+      buildDefaultVarTree({
+        formFields,
+        nodeOutputs: upstreamNodes,
+      }),
+    [formFields, upstreamNodes],
+  );
+
+  const monacoVars = useMemo(() => mapVarsToMonaco(availableVars), [availableVars]);
 
   /**
    * 处理变量选择
@@ -186,7 +203,7 @@ export const NodeInspector: React.FC<NodeInspectorProps> = ({
               theme="vs-dark"
               showActions={true}
               enableVarCompletion={true}
-              availableVars={availableVars}
+              availableVars={monacoVars}
             />
           </Form.Item>
 

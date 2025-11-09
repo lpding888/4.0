@@ -13,12 +13,18 @@ describe('PipelineEngine retry policy', () => {
   const engine = pipelineEngine as any;
 
   it('returns base delay when exponential disabled', () => {
-    const delay = engine.calculateRetryDelay({ maxAttempts: 3, delayMs: 500, exponential: false }, 2);
+    const delay = engine.calculateRetryDelay(
+      { maxAttempts: 3, delayMs: 500, exponential: false },
+      2
+    );
     expect(delay).toBe(500);
   });
 
   it('applies exponential backoff when enabled', () => {
-    const delay = engine.calculateRetryDelay({ maxAttempts: 5, delayMs: 200, exponential: true }, 3);
+    const delay = engine.calculateRetryDelay(
+      { maxAttempts: 5, delayMs: 200, exponential: true },
+      3
+    );
     expect(delay).toBeGreaterThan(200);
   });
 });

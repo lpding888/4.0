@@ -198,7 +198,8 @@ export async function runAllCollaborationTests(): Promise<void> {
 }
 
 // 如果直接运行此文件，执行测试
-if (typeof window === 'undefined' && require.main === module) {
+const nodeRequire = typeof require !== 'undefined' ? (require as { main?: unknown }) : null;
+if (typeof window === 'undefined' && nodeRequire?.main === module) {
   runAllCollaborationTests()
     .then(() => {
       console.log('\n✨ 测试完成，进程退出');

@@ -93,18 +93,19 @@ export const useTaskStore = create<TaskState>()(
           };
 
           const response = await api.task.list(requestParams);
+          const payload = response.data;
 
-          if (response.success && response.data) {
+          if (payload?.success && payload.data) {
             set({
-              tasks: response.data.tasks || response.data || [],
+              tasks: payload.data.tasks || payload.data || [],
               pagination: {
                 ...pagination,
-                total: response.data.total || 0
+                total: payload.data.total || 0
               },
               loading: false
             });
           } else {
-            throw new Error(response.message || '获取任务列表失败');
+            throw new Error(payload?.message || '获取任务列表失败');
           }
         } catch (error: any) {
           console.error('获取任务列表失败:', error);
@@ -121,9 +122,10 @@ export const useTaskStore = create<TaskState>()(
           set({ creatingTask: true, error: null });
 
           const response = await api.task.createByFeature(data);
+          const payload = response.data;
 
-          if (response.success && response.data) {
-            const newTask = response.data;
+          if (payload?.success && payload.data) {
+            const newTask = payload.data;
 
             // 添加到任务列表开头
             set((state) => ({
@@ -134,7 +136,7 @@ export const useTaskStore = create<TaskState>()(
 
             return newTask;
           } else {
-            throw new Error(response.message || '创建任务失败');
+            throw new Error(payload?.message || '创建任务失败');
           }
         } catch (error: any) {
           console.error('创建任务失败:', error);
@@ -152,9 +154,10 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.task.get(taskId);
+          const payload = response.data;
 
-          if (response.success && response.data) {
-            const task = response.data;
+          if (payload?.success && payload.data) {
+            const task = payload.data;
             set({
               currentTask: task,
               loading: false
@@ -165,7 +168,7 @@ export const useTaskStore = create<TaskState>()(
               tasks: state.tasks.map(t => t.id === taskId ? task : t)
             }));
           } else {
-            throw new Error(response.message || '获取任务详情失败');
+            throw new Error(payload?.message || '获取任务详情失败');
           }
         } catch (error: any) {
           console.error('获取任务详情失败:', error);
@@ -182,14 +185,15 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.assets.getAll(params);
+          const payload = response.data;
 
-          if (response.success && response.data) {
+          if (payload?.success && payload.data) {
             set({
-              assets: response.data.assets || response.data || [],
+              assets: payload.data.assets || payload.data || [],
               loading: false
             });
           } else {
-            throw new Error(response.message || '获取素材库失败');
+            throw new Error(payload?.message || '获取素材库失败');
           }
         } catch (error: any) {
           console.error('获取素材库失败:', error);
@@ -206,15 +210,16 @@ export const useTaskStore = create<TaskState>()(
           set({ loading: true, error: null });
 
           const response = await api.assets.delete(assetId, { delete_cos_file: deleteCosFile });
+          const payload = response.data;
 
-          if (response.success) {
+          if (payload?.success) {
             // 从素材列表中移除
             set((state) => ({
               assets: state.assets.filter(asset => asset.id !== assetId),
               loading: false
             }));
           } else {
-            throw new Error(response.message || '删除素材失败');
+            throw new Error(payload?.message || '删除素材失败');
           }
         } catch (error: any) {
           console.error('删除素材失败:', error);

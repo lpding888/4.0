@@ -131,6 +131,9 @@ export interface PipelineMetadata {
   updatedAt?: string;
   author?: string;
   tags?: string[];
+  exportedAt?: string;
+  nodesCount?: number;
+  edgesCount?: number;
 }
 
 /**

@@ -9,6 +9,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
 import { PipelineCollaboration, CollaborativeUser, VersionSnapshot } from '@/lib/collaboration/pipeline-collab';
 
+const generateUserColor = (userId?: string): string => {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'
+  ];
+  const base = userId || 'anonymous';
+  const hash = base.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const index = Math.abs(hash) % colors.length;
+  const paletteColor = colors[index];
+  return paletteColor ?? '#4ECDC4';
+};
+
 // 协作状态
 export interface CollaborationState {
   isConnected: boolean;
@@ -178,7 +190,7 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
         const currentUser: CollaborativeUser = {
           id: config.userId,
           name: config.userName,
-          color: collaborationRef.current.generateUserColor(config.userId),
+          color: generateUserColor(config.userId),
           status: 'online'
         };
 
@@ -274,7 +286,7 @@ export function usePipelineCollaboration(config: CollaborationConfig) {
     const users = state.onlineUsers.filter(user =>
       user.cursor?.nodeId === nodeId && user.status === 'editing'
     );
-    return users.length > 0 ? users[0] : null;
+    return users[0] ?? null;
   }, [state.onlineUsers]);
 
   // 获取用户光标信息

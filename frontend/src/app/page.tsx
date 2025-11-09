@@ -191,14 +191,16 @@ export default function HomePage() {
     }
   };
 
+  type FeatureItem = (typeof allFeatures)[number];
   // 按类别分组
-  const groupedFeatures: Record<string, typeof allFeatures> = {};
-  allFeatures.forEach(feature => {
-    if (!groupedFeatures[feature.category]) {
-      groupedFeatures[feature.category] = [];
-    }
-    groupedFeatures[feature.category].push(feature);
+  const groupedFeatures: Record<string, FeatureItem[]> = {};
+  allFeatures.forEach((feature) => {
+    const category = feature.category;
+    const bucket: FeatureItem[] = groupedFeatures[category] ?? [];
+    bucket.push(feature);
+    groupedFeatures[category] = bucket;
   });
+  const groupedEntries = Object.entries(groupedFeatures);
 
   return (
     <div style={{
@@ -447,11 +449,11 @@ export default function HomePage() {
         </div>
 
         {/* 功能卡片 */}
-        {Object.keys(groupedFeatures).map((category, catIdx) => (
+        {groupedEntries.map(([category, features], catIdx) => (
           <div
             key={category}
             style={{
-              marginBottom: catIdx === Object.keys(groupedFeatures).length - 1 ? 0 : '72px'
+              marginBottom: catIdx === groupedEntries.length - 1 ? 0 : '72px'
             }}
           >
             {/* 分类标题 */}
@@ -478,7 +480,7 @@ export default function HomePage() {
 
             {/* 功能卡片网格 */}
             <Row gutter={[24, 24]}>
-              {groupedFeatures[category].map((feature) => (
+              {features.map((feature) => (
                 <Col key={feature.id} xs={24} sm={12} lg={8} xl={6}>
                   <Card
                     hoverable={feature.status === 'available'}

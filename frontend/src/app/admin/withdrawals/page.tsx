@@ -15,7 +15,7 @@ import { useTableData } from '@/hooks/useTableData';
 
 // API和类型
 import { api } from '@/lib/api';
-import { Withdrawal, WithdrawalStatus } from '@/types';
+import { WithdrawalAdmin, WithdrawalStatus } from '@/types';
 import StatusBadge from '@/components/distribution/StatusBadge';
 import { formatCurrency } from '@/utils/number';
 
@@ -32,7 +32,7 @@ export default function AdminWithdrawalsPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // ========== 新框架：使用useTableData Hook统一管理状态 ==========
-  const tableData = useTableData<Withdrawal>({
+  const tableData = useTableData<WithdrawalAdmin>({
     fetcher: async (params) => {
       const response: any = await api.adminDistribution.getWithdrawals({
         status: activeTab === 'all' ? undefined : activeTab,
@@ -70,7 +70,7 @@ export default function AdminWithdrawalsPage() {
           const response: any = await api.adminDistribution.approveWithdrawal(id);
           if (response.success) {
             message.success('已批准');
-            tableData.reload();
+            tableData.refresh();
           } else {
             message.error(response.error?.message || '操作失败');
           }
@@ -114,7 +114,7 @@ export default function AdminWithdrawalsPage() {
         setRejectModalVisible(false);
         setCurrentWithdrawal(null);
         setRejectReason('');
-        tableData.reload();
+        tableData.refresh();
       } else {
         message.error(response.error?.message || '操作失败');
       }
@@ -126,7 +126,7 @@ export default function AdminWithdrawalsPage() {
   };
 
   // ========== 新框架：DataTable列配置 ==========
-  const columns: ColumnType<Withdrawal>[] = [
+  const columns: ColumnType<WithdrawalAdmin>[] = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -136,10 +136,10 @@ export default function AdminWithdrawalsPage() {
     {
       title: '分销员',
       key: 'distributor',
-      render: (record: Withdrawal) => (
+      render: (record: WithdrawalAdmin) => (
         <div>
           <div>{record.phone}</div>
-          <div style={{ fontSize: '12px', color: '#999' }}>{record.realName}</div>
+          <div style={{ fontSize: '12px', color: '#999' }}>{record.distributorName}</div>
         </div>
       ),
     },
@@ -162,7 +162,7 @@ export default function AdminWithdrawalsPage() {
     {
       title: '收款信息',
       key: 'account',
-      render: (record: Withdrawal) => (
+      render: (record: WithdrawalAdmin) => (
         <div>
           <div style={{ fontSize: '12px', color: '#999' }}>
             {record.method === 'wechat' ? '微信' : '支付宝'}：
@@ -192,7 +192,7 @@ export default function AdminWithdrawalsPage() {
       title: '操作',
       key: 'actions',
       width: 200,
-      render: (record: Withdrawal) => (
+      render: (record: WithdrawalAdmin) => (
         <Space>
           {record.status === 'pending' && (
             <>
@@ -214,9 +214,9 @@ export default function AdminWithdrawalsPage() {
               </Button>
             </>
           )}
-          {record.status === 'rejected' && record.rejectedReason && (
+          {record.status === 'rejected' && record.rejectReason && (
             <span style={{ fontSize: '12px', color: '#ff4d4f' }}>
-              {record.rejectedReason}
+              {record.rejectReason}
             </span>
           )}
           {record.status === 'approved' && record.approvedAt && (
@@ -275,10 +275,10 @@ export default function AdminWithdrawalsPage() {
         loading={tableData.loading}
         rowKey="id"
         pagination={{
-          current: tableData.pagination.page,
-          pageSize: tableData.pagination.pageSize,
+          current: tableData.currentPage,
+          pageSize: tableData.pageSize,
           total: tableData.total,
-          onChange: tableData.handlePageChange,
+          onChange: tableData.onPageChange,
         }}
       />
 

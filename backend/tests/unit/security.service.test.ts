@@ -23,7 +23,9 @@ describe('SecurityService data masking', () => {
 
   it('falls back to generic masking when rule is unknown', () => {
     const payload = { token: 'abcdef1234567890' };
-    const masked = securityService.maskData(payload, [{ field: 'token', type: 'custom', customPattern: '[a-f]+' }]);
+    const masked = securityService.maskData(payload, [
+      { field: 'token', type: 'custom', customPattern: '[a-f]+' }
+    ]);
 
     expect(masked.token).toMatch(/\*/);
   });

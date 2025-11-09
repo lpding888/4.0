@@ -130,13 +130,13 @@ export default function TemplateTestPage() {
           description={
             <div>
               <p style={{ margin: 0 }}>
-                这是Handlebars模板渲染的测试工具，支持{{'{{'}}变量{{'}}'}}语法。
+                这是Handlebars模板渲染的测试工具，支持 {'{{'} 变量 {'}}'} 语法。
               </p>
               <ul style={{ margin: '8px 0 0', paddingLeft: '20px' }}>
                 <li>输入模板字符串和上下文数据（JSON格式）</li>
-                <li>点击"渲染"按钮查看结果</li>
+                <li>点击“渲染模板”按钮查看结果</li>
                 <li>自动检测模板中的变量引用</li>
-                <li>校验变量是否都存在于context中</li>
+                <li>校验变量是否都存在于 context 中</li>
               </ul>
             </div>
           }

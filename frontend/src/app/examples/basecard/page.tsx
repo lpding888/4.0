@@ -408,7 +408,6 @@ export default function BaseCardExample() {
             },
             ...exampleActions
           ]}
-          onRefresh={handleRefresh}
           onSettings={() => console.log('项目设置')}
           onFullscreen={() => console.log('全屏查看')}
           loading={loading}

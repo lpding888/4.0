@@ -513,7 +513,7 @@ export default function FeedbackManagementPage() {
                   <Image.PreviewGroup>
                     <Space>
                       {selectedFeedback.screenshots.map((url, index) => (
-                        <Image key={index} src={url} width={100} />
+                        <Image key={index} src={url} width={100} alt={`feedback-screenshot-${index}`} />
                       ))}
                     </Space>
                   </Image.PreviewGroup>

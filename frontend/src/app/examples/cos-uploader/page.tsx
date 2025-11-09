@@ -166,13 +166,12 @@ export default function COSUploaderExample() {
           <Col span={24}>
             <Card
               title={
-                <Space>
-                  <CloudUploadOutlined />
-                  <span>基础文件上传</span>
-                </Space>
-              }
-              subtitle="支持拖拽上传、批量选择、实时进度显示"
-            >
+              <Space>
+                <CloudUploadOutlined />
+                <span>基础文件上传</span>
+              </Space>
+            }
+          >
               <COSBatchUploader
                 config={basicConfig}
                 cosConfig={cosConfig}
@@ -198,13 +197,12 @@ export default function COSUploaderExample() {
           <Col span={12}>
             <Card
               title={
-                <Space>
-                  <SettingOutlined />
-                  <span>高级配置上传</span>
-                </Space>
-              }
-              subtitle="大文件支持、分片上传、手动控制"
-            >
+              <Space>
+                <SettingOutlined />
+                <span>高级配置上传</span>
+              </Space>
+            }
+          >
               <COSBatchUploader
                 config={advancedConfig}
                 cosConfig={cosConfig}
@@ -221,13 +219,12 @@ export default function COSUploaderExample() {
           <Col span={12}>
             <Card
               title={
-                <Space>
-                  <PictureOutlined />
-                  <span>图片批量上传</span>
-                </Space>
-              }
-              subtitle="专门用于图片文件的批量上传和预览"
-            >
+              <Space>
+                <PictureOutlined />
+                <span>图片批量上传</span>
+              </Space>
+            }
+          >
               <COSBatchUploader
                 config={imageConfig}
                 cosConfig={cosConfig}

@@ -33,6 +33,7 @@ import {
   message,
   Popconfirm
 } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   SearchOutlined,
   ReloadOutlined,
@@ -45,13 +46,12 @@ import {
 import type {
   ColumnsType,
   TableProps,
-  ColumnType,
-  FilterValue,
-  SorterResult
+  ColumnType
 } from 'antd/es/table';
-import type { CheckboxValueType } from 'antd/es/checkbox/Group';
+import type { FilterValue, SorterResult } from 'antd/es/table/interface';
 
 const { Text } = Typography;
+type CheckboxValue = string | number | boolean;
 
 // 表格列配置
 export interface DataTableColumn<T = any> extends Omit<ColumnType<T>, 'title'> {
@@ -75,6 +75,7 @@ export interface DataTablePagination {
   showSizeChanger?: boolean;
   showQuickJumper?: boolean;
   showTotal?: boolean;
+  onChange?: (page: number, pageSize: number) => void;
 }
 
 // 搜索配置
@@ -113,11 +114,7 @@ export interface DataTableProProps<T = any> extends Omit<TableProps<T>, 'columns
   actions?: DataTableActions;
 
   // 回调函数
-  onChange?: (
-    pagination: any,
-    filters: FilterValue,
-    sorter: SorterResult<T> | SorterResult<T>[]
-  ) => void;
+  onChange?: TableProps<T>['onChange'];
   onSearch?: (value: string, fields?: string[]) => void;
   onRefresh?: () => void;
   onExport?: () => void;
@@ -161,7 +158,7 @@ export function DataTablePro<T extends Record<string, any>>({
   }, [columns]);
 
   // 处理列显示/隐藏
-  const handleColumnChange = (checkedValues: CheckboxValueType[]) => {
+  const handleColumnChange = (checkedValues: CheckboxValue[]) => {
     setVisibleColumns(checkedValues as string[]);
   };
 
@@ -237,22 +234,57 @@ export function DataTablePro<T extends Record<string, any>>({
       });
   }, [columns, visibleColumns]);
 
-  // 列设置菜单
-  const columnSettingMenu = (
-    <Menu>
-      <Menu.Item key="setting" onClick={() => setColumnModalVisible(true)}>
-        <SettingOutlined /> 列设置
-      </Menu.Item>
-      <Menu.Divider />
-      <Menu.Item key="reset" onClick={() => {
-        const allCols = columns.map(col => col.key);
-        setVisibleColumns(allCols);
-        message.success('已重置列显示');
-      }}>
-        <ReloadOutlined /> 重置显示
-      </Menu.Item>
-    </Menu>
+  const activeFilterCount = useMemo(
+    () => Object.keys(filters).filter((key) => (filters[key]?.length ?? 0) > 0).length,
+    [filters]
   );
+  const tablePagination = useMemo(() => {
+    if (pagination === false) {
+      return false;
+    }
+    const showTotal =
+      typeof pagination.showTotal === 'function'
+        ? pagination.showTotal
+        : pagination.showTotal
+          ? (total: number, range: [number, number]) => `共 ${total} 条`
+          : undefined;
+    return {
+      ...pagination,
+      showTotal
+    };
+  }, [pagination]);
+
+  const columnMenuItems: MenuProps['items'] = [
+    {
+      key: 'setting',
+      label: (
+        <span>
+          <SettingOutlined /> 列设置
+        </span>
+      )
+    },
+    { type: 'divider' },
+    {
+      key: 'reset',
+      label: (
+        <span>
+          <ReloadOutlined /> 重置显示
+        </span>
+      )
+    }
+  ];
+
+  const handleColumnMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'setting') {
+      setColumnModalVisible(true);
+      return;
+    }
+    if (key === 'reset') {
+      const allCols = columns.map(col => col.key);
+      setVisibleColumns(allCols);
+      message.success('已重置列显示');
+    }
+  };
 
   // 操作栏
   const actionBar = (
@@ -271,9 +303,10 @@ export function DataTablePro<T extends Record<string, any>>({
           )}
           {Object.keys(filters).length > 0 && (
             <Button icon={<FilterOutlined />}>
-              筛选 {Object.keys(filters).filter(key => filters[key].length > 0).length > 0 && (
-                <Tag size="small" color="blue">
-                  {Object.keys(filters).filter(key => filters[key].length > 0).length}
+              筛选{' '}
+              {activeFilterCount > 0 && (
+                <Tag color="blue" style={{ marginLeft: 4 }}>
+                  {activeFilterCount}
                 </Tag>
               )}
             </Button>
@@ -302,7 +335,10 @@ export function DataTablePro<T extends Record<string, any>>({
             </Tooltip>
           )}
           {actions?.columnSetting !== false && (
-            <Dropdown overlay={columnSettingMenu} trigger={['click']}>
+            <Dropdown
+              menu={{ items: columnMenuItems, onClick: handleColumnMenuClick }}
+              trigger={['click']}
+            >
               <Button icon={<ColumnWidthOutlined />}>
                 列 <DownOutlined />
               </Button>
@@ -322,21 +358,7 @@ export function DataTablePro<T extends Record<string, any>>({
         columns={filteredColumns}
         dataSource={dataSource}
         loading={loading}
-        pagination={
-          pagination === false
-            ? false
-            : {
-                current: pagination.current,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                showSizeChanger: pagination.showSizeChanger !== false,
-                showQuickJumper: pagination.showQuickJumper !== false,
-                showTotal: pagination.showTotal !== false ?
-                  (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条` :
-                  undefined,
-                ...pagination
-              }
-        }
+        pagination={tablePagination}
         rowSelection={rowSelection}
         onChange={onChange}
         size={size}

@@ -40,7 +40,7 @@ import {
 import {
   InboxOutlined,
   DeleteOutlined,
-  RetryOutlined,
+  ReloadOutlined,
   CloudUploadOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
@@ -51,7 +51,7 @@ import {
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { MSWInitializer } from '@/components/MSWInitializer';
-import type { UploadFile, UploadProps } from 'antd/es/upload';
+import type { RcFile, UploadProps } from 'antd/es/upload';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text, Paragraph } = Typography;
@@ -210,7 +210,7 @@ export default function KBUploadPage() {
   };
 
   // 文件选择处理
-  const handleFileSelect = useCallback((files: FileList) => {
+  const handleFileSelect = useCallback((files: FileList | File[]) => {
     const newTasks: UploadTask[] = Array.from(files).map(file => ({
       id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       file,
@@ -232,7 +232,12 @@ export default function KBUploadPage() {
     beforeUpload: () => false, // 阻止默认上传
     onChange: (info) => {
       if (info.fileList && info.fileList.length > 0) {
-        handleFileSelect(info.fileList.map(f => f.originFileObj!).filter(Boolean));
+        const files = info.fileList
+          .map((f) => f.originFileObj)
+          .filter((file): file is RcFile => Boolean(file));
+        if (files.length > 0) {
+          handleFileSelect(files);
+        }
       }
     },
     onDrop: (e) => {
@@ -381,7 +386,7 @@ export default function KBUploadPage() {
             <Button
               type="text"
               size="small"
-              icon={<RetryOutlined />}
+              icon={<ReloadOutlined />}
               onClick={() => {
                 setUploadTasks(prev => prev.map(task =>
                   task.id === record.id
@@ -497,7 +502,7 @@ export default function KBUploadPage() {
               <Space>
                 {errorCount > 0 && (
                   <Button
-                    icon={<RetryOutlined />}
+                    icon={<ReloadOutlined />}
                     onClick={retryFailedUploads}
                     disabled={isUploading}
                   >

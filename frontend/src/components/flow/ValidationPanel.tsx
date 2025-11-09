@@ -54,7 +54,7 @@ export interface ValidationPanelProps {
 function extractNodeIdFromMessage(message: string): string | null {
   // 匹配引号中的节点ID: "xxx"
   const match = message.match(/"([^"]+)"/);
-  return match ? match[1] : null;
+  return match && match[1] ? match[1] : null;
 }
 
 /**

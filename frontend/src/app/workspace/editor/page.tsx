@@ -43,6 +43,7 @@ import {
   WarningOutlined
 } from '@ant-design/icons';
 import { useSSE } from '@/hooks/useSSE';
+import type { ProgressEvent, StatusEvent, CompleteEvent } from '@/hooks/useSSE';
 import { COSBatchUploader } from '@/lib/storage/cos-batch-uploader';
 import { ThemeSwitcherCompact } from '@/components/ThemeSwitcher';
 
@@ -84,6 +85,15 @@ export interface CanvasState {
   pan: { x: number; y: number };
 }
 
+type CanvasTaskProgress = {
+  taskId: string;
+  progress: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  message?: string;
+  result?: CompleteEvent['result'];
+  error?: string;
+};
+
 // 处理模式配置
 const PROCESSING_MODES = [
   {
@@ -108,6 +118,11 @@ const PROCESSING_MODES = [
     icon: '✨'
   }
 ];
+
+const loadFabric = async () => {
+  const fabricModule = await import('fabric');
+  return (fabricModule as { fabric?: any; default: any }).fabric ?? fabricModule.default;
+};
 
 export default function CanvasPage() {
   // Canvas相关状态
@@ -134,9 +149,51 @@ export default function CanvasPage() {
     steps: 20,
     seed: -1
   });
+  const [taskProgress, setTaskProgress] = useState<CanvasTaskProgress | null>(null);
 
   // SSE和上传器
-  const { connect, disconnect, isConnected, currentProgress } = useSSE();
+  const { connect, disconnect, isConnected } = useSSE({
+    onProgress: (event: ProgressEvent) => {
+      setTaskProgress({
+        taskId: event.taskId,
+        progress: event.progress,
+        status: 'processing',
+        message: event.message
+      });
+    },
+    onStatus: (event: StatusEvent) => {
+      setTaskProgress((prev) => ({
+        taskId: event.taskId,
+        progress: prev?.progress ?? 0,
+        status: event.status,
+        message: event.message,
+        error: event.error,
+        result: prev?.result
+      }));
+    },
+    onComplete: (event: CompleteEvent) => {
+      setTaskProgress({
+        taskId: event.taskId,
+        progress: 100,
+        status: 'completed',
+        message: '处理完成',
+        result: event.result
+      });
+    },
+    onError: (error) => {
+      console.error('Canvas SSE error:', error);
+      setTaskProgress((prev) =>
+        prev
+          ? { ...prev, status: 'failed', error: error.message }
+          : {
+              taskId: 'unknown',
+              progress: 0,
+              status: 'failed',
+              error: error.message
+            }
+      );
+    }
+  });
   const cosUploader = new COSBatchUploader();
 
   // 初始化Fabric Canvas
@@ -145,7 +202,7 @@ export default function CanvasPage() {
       if (canvasRef.current && !fabricCanvasRef.current) {
         // 动态导入fabric
         try {
-          const { fabric } = await import('fabric');
+          const fabric = await loadFabric();
 
           const canvas = new fabric.Canvas(canvasRef.current, {
             width: 800,
@@ -222,8 +279,8 @@ export default function CanvasPage() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const imgSrc = e.target?.result as string;
-        try {
-          const { fabric } = await import('fabric');
+      try {
+        const fabric = await loadFabric();
 
           fabric.Image.fromURL(imgSrc, (img: any) => {
             if (!fabricCanvasRef.current) return;
@@ -336,7 +393,7 @@ export default function CanvasPage() {
     const canvas = fabricCanvasRef.current;
 
     // 创建临时canvas用于mask导出
-    const { fabric } = await import('fabric');
+    const fabric = await loadFabric();
     const maskCanvas = new fabric.StaticCanvas(null, {
       width: canvas.width,
       height: canvas.height,
@@ -389,6 +446,7 @@ export default function CanvasPage() {
 
     try {
       setProcessing(true);
+      setTaskProgress(null);
       setResults([]);
 
       // 导出mask
@@ -430,23 +488,27 @@ export default function CanvasPage() {
 
   // SSE进度更新处理
   useEffect(() => {
-    if (currentProgress && currentProgress.status === 'completed') {
+    if (!taskProgress) {
+      return;
+    }
+
+    if (taskProgress.status === 'completed' && taskProgress.result) {
       setProcessing(false);
       setResults([{
-        id: currentProgress.taskId!,
-        imageUrl: currentProgress.result?.images[0] || '',
-        maskUrl: currentProgress.result?.metadata?.maskUrl || '',
+        id: taskProgress.taskId,
+        imageUrl: taskProgress.result?.images[0] || '',
+        maskUrl: taskProgress.result?.metadata?.maskUrl || '',
         mode: selectedMode,
         parameters: { ...parameters, prompt },
         createdAt: new Date().toISOString()
       }]);
       disconnect();
-    } else if (currentProgress && currentProgress.status === 'failed') {
+    } else if (taskProgress.status === 'failed') {
       setProcessing(false);
-      console.error('Processing failed:', currentProgress.error);
+      console.error('Processing failed:', taskProgress.error);
       disconnect();
     }
-  }, [currentProgress, selectedMode, parameters, prompt, connect, disconnect]);
+  }, [taskProgress, selectedMode, parameters, prompt, disconnect]);
 
   // 下载结果
   const downloadResult = async (result: ProcessingResult) => {
@@ -687,20 +749,20 @@ export default function CanvasPage() {
             )}
 
             {/* 处理进度 */}
-            {processing && currentProgress && (
+            {processing && taskProgress && (
               <div style={{ marginTop: 16 }}>
                 <Progress
-                  percent={currentProgress.progress}
-                  status={currentProgress.status === 'processing' ? 'active' : 'normal'}
+                  percent={taskProgress.progress}
+                  status={taskProgress.status === 'processing' ? 'active' : 'normal'}
                   format={(percent) => (
                     <Space>
-                      {currentProgress.status === 'processing' && <LoadingOutlined />}
+                      {taskProgress.status === 'processing' && <LoadingOutlined />}
                       <span>{percent}%</span>
                     </Space>
                   )}
                 />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  {currentProgress.message}
+                  {taskProgress.message}
                 </Text>
               </div>
             )}

@@ -28,7 +28,13 @@ import { useState, useMemo } from 'react';
 /**
  * 筛选条件类型
  */
-export type FilterValue = string | number | boolean | null | undefined | (string | number)[];
+export type FilterValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | (string | number | null)[];
 
 export type Filters = Record<string, FilterValue>;
 

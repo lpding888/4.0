@@ -124,7 +124,7 @@ export function extractTemplateVars(template: string): string[] {
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(template)) !== null) {
-    const varPath = match[1].trim();
+    const varPath = match[1]!.trim();
     if (varPath && !vars.includes(varPath)) {
       vars.push(varPath);
     }

@@ -7,14 +7,34 @@
 
 import React from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
+import type { NodeTypes } from '@xyflow/react';
 import { ApiOutlined, BranchesOutlined, ToolOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import ForkNode from './nodes/ForkNode';
 import JoinNode from './nodes/JoinNode';
+
+type BaseNodeData = {
+  label?: React.ReactNode;
+};
+
+type ProviderNodeData = BaseNodeData & {
+  providerRef?: string;
+};
+
+type ConditionNodeData = BaseNodeData & {
+  condition?: string;
+};
+
+type PostProcessNodeData = BaseNodeData & {
+  processor?: string;
+};
+
+type EndNodeData = BaseNodeData;
 
 /**
  * Provider节点（AI Provider调用）
  */
 export function ProviderNode({ data }: NodeProps) {
+  const nodeData = data as ProviderNodeData;
   return (
     <div
       style={{
@@ -30,11 +50,11 @@ export function ProviderNode({ data }: NodeProps) {
         <ApiOutlined style={{ fontSize: '18px', color: '#1890ff' }} />
         <div>
           <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {data.label || 'Provider节点'}
+            {nodeData.label || 'Provider节点'}
           </div>
-          {data.providerRef && (
+          {nodeData.providerRef && (
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {data.providerRef}
+              {nodeData.providerRef}
             </div>
           )}
         </div>
@@ -48,6 +68,7 @@ export function ProviderNode({ data }: NodeProps) {
  * Condition节点（条件判断）
  */
 export function ConditionNode({ data }: NodeProps) {
+  const nodeData = data as ConditionNodeData;
   return (
     <div
       style={{
@@ -63,11 +84,11 @@ export function ConditionNode({ data }: NodeProps) {
         <BranchesOutlined style={{ fontSize: '18px', color: '#52c41a' }} />
         <div>
           <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {data.label || '条件节点'}
+            {nodeData.label || '条件节点'}
           </div>
-          {data.condition && (
+          {nodeData.condition && (
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {data.condition}
+              {nodeData.condition}
             </div>
           )}
         </div>
@@ -82,6 +103,7 @@ export function ConditionNode({ data }: NodeProps) {
  * PostProcess节点（后处理）
  */
 export function PostProcessNode({ data }: NodeProps) {
+  const nodeData = data as PostProcessNodeData;
   return (
     <div
       style={{
@@ -97,11 +119,11 @@ export function PostProcessNode({ data }: NodeProps) {
         <ToolOutlined style={{ fontSize: '18px', color: '#fa8c16' }} />
         <div>
           <div style={{ fontWeight: 600, fontSize: '14px' }}>
-            {data.label || '后处理'}
+            {nodeData.label || '后处理'}
           </div>
-          {data.processor && (
+          {nodeData.processor && (
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {data.processor}
+              {nodeData.processor}
             </div>
           )}
         </div>
@@ -115,6 +137,7 @@ export function PostProcessNode({ data }: NodeProps) {
  * End节点（结束）
  */
 export function EndNode({ data }: NodeProps) {
+  const nodeData = data as EndNodeData;
   return (
     <div
       style={{
@@ -129,7 +152,7 @@ export function EndNode({ data }: NodeProps) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
         <CheckCircleOutlined style={{ fontSize: '18px', color: '#722ed1' }} />
         <div style={{ fontWeight: 600, fontSize: '14px' }}>
-          {data.label || '结束'}
+          {nodeData.label || '结束'}
         </div>
       </div>
     </div>
@@ -140,11 +163,11 @@ export function EndNode({ data }: NodeProps) {
  * 节点类型映射 (CMS-206: 新增FORK/JOIN并行节点)
  * 艹，这个tm必须稳定引用，不然React Flow会重新渲染！
  */
-export const nodeTypes = {
-  provider: ProviderNode,
-  condition: ConditionNode,
-  postProcess: PostProcessNode,
-  end: EndNode,
+export const nodeTypes: NodeTypes = {
+  provider: ProviderNode as any,
+  condition: ConditionNode as any,
+  postProcess: PostProcessNode as any,
+  end: EndNode as any,
   fork: ForkNode,
   join: JoinNode,
 };

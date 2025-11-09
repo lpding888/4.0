@@ -225,8 +225,8 @@ export default function RulesPage() {
             testContext
           );
 
-          if (results.length > 0 && results[0].conditions_met) {
-            message.success(`规则测试成功！执行了 ${results[0].actions_executed} 个动作`);
+          if (results && results.length > 0 && results[0]?.conditions_met) {
+            message.success(`规则测试成功！执行了 ${results[0]?.actions_executed} 个动作`);
           } else {
             message.warning('规则条件不满足');
           }

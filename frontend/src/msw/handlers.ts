@@ -60,7 +60,7 @@ export const handlers = [
     }
 
     if (includeStats) {
-      const stats = {
+      const stats: Record<string, { totalCalls: number; avgResponseTime: number; successRate: number; lastUsed: string | null }> = {
         'gpt-4': { totalCalls: 1250, avgResponseTime: 2.3, successRate: 98.5, lastUsed: '2分钟前' },
         'gpt-3.5-turbo': { totalCalls: 3420, avgResponseTime: 1.1, successRate: 99.2, lastUsed: '刚刚' },
         'claude-3-sonnet': { totalCalls: 890, avgResponseTime: 1.8, successRate: 97.8, lastUsed: '15分钟前' },
@@ -103,7 +103,7 @@ export const handlers = [
     }
 
     // 根据不同模型生成不同的回复
-    const responses = {
+    const responses: Record<string, string[]> = {
       'gpt-4': [
         '这是一个复杂的问题，让我仔细分析一下...',
         '基于我的理解，我认为可以从以下几个角度来看待这个问题...',
@@ -126,7 +126,7 @@ export const handlers = [
       ]
     };
 
-    const responseText = responses[model] || responses['gpt-3.5-turbo'];
+    const responseText = (responses[model] || responses['gpt-3.5-turbo']) as string[];
 
     // 返回SSE流
     const stream = new ReadableStream({
@@ -414,8 +414,8 @@ export const handlers = [
         let score = 0;
         const queryWords = queryLower.split(/\s+/);
         const contentWords = chunk.content.toLowerCase().split(/\s+/);
-        const overlap = queryWords.filter(word =>
-          contentWords.some(contentWord => contentWord.includes(word))
+        const overlap = queryWords.filter((word: string) =>
+          contentWords.some((contentWord: string) => contentWord.includes(word))
         ).length;
         score = overlap / queryWords.length + Math.random() * 0.2;
 
@@ -2084,7 +2084,7 @@ AI衣柜科技有限公司
    * 创建规则
    */
   http.post('/api/admin/rules', async ({ request }) => {
-    const rule = await request.json();
+    const rule = (await request.json()) as Record<string, any>;
     console.log('[Rules] 创建规则:', rule);
 
     return HttpResponse.json({
@@ -2102,7 +2102,7 @@ AI衣柜科技有限公司
    * 更新规则
    */
   http.put('/api/admin/rules', async ({ request }) => {
-    const rule = await request.json();
+    const rule = (await request.json()) as Record<string, any>;
     console.log('[Rules] 更新规则:', rule);
 
     return HttpResponse.json({
@@ -2131,7 +2131,7 @@ AI衣柜科技有限公司
    * 批量导入规则
    */
   http.post('/api/admin/rules/batch', async ({ request }) => {
-    const { rules } = await request.json();
+    const { rules } = (await request.json()) as { rules?: any[] };
     console.log(`[Rules] 批量导入 ${rules?.length || 0} 条规则`);
 
     return HttpResponse.json({
@@ -2145,7 +2145,7 @@ AI衣柜科技有限公司
    */
   http.post('/api/admin/rules/:ruleId/test', async ({ params, request }) => {
     const { ruleId } = params;
-    const context = await request.json();
+    const context = (await request.json()) as Record<string, any>;
     console.log('[Rules] 测试规则:', ruleId, context);
 
     return HttpResponse.json({
@@ -2168,7 +2168,17 @@ AI衣柜科技有限公司
    * 获取推荐候选
    */
   http.post('/api/reco/candidates', async ({ request }) => {
-    const { scene, limit = 10, strategy = 'personalized', context } = await request.json();
+    const {
+      scene,
+      limit = 10,
+      strategy = 'personalized',
+      context
+    } = (await request.json()) as {
+      scene?: string;
+      limit?: number;
+      strategy?: string;
+      context?: Record<string, any>;
+    };
 
     console.log('[Reco] 获取推荐候选:', { scene, limit, strategy });
 
@@ -2260,7 +2270,7 @@ AI衣柜科技有限公司
    * 追踪用户行为
    */
   http.post('/api/reco/track', async ({ request }) => {
-    const { events } = await request.json();
+    const { events } = (await request.json()) as { events?: any[] };
     console.log(`[Reco] 接收追踪事件: ${events?.length || 0} 条`);
 
     // 统计事件类型
@@ -2355,7 +2365,7 @@ AI衣柜科技有限公司
    * 创建评论
    */
   http.post('/api/collab/comments', async ({ request }) => {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     console.log('[Collab] 创建评论:', body);
 
     return HttpResponse.json({
@@ -2415,7 +2425,7 @@ AI衣柜科技有限公司
    * 创建任务分配
    */
   http.post('/api/collab/assignments', async ({ request }) => {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     console.log('[Collab] 创建任务分配:', body);
 
     return HttpResponse.json({
@@ -2436,7 +2446,7 @@ AI衣柜科技有限公司
    */
   http.put('/api/collab/assignments/:assignmentId', async ({ params, request }) => {
     const { assignmentId } = params;
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     console.log('[Collab] 更新任务分配:', assignmentId, body);
 
     return HttpResponse.json({
@@ -2548,7 +2558,7 @@ AI衣柜科技有限公司
    * 创建审批流
    */
   http.post('/api/admin/collab/flows', async ({ request }) => {
-    const flow = await request.json();
+    const flow = (await request.json()) as Record<string, any>;
     console.log('[Collab] 创建审批流:', flow);
 
     return HttpResponse.json({
@@ -2566,7 +2576,7 @@ AI衣柜科技有限公司
    * 更新审批流
    */
   http.put('/api/admin/collab/flows', async ({ request }) => {
-    const flow = await request.json();
+    const flow = (await request.json()) as Record<string, any>;
     console.log('[Collab] 更新审批流:', flow);
 
     return HttpResponse.json({
@@ -2671,7 +2681,7 @@ AI衣柜科技有限公司
    * CDN追踪
    */
   http.post('/api/cdn/track', async ({ request }) => {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     console.log('[CDN] 追踪:', body);
 
     return HttpResponse.json({
@@ -2905,7 +2915,7 @@ AI衣柜科技有限公司
     if (style) {
       const styles = style.split(',');
       filteredAssets = filteredAssets.filter((a) =>
-        styles.some((s) => a.tags.some((t) => t.includes(s)))
+        styles.some((s: string) => a.tags.some((t: string) => t.includes(s)))
       );
     }
 
@@ -2934,10 +2944,10 @@ AI衣柜科技有限公司
       const keywords = query.toLowerCase().split(' ');
       filteredAssets = filteredAssets.filter((a) =>
         keywords.some(
-          (k) =>
+          (k: string) =>
             a.name.toLowerCase().includes(k) ||
             a.description.toLowerCase().includes(k) ||
-            a.tags.some((t) => t.toLowerCase().includes(k))
+            a.tags.some((t: string) => t.toLowerCase().includes(k))
         )
       );
     }
@@ -2954,7 +2964,7 @@ AI衣柜科技有限公司
             .toLowerCase()
             .split(' ')
             .filter(
-              (k) =>
+              (k: string) =>
                 asset.name.toLowerCase().includes(k) ||
                 asset.description.toLowerCase().includes(k)
             ).length;
@@ -2964,7 +2974,7 @@ AI衣柜科技有限公司
         // 风格匹配度调整
         if (style) {
           const styles = style.split(',');
-          const matchCount = styles.filter((s) => asset.tags.some((t) => t.includes(s))).length;
+          const matchCount = styles.filter((s: string) => asset.tags.some((t: string) => t.includes(s))).length;
           score = Math.min(1.0, score + matchCount * 0.1);
         }
 

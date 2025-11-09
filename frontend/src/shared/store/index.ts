@@ -14,7 +14,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, devtools } from 'zustand/middleware';
 import { createAuthSlice, type AuthSlice } from './slices/authSlice';
 import { createUiSlice, type UiSlice } from './slices/uiSlice';
-import { createWorkbenchSlice, type WorkbenchSlice } from '@/features/workbench/model/workbenchSlice';
+import { createWorkbenchSlice } from '@/features/workbench/model/workbenchSlice';
+import type { WorkbenchSlice } from '@/features/workbench/model/types';
 
 /**
  * 完整的Store类型

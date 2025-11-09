@@ -28,7 +28,7 @@ import {
   ThunderboltOutlined,
   ReloadOutlined,
   EyeOutlined,
-  ClickOutlined,
+  AimOutlined,
   RocketOutlined,
   HeartOutlined,
   StarOutlined,
@@ -188,7 +188,7 @@ export default function RecoDemoPage() {
                 <Statistic
                   title="总追踪数"
                   value={stats.total_tracks}
-                  prefix={<ClickOutlined />}
+                  prefix={<AimOutlined />}
                 />
               </Card>
             </Col>
@@ -304,76 +304,85 @@ export default function RecoDemoPage() {
               </div>
             </Col>
           ) : (
-            items.map((item, index) => (
-              <Col xs={24} sm={12} md={8} key={item.id}>
-                <Card
-                  size="small"
-                  hoverable
-                  onClick={() => handleTemplateClick(item, index)}
-                  extra={
-                    <Badge
-                      count={
-                        <Tooltip title="推荐分数">
-                          <Tag color="blue">{(item.score * 100).toFixed(0)}%</Tag>
+            items.map((item, index) => {
+              const metadata = item.metadata || {
+                name: '未命名模板',
+                category: '未知',
+                tags: [] as string[],
+                popularity: 0,
+              };
+
+              return (
+                <Col xs={24} sm={12} md={8} key={item.id}>
+                  <Card
+                    size="small"
+                    hoverable
+                    onClick={() => handleTemplateClick(item, index)}
+                    extra={
+                      <Badge
+                        count={
+                          <Tooltip title="推荐分数">
+                            <Tag color="blue">{(item.score * 100).toFixed(0)}%</Tag>
+                          </Tooltip>
+                        }
+                      />
+                    }
+                  >
+                    <div style={{ marginBottom: 8 }}>
+                      <Text strong>{metadata.name}</Text>
+                      <div style={{ marginTop: 4 }}>
+                        <Tag color="purple">{metadata.category}</Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {item.reason}
+                        </Text>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 8 }}>
+                      <Space size={[0, 4]} wrap>
+                        {metadata.tags.map((tag: string) => (
+                          <Tag key={tag} style={{ fontSize: 11 }}>
+                            {tag}
+                          </Tag>
+                        ))}
+                      </Space>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          <FireOutlined style={{ marginRight: 4 }} />
+                          热度: {metadata.popularity}
+                        </Text>
+                      </div>
+                      <Space size="small">
+                        <Tooltip title="生成">
+                          <Button
+                            size="small"
+                            type="primary"
+                            icon={<RocketOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerate(item, index);
+                            }}
+                          />
                         </Tooltip>
-                      }
-                    />
-                  }
-                >
-                  <div style={{ marginBottom: 8 }}>
-                    <Text strong>{item.metadata.name}</Text>
-                    <div style={{ marginTop: 4 }}>
-                      <Tag color="purple">{item.metadata.category}</Tag>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.reason}
-                      </Text>
+                        <Tooltip title="点赞">
+                          <Button
+                            size="small"
+                            icon={<HeartOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLike(item, index);
+                            }}
+                          />
+                        </Tooltip>
+                      </Space>
                     </div>
-                  </div>
-
-                  <div style={{ marginBottom: 8 }}>
-                    <Space size={[0, 4]} wrap>
-                      {item.metadata.tags.map((tag: string) => (
-                        <Tag key={tag} style={{ fontSize: 11 }}>
-                          {tag}
-                        </Tag>
-                      ))}
-                    </Space>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        <FireOutlined style={{ marginRight: 4 }} />
-                        热度: {item.metadata.popularity}
-                      </Text>
-                    </div>
-                    <Space size="small">
-                      <Tooltip title="生成">
-                        <Button
-                          size="small"
-                          type="primary"
-                          icon={<RocketOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerate(item, index);
-                          }}
-                        />
-                      </Tooltip>
-                      <Tooltip title="点赞">
-                        <Button
-                          size="small"
-                          icon={<HeartOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLike(item, index);
-                          }}
-                        />
-                      </Tooltip>
-                    </Space>
-                  </div>
-                </Card>
-              </Col>
-            ))
+                  </Card>
+                </Col>
+              );
+            })
           )}
         </Row>
 

@@ -69,7 +69,7 @@ export interface BaseCardStats {
 }
 
 // 基础卡片属性
-export interface BaseCardProps extends Omit<CardProps, 'size' | 'title' | 'extra'> {
+export interface BaseCardProps extends Omit<CardProps, 'size' | 'title' | 'extra' | 'actions'> {
   // 基础属性
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -200,7 +200,7 @@ export function BaseCard({
 
   // 渲染操作按钮
   const renderActions = () => {
-    const actionItems = [];
+    const actionItems: BaseCardAction[] = [];
 
     // 刷新按钮
     if (onRefresh) {
@@ -399,7 +399,7 @@ export function BaseCard({
         {...cardProps}
         title={renderTitle()}
         bordered={bordered}
-        styles={{ body: mergedBodyStyle, head: mergedHeadStyle }}
+        styles={{ body: mergedBodyStyle, header: mergedHeadStyle }}
         className="base-card-wrapper"
       >
         {/* 统计信息 */}

@@ -381,7 +381,7 @@ export default function LookbookPage() {
                       <Text type="danger" strong>¥{sku.price}</Text>
                       <div>
                         {sku.tags.map(tag => (
-                          <Tag key={tag} size="small">{tag}</Tag>
+                          <Tag key={tag}>{tag}</Tag>
                         ))}
                       </div>
                     </Space>

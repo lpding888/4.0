@@ -45,7 +45,7 @@ export default function FormRenderer({
     const initFormioRenderer = async () => {
       try {
         // 动态导入formiojs
-        const Formio = (await import('formiojs')).default;
+        const Formio = (await import('formiojs')).default as any;
 
         // 加载formio样式
         await import('formiojs/dist/formio.full.min.css');

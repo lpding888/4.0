@@ -36,9 +36,13 @@ export async function POST(request: NextRequest) {
         '根据我的分析，建议您可以考虑以下方案...',
         '如果您还有其他问题，随时可以问我。'
       ]
-    };
+    } as const;
 
-    const responseText = responses[model] || responses['gpt-3.5-turbo'];
+    type SupportedModel = keyof typeof responses;
+    const fallbackModel: SupportedModel = 'gpt-3.5-turbo';
+    const modelKey: SupportedModel =
+      typeof model === 'string' && model in responses ? (model as SupportedModel) : fallbackModel;
+    const responseText = responses[modelKey];
 
     // 创建一个可读流
     const stream = new ReadableStream({

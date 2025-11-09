@@ -201,6 +201,52 @@ class QuotaService {
   }
 
   /**
+   * 立即消费配额（无需任务ID的简单扣减）
+   */
+  async consumeImmediate(userId: string, amount = 1): Promise<QuotaInfo> {
+    return db.transaction(async (trx) => {
+      const user = (await trx<UserQuotaRecord>('users')
+        .where({ id: userId })
+        .forUpdate()
+        .first()) as UserQuotaRecord | undefined;
+
+      if (!user) {
+        throw {
+          statusCode: 404,
+          errorCode: 'USER_NOT_FOUND',
+          message: '用户不存在'
+        };
+      }
+
+      if (!user.isMember) {
+        throw {
+          statusCode: 403,
+          errorCode: 'NOT_MEMBER',
+          message: '请先购买会员'
+        };
+      }
+
+      if (user.quota_remaining < amount) {
+        throw {
+          statusCode: 402,
+          errorCode: 'QUOTA_INSUFFICIENT',
+          message: '额度不足'
+        };
+      }
+
+      await trx('users').where({ id: userId }).decrement('quota_remaining', amount);
+
+      const remaining = user.quota_remaining - amount;
+
+      return {
+        remaining,
+        isMember: user.isMember,
+        expireAt: user.quota_expireAt ?? null
+      };
+    });
+  }
+
+  /**
    * 获取事务状态 - 用于监控和调试
    */
   async getTransactionStatus(taskId: string): Promise<QuotaTransactionStatus | null> {

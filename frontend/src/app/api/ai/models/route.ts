@@ -68,7 +68,12 @@ let models = [
 ];
 
 // 模拟统计数据
-const modelStats = {
+const modelStats: Record<string, {
+  totalCalls: number;
+  avgResponseTime: number;
+  successRate: number;
+  lastUsed: string;
+}> = {
   'gpt-4': {
     totalCalls: 1250,
     avgResponseTime: 2.3,

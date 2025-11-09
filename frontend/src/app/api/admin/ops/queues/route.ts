@@ -7,8 +7,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+type QueueStatus = {
+  id: string;
+  name: string;
+  type: string;
+  count: number;
+  isActive: boolean;
+  concurrency: number;
+  processed: number;
+  failed: number;
+  avgProcessingTime: number;
+  lastActivity: string;
+};
+
 // 模拟队列数据
-let mockQueues = [
+let mockQueues: QueueStatus[] = [
   {
     id: 'queue_001',
     name: 'ai-generation',
@@ -60,7 +73,7 @@ let mockQueues = [
 ];
 
 // 模拟任务数据
-let mockTasks = [
+let mockTasks: any[] = [
   {
     id: 'task_001',
     name: 'AI商品图生成',
@@ -122,7 +135,7 @@ let mockTasks = [
 ];
 
 // 模拟操作日志
-let operationLogs = [
+let operationLogs: any[] = [
   {
     id: 'log_001',
     operation: 'QUEUE_TOGGLE',
@@ -277,9 +290,10 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const queue = mockQueues[queueIndex]!;
         mockQueues[queueIndex] = {
-          ...mockQueues[queueIndex],
-          isActive: !mockQueues[queueIndex].isActive,
+          ...queue,
+          isActive: !queue.isActive,
           lastActivity: new Date().toISOString()
         };
 
@@ -288,7 +302,7 @@ export async function POST(request: NextRequest) {
           id: `log_${Date.now()}`,
           operation: 'QUEUE_TOGGLE',
           target,
-          targetName: mockQueues[queueIndex].name,
+          targetName: queue.name,
           operator: 'admin',
           timestamp: new Date().toISOString(),
           details: `队列已${mockQueues[queueIndex].isActive ? '启动' : '暂停'}`,
@@ -381,7 +395,15 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const queueName = mockQueues[clearQueueIndex].name;
+        const queueToClear = mockQueues[clearQueueIndex];
+        if (!queueToClear) {
+          return NextResponse.json(
+            { error: 'Queue not found' },
+            { status: 404 }
+          );
+        }
+
+        const queueName = queueToClear.name;
         const initialCount = mockTasks.length;
 
         // 移除等待中的任务

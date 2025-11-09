@@ -42,4 +42,10 @@ router.get('/me', authenticate, authController.getMe.bind(authController));
 // 验证 Token
 router.get('/verify', authenticate, authController.verify.bind(authController));
 
+// 设置/修改密码
+router.post('/set-password', authenticate, authController.setPassword.bind(authController));
+
+// 重置密码（忘记密码）
+router.post('/reset-password', authController.resetPassword.bind(authController));
+
 export default router;

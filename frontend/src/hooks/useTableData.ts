@@ -5,11 +5,14 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 export interface UseTableDataOptions<T = any> {
-  fetchData: (params: any) => Promise<{ data: T[]; total: number }>;
+  fetchData?: (params: any) => Promise<{ data: T[]; total: number }>;
+  fetcher?: (params: any) => Promise<{ data: T[]; total: number }>;
   initialPageSize?: number;
+  autoLoad?: boolean;
+  dependencies?: any[];
 }
 
 export interface UseTableDataResult<T = any> {
@@ -30,7 +33,10 @@ export interface UseTableDataResult<T = any> {
  */
 export function useTableData<T = any>({
   fetchData,
+  fetcher,
   initialPageSize = 10,
+  autoLoad = true,
+  dependencies = [],
 }: UseTableDataOptions<T>): UseTableDataResult<T> {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,7 +48,12 @@ export function useTableData<T = any>({
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await fetchData({
+      const executor = fetchData || fetcher;
+      if (!executor) {
+        throw new Error('useTableData需要提供fetchData或fetcher');
+      }
+
+      const result = await executor({
         page: currentPage,
         pageSize,
         ...filters,
@@ -68,6 +79,12 @@ export function useTableData<T = any>({
       setPageSize(newPageSize);
     }
   }, [pageSize]);
+
+  useEffect(() => {
+    if (autoLoad) {
+      loadData();
+    }
+  }, [autoLoad, loadData, ...dependencies]);
 
   return {
     data,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   Card,
   Button,
@@ -302,7 +303,7 @@ export default function MembershipPage() {
               <div style={{ marginTop: '16px', textAlign: 'center' }}>
                 <Text type="secondary" style={{ fontSize: '12px' }}>
                   购买即代表同意
-                  <a href="#" style={{ color: '#1890ff' }}> 会员服务协议</a>
+                  <a href="/legal/terms" style={{ color: '#1890ff' }}> 会员服务协议</a>
                 </Text>
               </div>
             </Card>
@@ -331,7 +332,14 @@ export default function MembershipPage() {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}>
-                <img src={qrcodeUrl} alt="支付二维码" style={{ maxWidth: '100%' }} />
+                <Image
+                  src={qrcodeUrl}
+                  alt="支付二维码"
+                  width={200}
+                  height={200}
+                  style={{ maxWidth: '100%', height: 'auto' }}
+                  unoptimized
+                />
               </div>
               <Paragraph>
                 <Text strong>订单号: {orderId}</Text>

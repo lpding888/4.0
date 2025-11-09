@@ -124,6 +124,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         return (
           <RangePicker
             {...commonProps}
+            placeholder={
+              placeholder
+                ? [placeholder, placeholder]
+                : [`开始${label}`, `结束${label}`]
+            }
             defaultValue={defaultValue as any}
             format="YYYY-MM-DD"
           />
