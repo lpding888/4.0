@@ -327,7 +327,7 @@ describe('ConfigCacheService', () => {
 
       mockLRUCache.get.mockReturnValue(null);
       mockRedis.get.mockResolvedValue(null);
-      mockFS.readFileSync.mockImplementation(() => { throw new Error('Not found'));
+      mockFS.readFileSync.mockImplementation(() => { throw new Error('Not found'); });
       mockFS.writeFileSync.mockReturnValue(undefined);
 
       const fetcher = jest.fn().mockResolvedValue(mockData);

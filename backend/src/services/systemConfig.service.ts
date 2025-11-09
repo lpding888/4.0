@@ -1,5 +1,6 @@
 import { db } from '../config/database.js';
 import logger from '../utils/logger.js';
+import cacheService from './cache.service.js'; // P1-010: 使用Redis缓存
 
 type ConfigPrimitive = string | number | boolean | Record<string, unknown> | null;
 type ConfigType = 'string' | 'number' | 'boolean' | 'json';
@@ -40,22 +41,33 @@ const toNumber = (value?: string | number | bigint | null): number => {
   return 0;
 };
 
+/**
+ * 系统配置服务 (P1-010优化)
+ * 提供动态配置管理功能，支持运行时修改API密钥、提示词等配置
+ * 艹！老王我用Redis缓存替换了Map缓存，多进程共享杠杠的
+ */
 class SystemConfigService {
-  private readonly cache = new Map<string, ConfigPrimitive>();
+  private readonly CACHE_TTL = 5 * 60; // P1-010: 5分钟缓存(秒)，Redis用秒
 
-  private readonly cacheExpiry = new Map<string, number>();
-
-  private readonly CACHE_TTL = 5 * 60 * 1000;
-
+  /**
+   * 获取配置值 (P1-010: 使用Redis缓存)
+   */
   async get<T = ConfigPrimitive>(
     key: string,
     defaultValue: T | null = null
   ): Promise<T | ConfigPrimitive | null> {
     try {
-      if (this.isCacheValid(key)) {
-        return this.cache.get(key) ?? defaultValue;
+      // P1-010: 使用Redis缓存的Cache-Aside模式
+      const cacheKey = `system_config:${key}`;
+      const cached = await cacheService.get<ConfigPrimitive>(cacheKey);
+
+      if (cached !== null) {
+        logger.debug(`[SystemConfigService] 缓存命中: ${key}`);
+        return (cached as T) ?? defaultValue;
       }
 
+      // 缓存miss，查询数据库
+      logger.debug(`[SystemConfigService] 缓存未命中，查询数据源: ${key}`);
       const config = (await db<SystemConfigRow>('system_configs')
         .where('config_key', key)
         .where('is_active', true)
@@ -67,7 +79,13 @@ class SystemConfigService {
       }
 
       const value = this.parseValue(config.config_value, config.config_type);
-      this.setCache(key, value);
+
+      // 写入Redis缓存
+      if (value !== null && value !== undefined) {
+        await cacheService.set(cacheKey, value, { ttl: this.CACHE_TTL });
+        logger.debug(`[SystemConfigService] 数据已缓存: ${key}, TTL=${this.CACHE_TTL}s`);
+      }
+
       return (value as T) ?? defaultValue;
     } catch (error) {
       logger.error(`[SystemConfigService] 获取配置失败: ${key}`, error);
@@ -153,7 +171,9 @@ class SystemConfigService {
         });
       }
 
-      this.clearCache(key);
+      // P1-010: 清除Redis缓存
+      const cacheKey = `system_config:${key}`;
+      await cacheService.delete(cacheKey);
       logger.info(`[SystemConfigService] 配置已更新: ${key}`);
       return true;
     } catch (error) {
@@ -207,7 +227,9 @@ class SystemConfigService {
               category
             });
 
-          this.clearCache(config.key);
+          // P1-010: 清除Redis缓存
+          const cacheKey = `system_config:${config.key}`;
+          await cacheService.delete(cacheKey);
         }
       });
 
@@ -226,7 +248,9 @@ class SystemConfigService {
         deleted_at: new Date()
       });
 
-      this.clearCache(key);
+      // P1-010: 清除Redis缓存
+      const cacheKey = `system_config:${key}`;
+      await cacheService.delete(cacheKey);
       logger.info(`[SystemConfigService] 配置已禁用: ${key}`);
       return true;
     } catch (error) {
@@ -296,26 +320,19 @@ class SystemConfigService {
     }
   }
 
+  /**
+   * 重新加载配置缓存 (P1-010: 清空Redis缓存)
+   */
   async reloadCache(): Promise<void> {
-    this.cache.clear();
-    this.cacheExpiry.clear();
-    logger.info('[SystemConfigService] 配置缓存已清空');
+    // P1-010: 清空所有系统配置的Redis缓存
+    const deletedCount = await cacheService.deletePattern('system_config:*');
+    logger.info(`[SystemConfigService] 配置缓存已清空，删除 ${deletedCount} 条缓存`);
   }
 
-  private isCacheValid(key: string): boolean {
-    const expiry = this.cacheExpiry.get(key);
-    return typeof expiry === 'number' && Date.now() < expiry;
-  }
-
-  private setCache(key: string, value: ConfigPrimitive): void {
-    this.cache.set(key, value);
-    this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
-  }
-
-  private clearCache(key: string): void {
-    this.cache.delete(key);
-    this.cacheExpiry.delete(key);
-  }
+  /**
+   * P1-010: 已移除isCacheValid()、setCache()和clearCache()方法
+   * 现在使用Redis缓存，不再需要内存缓存管理方法
+   */
 
   private parseValue(value: string | null, type: ConfigType): ConfigPrimitive {
     if (value === null || value === undefined || value === '') {

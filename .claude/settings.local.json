@@ -1,18 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(done)",
-      "Bash(for:*)",
-      "Bash(do echo \"=== $f ===\")",
-      "Bash(while read f)",
-      "Bash(cat:*)",
-      "Bash(npm run test:unit:*)",
-      "Bash(npx jest:*)",
-      "Bash(timeout 40 npm run test:unit:*)",
-      "Bash(git checkout:*)",
-      "Bash(timeout 45 npm run test:unit:*)",
-      "Bash(timeout 50 npm run test:unit:*)",
-      "Bash(npx tsc:*)"
+      "Bash(dir:*)",
+      "Bash(do)",
+      "Bash(ts_file=\"$file%.js.ts\")",
+      "Bash(if [ -f \"$ts_file\" ])",
+      "Bash(then)",
+      "Bash(echo:*)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

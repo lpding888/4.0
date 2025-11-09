@@ -6,6 +6,7 @@ import featureService from './feature.service.js';
 import pipelineEngine from './pipelineEngine.service.js';
 import { checkFeatureRateLimit } from '../middlewares/rateLimiter.middleware.js';
 import logger from '../utils/logger.js';
+import websocketService from './websocket.service.js'; // P1-011: WebSocket服务
 
 /**
  * 任务服务 - TypeScript 版本
@@ -199,7 +200,7 @@ class TaskService {
   }
 
   /**
-   * 更新任务状态
+   * 更新任务状态 (P1-011: 添加WebSocket推送)
    */
   async updateStatus(taskId: string, status: string, data: any = {}): Promise<void> {
     try {
@@ -216,6 +217,45 @@ class TaskService {
       await db('tasks').where('id', taskId).update(updateData);
 
       logger.info(`[TaskService] 任务状态更新 taskId=${taskId} status=${status}`);
+
+      // P1-011: 获取任务详情用于WebSocket推送
+      const task = await db('tasks').where('id', taskId).first();
+      if (task) {
+        // P1-011: 推送任务状态变更
+        try {
+          const taskData = {
+            id: task.id,
+            type: task.type,
+            status: task.status,
+            inputUrl: task.inputUrl,
+            resultUrls: task.resultUrls ? JSON.parse(task.resultUrls) : null,
+            errorMessage: task.errorMessage,
+            createdAt: task.created_at,
+            updatedAt: task.updated_at,
+            completedAt: task.completed_at
+          };
+
+          // 推送WebSocket任务状态变更事件
+          websocketService.pushTaskStatusChange(task.userId, taskId, status, taskData);
+        } catch (wsError: any) {
+          // WebSocket推送失败不影响主流程
+          logger.warn(`[TaskService] WebSocket推送失败: ${wsError.message}`, { taskId });
+        }
+      }
+
+      // 如果任务失败,取消配额预留（艹！使用cancel方法返还配额）
+      if (status === 'failed' && task && task.eligible_for_refund && !task.refunded) {
+        try {
+          await quotaService.cancel(taskId);
+          await db('tasks').where('id', taskId).update({ refunded: true });
+          const refundAmount = this.getQuotaCost(task.type);
+          logger.info(
+            `[TaskService] 任务失败,配额已返还 taskId=${taskId} userId=${task.userId} amount=${refundAmount}`
+          );
+        } catch (cancelError: any) {
+          logger.error(`[TaskService] 配额返还失败: ${cancelError.message}`, { taskId });
+        }
+      }
     } catch (error: any) {
       logger.error(`[TaskService] 更新任务状态失败: ${error.message}`, { taskId, status, error });
       throw error;
