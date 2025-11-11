@@ -34,7 +34,7 @@ interface STSResult {
   startTime: number;
 }
 
-interface COSPolicyStatement {
+interface COSPolicyStatement extends Record<string, unknown> {
   version: string;
   statement: Array<{
     effect: string;

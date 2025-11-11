@@ -19,6 +19,10 @@ export interface ProviderEndpoint {
   endpoint_url: string;
   credentials_encrypted: unknown; // 加密后的凭证（存储时是字符串，读取后是对象）
   auth_type: string;
+  handler_key?: string;
+  weight?: number | null;
+  timeout_ms?: number | null;
+  max_retries?: number | null;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -83,6 +87,22 @@ function setCache(providerRef: string, data: ProviderEndpoint): void {
     data,
     expireAt: Date.now() + CACHE_TTL
   });
+}
+
+function toProviderEndpoint(row: Record<string, unknown>): ProviderEndpoint {
+  return {
+    provider_ref: String(row.provider_ref ?? ''),
+    provider_name: String(row.provider_name ?? ''),
+    endpoint_url: String(row.endpoint_url ?? ''),
+    credentials_encrypted: row.credentials_encrypted,
+    auth_type: String(row.auth_type ?? ''),
+    handler_key: row.handler_key as string | undefined,
+    weight: (row.weight as number | null | undefined) ?? null,
+    timeout_ms: (row.timeout_ms as number | null | undefined) ?? null,
+    max_retries: (row.max_retries as number | null | undefined) ?? null,
+    created_at: row.created_at as Date | undefined,
+    updated_at: row.updated_at as Date | undefined
+  };
 }
 
 /**
@@ -152,19 +172,22 @@ export async function getProviderEndpoint(
   }
 
   // 从数据库读取
-  const row = await db('provider_endpoints').where({ provider_ref: providerRef }).first();
+  const row = await db<ProviderEndpoint>('provider_endpoints')
+    .where({ provider_ref: providerRef })
+    .first();
 
   if (!row) {
     return null;
   }
 
   // 解密敏感字段
-  const decrypted = decryptFields(row, SENSITIVE_FIELDS) as ProviderEndpoint;
+  const decrypted = decryptFields(row as unknown as Record<string, unknown>, SENSITIVE_FIELDS);
+  const endpoint = toProviderEndpoint(decrypted);
 
   // 存入缓存
-  setCache(providerRef, decrypted);
+  setCache(providerRef, endpoint);
 
-  return decrypted;
+  return endpoint;
 }
 
 /**
@@ -179,7 +202,7 @@ export async function listProviderEndpoints(options: {
 }): Promise<ProviderEndpoint[]> {
   const { limit = 100, offset = 0, authType } = options;
 
-  let query = db('provider_endpoints').select('*').limit(limit).offset(offset);
+  let query = db<ProviderEndpoint>('provider_endpoints').select('*').limit(limit).offset(offset);
 
   // 可选过滤：按auth_type
   if (authType) {
@@ -189,7 +212,10 @@ export async function listProviderEndpoints(options: {
   const rows = await query;
 
   // 艹，批量解密（性能考虑，不使用缓存）
-  return rows.map((row: unknown) => decryptFields(row, SENSITIVE_FIELDS)) as ProviderEndpoint[];
+  return rows.map((row) => {
+    const decrypted = decryptFields(row as unknown as Record<string, unknown>, SENSITIVE_FIELDS);
+    return toProviderEndpoint(decrypted);
+  });
 }
 
 /**

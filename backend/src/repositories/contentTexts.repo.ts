@@ -107,7 +107,8 @@ export async function getPageTexts(params: {
   for (const text of texts) {
     if (text.section) {
       if (!result[text.section]) result[text.section] = {};
-      result[text.section][text.key] = text.value;
+      const sectionGroup = result[text.section] as Record<string, unknown>;
+      sectionGroup[text.key] = text.value;
     } else {
       result[text.key] = text.value;
     }
