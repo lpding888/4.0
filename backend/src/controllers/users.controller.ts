@@ -6,12 +6,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as userRepo from '../repositories/users.repo.js';
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-  };
-}
-
 interface UserUpdates extends Record<string, unknown> {
   phone?: string;
 }

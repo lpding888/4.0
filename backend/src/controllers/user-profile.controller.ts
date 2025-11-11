@@ -612,8 +612,8 @@ class UserProfileController {
         success: true,
         data: {
           suggestions,
-          completeness_percentage: completeness.completeness_percentage,
-          missing_fields: completeness.missing_fields || []
+          completeness_percentage: completeness.completenessPercentage,
+          missing_fields: completeness.missingFields || []
         }
       });
     } catch (error) {

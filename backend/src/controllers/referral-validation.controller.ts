@@ -118,9 +118,10 @@ class ReferralValidationController {
         // 尝试读取 referral_statistics 表（若存在），否则退化到 referrals 聚合
         let stats: ReferralStats | null = null;
         try {
-          stats = (await db('referral_statistics')
-            .where('date', date)
-            .first()) as ReferralStats | undefined;
+          const record = (await db('referral_statistics').where('date', date).first()) as
+            | ReferralStats
+            | undefined;
+          stats = record ?? null;
         } catch {
           // ignore, fall back below
         }

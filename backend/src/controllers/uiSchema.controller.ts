@@ -1,13 +1,18 @@
 import type { Request, Response, NextFunction } from 'express';
 import uiSchemaService from '../services/ui-schema.service.js';
 import logger from '../utils/logger.js';
+import type { UserRole } from '../utils/rbac.js';
 
 /**
  * 增强请求对象类型 - 添加UI schema特定字段
  */
 interface EnhancedRequest extends Request {
   userRole?: string;
-  userPermissions?: Record<string, unknown>;
+  userPermissions?: {
+    role: UserRole;
+    resource: string;
+    actions: string[];
+  };
   id?: string;
 }
 
@@ -48,7 +53,7 @@ class UiSchemaController {
 
   async invalidateCache(_req: Request, res: Response, next: NextFunction) {
     try {
-      await uiSchemaService.invalidateCache();
+      await uiSchemaService.invalidateAllCaches();
       res.json({
         success: true,
         message: 'UI缓存已失效',

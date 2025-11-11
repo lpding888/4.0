@@ -1,12 +1,7 @@
 import type { Request, Response } from 'express';
 import featureService from '../services/feature.service.js';
 import logger from '../utils/logger.js';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-  };
-}
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
 
 interface FeatureError {
   statusCode?: number;
@@ -25,11 +20,13 @@ class FeatureController {
       let features;
 
       // 未登录：返回所有启用的功能（首页展示用）
-      if (!(req as unknown as AuthenticatedRequest).user) {
+      const authReq = req as AuthRequest;
+
+      if (!authReq.user) {
         features = await featureService.getAllEnabledFeatures();
       } else {
         // 已登录：根据权限返回可用功能
-        const userId = (req as unknown as AuthenticatedRequest).user!.id;
+        const userId = authReq.user.id;
         features = await featureService.getAvailableFeatures(userId);
       }
 
@@ -50,7 +47,8 @@ class FeatureController {
   async getFormSchema(req: Request, res: Response): Promise<void> {
     try {
       const { featureId } = req.params as { featureId: string };
-      const userId = ((req as unknown as AuthenticatedRequest).user?.id ?? '') as string;
+      const authReq = req as AuthRequest;
+      const userId = authReq.user?.id ?? '';
 
       const formSchema = await featureService.getFormSchema(featureId, userId);
 

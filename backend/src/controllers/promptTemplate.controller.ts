@@ -5,15 +5,6 @@ import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import type { BatchPreviewItem } from '../types/prompt-template.types.js';
 
-// 艹！扩展Request类型，包含用户信息和请求ID
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    [key: string]: unknown;
-  };
-  id?: string;
-}
-
 class PromptTemplateController {
   async getTemplates(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -44,7 +35,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: result,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Get templates failed:', error);
@@ -59,7 +50,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: template,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Get template by ID failed:', error);
@@ -78,7 +69,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: template,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Get template by key failed:', error);
@@ -88,7 +79,7 @@ class PromptTemplateController {
 
   async createTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -101,7 +92,7 @@ class PromptTemplateController {
         success: true,
         data: template,
         message: '提示词模板创建成功',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Create template failed:', error);
@@ -112,7 +103,7 @@ class PromptTemplateController {
   async updateTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -122,7 +113,7 @@ class PromptTemplateController {
         success: true,
         data: template,
         message: '提示词模板更新成功',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Update template failed:', error);
@@ -133,7 +124,7 @@ class PromptTemplateController {
   async deleteTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -141,7 +132,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         message: '提示词模板删除成功',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Delete template failed:', error);
@@ -160,7 +151,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: result,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Get template versions failed:', error);
@@ -176,7 +167,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: result,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Preview template failed:', error);
@@ -191,7 +182,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: result,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Validate template failed:', error);
@@ -202,7 +193,7 @@ class PromptTemplateController {
   async publishTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -211,7 +202,7 @@ class PromptTemplateController {
         success: true,
         data: template,
         message: '模板发布成功',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Publish template failed:', error);
@@ -222,7 +213,7 @@ class PromptTemplateController {
   async archiveTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params as { id: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -231,7 +222,7 @@ class PromptTemplateController {
         success: true,
         data: template,
         message: '模板已归档',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Archive template failed:', error);
@@ -243,7 +234,7 @@ class PromptTemplateController {
     try {
       const { id } = req.params as { id: string };
       const { version } = req.body as { version?: number };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -255,7 +246,7 @@ class PromptTemplateController {
         success: true,
         data: template,
         message: `已回滚到版本 ${version}`,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Rollback template failed:', error);
@@ -267,7 +258,7 @@ class PromptTemplateController {
     try {
       const { id } = req.params as { id: string };
       const { new_key, new_name } = req.body as { new_key?: string; new_name?: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         throw AppError.custom(ERROR_CODES.UNAUTHORIZED, '未授权');
       }
@@ -290,7 +281,7 @@ class PromptTemplateController {
         success: true,
         data: duplicated,
         message: '模板复制成功',
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Duplicate template failed:', error);
@@ -340,7 +331,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: result,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Batch preview templates failed:', error);
@@ -360,7 +351,7 @@ class PromptTemplateController {
       res.json({
         success: true,
         data: health,
-        requestId: (req as AuthenticatedRequest).id
+        requestId: req.id
       });
     } catch (error) {
       logger.error('[PromptTemplateController] Health check failed:', error);

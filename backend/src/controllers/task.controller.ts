@@ -2,27 +2,24 @@ import type { Request, Response, NextFunction } from 'express';
 import taskService from '../services/task.service.js';
 import imageProcessService from '../services/imageProcess.service.js';
 import aiModelService from '../services/aiModel.service.js';
-import paginationService from '../services/pagination.service.js';
+import paginationService, { type TaskFilters } from '../services/pagination.service.js';
 import logger from '../utils/logger.js';
 import type {
-  AuthenticatedRequest,
   CreateFeatureTaskRequest,
   CreateTaskRequest,
   UpdateTaskStatusRequest,
   AdminTaskQuery,
   TaskSearchQuery,
   DbPerformanceQuery,
-  AdminTaskFilters,
   TaskError,
   TaskCreateResult
 } from '../types/task.types.js';
-import type { Knex } from 'knex';
 
 class TaskController {
   async createByFeature(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { featureId, inputData } = (req.body ?? {}) as CreateFeatureTaskRequest;
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
         return;
@@ -68,7 +65,7 @@ class TaskController {
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { type, inputImageUrl, params } = (req.body ?? {}) as CreateTaskRequest;
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
         return;
@@ -120,7 +117,7 @@ class TaskController {
 
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userId = (req as AuthenticatedRequest).user?.id;
+      const userId = req.user?.id;
       if (!userId) {
         res.status(401).json({ success: false, error: { code: 4003, message: '未授权操作' } });
         return;
@@ -153,7 +150,7 @@ class TaskController {
 
   async adminList(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userRole = (req as AuthenticatedRequest).user?.role;
+      const userRole = req.user?.role;
       if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
@@ -167,15 +164,14 @@ class TaskController {
         startDate,
         endDate
       } = req.query as AdminTaskQuery;
-      const filters: AdminTaskFilters = {};
+      const filters: TaskFilters = {};
       if (status) filters.status = status;
       if (type) filters.type = type;
       if (userId) filters.userId = userId;
       if (startDate || endDate) {
-        filters.created_at = function (this: Knex.QueryBuilder) {
-          if (startDate && endDate) this.whereBetween('created_at', [startDate, endDate]);
-          else if (startDate) this.where('created_at', '>=', startDate);
-          else if (endDate) this.where('created_at', '<=', endDate);
+        filters.createdRange = {
+          start: startDate ? String(startDate) : undefined,
+          end: endDate ? String(endDate) : undefined
         };
       }
       const result = await paginationService.getTaskList(filters, {
@@ -195,7 +191,7 @@ class TaskController {
 
   async search(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userRole = (req as AuthenticatedRequest).user?.role;
+      const userRole = req.user?.role;
       if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;
@@ -207,7 +203,7 @@ class TaskController {
           .json({ success: false, error: { code: 4001, message: '搜索关键词不能为空' } });
         return;
       }
-      const filters: AdminTaskFilters = {};
+      const filters: TaskFilters = {};
       if (status) filters.status = status;
       if (type) filters.type = type;
       const result = await paginationService.searchTasks(String(searchTerm).trim(), {
@@ -230,7 +226,7 @@ class TaskController {
 
   async getDbPerformance(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const userRole = (req as AuthenticatedRequest).user?.role;
+      const userRole = req.user?.role;
       if (userRole !== 'admin') {
         res.status(403).json({ success: false, error: { code: 4003, message: '需要管理员权限' } });
         return;

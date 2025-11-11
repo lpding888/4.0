@@ -8,24 +8,16 @@ import * as providerRepo from '../repositories/providerEndpoints.repo.js';
 import type { ProviderEndpointInput } from '../repositories/providerEndpoints.repo.js';
 
 /**
- * Express请求对象扩展类型定义
- */
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: number;
-    [key: string]: unknown;
-  };
-}
-
-/**
  * 审计日志条目类型
  */
 interface AuditLogEntry {
   action: string;
   provider_ref: string;
-  user_id: number | null;
+  user_id: string | null;
   details: Record<string, unknown>;
 }
+
+const getUserIdOrNull = (req: Request): string | null => req.user?.id ?? null;
 
 /**
  * Provider管理控制器
@@ -142,7 +134,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'CREATE',
         provider_ref: created.provider_ref,
-        user_id: (req as AuthenticatedRequest).user?.id || null,
+        user_id: getUserIdOrNull(req),
         details: { provider_name: created.provider_name }
       });
 
@@ -187,7 +179,7 @@ export class ProvidersController {
         await this.recordAuditLog({
           action: 'UPDATE',
           provider_ref: updated.provider_ref,
-          user_id: (req as AuthenticatedRequest).user?.id || null,
+          user_id: getUserIdOrNull(req),
           details: updates
         });
 
@@ -241,7 +233,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'DELETE',
         provider_ref,
-        user_id: (req as AuthenticatedRequest).user?.id || null,
+        user_id: getUserIdOrNull(req),
         details: {}
       });
 
@@ -287,7 +279,7 @@ export class ProvidersController {
       await this.recordAuditLog({
         action: 'TEST_CONNECTION',
         provider_ref,
-        user_id: (req as AuthenticatedRequest).user?.id || null,
+        user_id: getUserIdOrNull(req),
         details: { healthy, message }
       });
 

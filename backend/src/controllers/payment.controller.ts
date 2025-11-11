@@ -4,18 +4,36 @@ import logger from '../utils/logger.js';
 import paymentService from '../services/payment.service.js';
 import { db } from '../config/database.js';
 import type {
-  AuthenticatedRequest,
   CreatePaymentOrderRequest,
   CreateRefundRequest,
   PaymentRecordsQuery,
   RefundRecordsQuery,
   PaymentOrder,
   RefundRecord,
-  CountResult,
-  SumResult,
-  PaymentService
+  PaymentService,
+  OrderStatusResponse
 } from '../types/payment.types.js';
 import type { Knex } from 'knex';
+
+const paymentSvc = paymentService as unknown as PaymentService;
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const requireUserId = (req: Request, res: Response): string | null => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: '未授权操作' } });
+    return null;
+  }
+  return userId;
+};
 
 class PaymentController {
   async createPaymentOrder(req: Request, res: Response): Promise<void> {
@@ -43,16 +61,10 @@ class PaymentController {
         returnUrl,
         notifyUrl
       } = req.body as CreatePaymentOrderRequest;
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
+      const userId = requireUserId(req, res);
+      if (!userId) return;
 
-      const result = await (paymentService as unknown as PaymentService).createPaymentOrder(userId, {
+      const result = await paymentSvc.createPaymentOrder(userId, {
         productType,
         productId,
         productName,
@@ -83,7 +95,7 @@ class PaymentController {
   async handleAlipayNotify(req: Request, res: Response): Promise<void> {
     try {
       logger.info('[PaymentController] 收到支付宝回调:', req.body);
-      const result = await (paymentService as unknown as PaymentService).handleAlipayCallback(req.body);
+      const result = await paymentSvc.handleAlipayCallback(req.body);
       res.send(result?.success ? 'success' : 'fail');
     } catch (error) {
       logger.error('[PaymentController] 处理支付宝回调失败:', error);
@@ -94,7 +106,7 @@ class PaymentController {
   async handleWechatNotify(req: Request, res: Response): Promise<void> {
     try {
       logger.info('[PaymentController] 收到微信回调:', req.body);
-      const result = await (paymentService as unknown as PaymentService).handleWechatCallback(req.body);
+      const result = await paymentSvc.handleWechatCallback(req.body);
       if (result?.success) {
         res.json({ code: 'SUCCESS', message: 'success' });
       } else {
@@ -123,15 +135,9 @@ class PaymentController {
       }
 
       const { orderId, refundAmount, refundReason } = req.body as CreateRefundRequest;
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
-      const result = await (paymentService as unknown as PaymentService).createRefund(orderId, userId, {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const result = await paymentSvc.createRefund(orderId, userId, {
         refundAmount,
         refundReason
       });
@@ -155,15 +161,9 @@ class PaymentController {
   async getOrderStatus(req: Request, res: Response): Promise<void> {
     try {
       const { orderId } = req.params as { orderId: string };
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
-      const order = await (paymentService as unknown as PaymentService).getOrderStatus(orderId, userId);
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const order = await paymentSvc.getOrderStatus(orderId, userId);
       res.json({ success: true, data: order, timestamp: new Date().toISOString() });
     } catch (error) {
       const err = error as Error;
@@ -178,14 +178,8 @@ class PaymentController {
 
   async getUserPaymentRecords(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
+      const userId = requireUserId(req, res);
+      if (!userId) return;
       const {
         page = '1',
         limit = '20',
@@ -203,7 +197,8 @@ class PaymentController {
       const orders = (await query) as PaymentOrder[];
       let countQuery: Knex.QueryBuilder = db('payment_orders').where('user_id', userId);
       if (status) countQuery = countQuery.where('status', status);
-      const total = (await countQuery.count('* as total').first()) as CountResult | undefined;
+      const totalRows = await countQuery.count<{ count: string | number }[]>('* as count');
+      const total = toNumber(totalRows[0]?.count);
       res.json({
         success: true,
         data: {
@@ -211,8 +206,8 @@ class PaymentController {
           pagination: {
             page: parseInt(page, 10),
             limit: parseInt(limit, 10),
-            total: total?.total ?? 0,
-            pages: Math.ceil((total?.total ?? 0) / parseInt(limit, 10))
+            total,
+            pages: Math.ceil(total / parseInt(limit, 10))
           }
         },
         timestamp: new Date().toISOString()
@@ -228,14 +223,8 @@ class PaymentController {
 
   async getUserRefundRecords(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
+      const userId = requireUserId(req, res);
+      if (!userId) return;
       const { page = '1', limit = '20', status } = req.query as RefundRecordsQuery;
       const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
       let query: Knex.QueryBuilder = db('refund_records')
@@ -253,7 +242,8 @@ class PaymentController {
       const refunds = (await query) as RefundRecord[];
       let countQuery: Knex.QueryBuilder = db('refund_records').where('user_id', userId);
       if (status) countQuery = countQuery.where('status', status);
-      const total = (await countQuery.count('* as total').first()) as CountResult | undefined;
+      const totalRows = await countQuery.count<{ count: string | number }[]>('* as count');
+      const total = toNumber(totalRows[0]?.count);
       res.json({
         success: true,
         data: {
@@ -261,8 +251,8 @@ class PaymentController {
           pagination: {
             page: parseInt(page, 10),
             limit: parseInt(limit, 10),
-            total: total?.total ?? 0,
-            pages: Math.ceil((total?.total ?? 0) / parseInt(limit, 10))
+            total,
+            pages: Math.ceil(total / parseInt(limit, 10))
           }
         },
         timestamp: new Date().toISOString()
@@ -279,15 +269,15 @@ class PaymentController {
   async paymentSuccess(req: Request, res: Response): Promise<void> {
     try {
       const { orderId, out_trade_no } = req.query as Record<string, string>;
-      let order = null;
+      let order: OrderStatusResponse | null = null;
       if (orderId) {
-        order = await (paymentService as unknown as PaymentService).getOrderStatus(orderId);
+        order = await paymentSvc.getOrderStatus(orderId);
       } else if (out_trade_no) {
         const orderRecord = (await db('payment_orders')
           .where('order_no', out_trade_no)
           .first()) as PaymentOrder | undefined;
         if (orderRecord) {
-          order = await (paymentService as unknown as PaymentService).getOrderStatus(orderRecord.id);
+          order = await paymentSvc.getOrderStatus(orderRecord.id);
         }
       }
       if (!order) {
@@ -314,22 +304,22 @@ class PaymentController {
   async paymentCancel(req: Request, res: Response): Promise<void> {
     try {
       const { orderId, out_trade_no } = req.query as Record<string, string>;
-      let order = null;
+      let order: OrderStatusResponse | null = null;
       if (orderId) {
-        order = await (paymentService as unknown as PaymentService).getOrderStatus(orderId);
+        order = await paymentSvc.getOrderStatus(orderId);
       } else if (out_trade_no) {
         const orderRecord = (await db('payment_orders')
           .where('order_no', out_trade_no)
           .first()) as PaymentOrder | undefined;
         if (orderRecord) {
-          order = await (paymentService as unknown as PaymentService).getOrderStatus(orderRecord.id);
+          order = await paymentSvc.getOrderStatus(orderRecord.id);
         }
       }
-      if (order && (order as unknown as { status: string }).status === 'pending') {
+      if (order && order.status === 'pending') {
         await db('payment_orders')
-          .where('id', (order as unknown as { orderId: string }).orderId)
+          .where('id', order.orderId)
           .update({ status: 'cancelled', updated_at: new Date() });
-        (order as unknown as { status: string }).status = 'cancelled';
+        order = { ...order, status: 'cancelled' };
       }
       res.json({
         success: true,
@@ -348,14 +338,8 @@ class PaymentController {
 
   async getPaymentStats(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as AuthenticatedRequest).user?.id;
-      if (!userId) {
-        res.status(401).json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: '未授权操作' }
-        });
-        return;
-      }
+      const userId = requireUserId(req, res);
+      if (!userId) return;
       const [totalOrders, paidOrders, totalAmount, totalRefunds, refundAmount] = await Promise.all([
         db('payment_orders').where('user_id', userId).count('* as count').first(),
         db('payment_orders').where({ user_id: userId, status: 'paid' }).count('* as count').first(),
@@ -375,11 +359,11 @@ class PaymentController {
       res.json({
         success: true,
         data: {
-          totalOrders: (totalOrders as CountResult | undefined)?.count ?? 0,
-          paidOrders: (paidOrders as CountResult | undefined)?.count ?? 0,
-          totalAmount: (totalAmount as SumResult | undefined)?.total ?? 0,
-          totalRefunds: (totalRefunds as CountResult | undefined)?.count ?? 0,
-          refundAmount: (refundAmount as SumResult | undefined)?.total ?? 0
+          totalOrders: toNumber((totalOrders as { count?: string | number } | undefined)?.count),
+          paidOrders: toNumber((paidOrders as { count?: string | number } | undefined)?.count),
+          totalAmount: toNumber((totalAmount as { total?: string | number } | undefined)?.total),
+          totalRefunds: toNumber((totalRefunds as { count?: string | number } | undefined)?.count),
+          refundAmount: toNumber((refundAmount as { total?: string | number } | undefined)?.total)
         },
         timestamp: new Date().toISOString()
       });

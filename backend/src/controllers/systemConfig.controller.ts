@@ -1,5 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
-import systemConfigService from '../services/systemConfig.service.js';
+import systemConfigService, {
+  type ConfigPrimitive,
+  type ConfigType
+} from '../services/systemConfig.service.js';
 import logger from '../utils/logger.js';
 
 interface GetValueQuery {
@@ -19,8 +22,8 @@ interface SetValueBody {
 interface SetBatchBody {
   configs: Array<{
     key: string;
-    value: unknown;
-    type?: string;
+    value: ConfigPrimitive;
+    type?: ConfigType;
     description?: string;
   }>;
 }
@@ -28,20 +31,48 @@ interface SetBatchBody {
 interface ImportBody {
   configs: Array<{
     key: string;
-    value: unknown;
-    type?: string;
+    value: ConfigPrimitive;
+    type?: ConfigType;
     description?: string;
   }>;
   overwrite?: boolean;
 }
 
-interface ConfigItem {
-  key: string;
-  value: unknown;
-  type: string;
-  description: string;
-  updated_at: unknown;
-}
+const normalizeType = (type?: string): ConfigType => {
+  if (type === 'number' || type === 'boolean' || type === 'json') {
+    return type;
+  }
+  return 'string';
+};
+
+const normalizeValue = (value: unknown, type: ConfigType): ConfigPrimitive => {
+  if (value === null || value === undefined) return null;
+  if (type === 'number') {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  }
+  if (type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      return normalized === 'true' || normalized === '1';
+    }
+    return false;
+  }
+  if (type === 'json') {
+    if (typeof value === 'object') return value as Record<string, unknown>;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  return value as string;
+};
 
 class SystemConfigController {
   async getValue(req: Request, res: Response, next: NextFunction) {
@@ -97,7 +128,7 @@ class SystemConfigController {
 
   async getCategories(_req: Request, res: Response, next: NextFunction) {
     try {
-      const categories = await systemConfigService.getCategories();
+      const categories = await systemConfigService.listCategories();
       res.json({ success: true, data: categories });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -115,7 +146,9 @@ class SystemConfigController {
         res.status(400).json({ success: false, error: { code: 4001, message: '配置值不能为空' } });
         return;
       }
-      await systemConfigService.set(key, value, type, description, userId);
+      const configType = normalizeType(type);
+      const normalizedValue = normalizeValue(value, configType);
+      await systemConfigService.set(key, normalizedValue, configType, description, userId);
       res.json({ success: true, message: '配置更新成功', data: { key, value, type, description } });
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -147,7 +180,16 @@ class SystemConfigController {
           return;
         }
       }
-      await systemConfigService.setMultiple(configs, userId);
+      const normalizedConfigs = configs.map((config) => {
+        const configType = normalizeType(config.type);
+        return {
+          key: config.key,
+          value: normalizeValue(config.value, configType),
+          type: configType,
+          description: config.description ?? ''
+        };
+      });
+      await systemConfigService.setMultiple(normalizedConfigs, userId ?? null);
       res.json({
         success: true,
         message: `批量更新成功，共更新${configs.length}个配置`,
@@ -163,8 +205,7 @@ class SystemConfigController {
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const { key } = req.params as { key: string };
-      const userId = req.user?.id as string | undefined;
-      const deleted = await systemConfigService.delete(key, userId);
+      const deleted = await systemConfigService.delete(key);
       if (!deleted) {
         res.status(404).json({ success: false, error: { code: 4004, message: '配置不存在' } });
         return;
@@ -194,14 +235,17 @@ class SystemConfigController {
 
   async export(_req: Request, res: Response, next: NextFunction) {
     try {
-      const configs = await systemConfigService.export();
-      const exportData = (configs || []).map((c: ConfigItem) => ({
-        key: c.key,
-        value: c.value,
-        type: c.type,
-        description: c.description,
-        updated_at: c.updated_at
-      }));
+      const configs = await systemConfigService.exportAll();
+      const exportData = (configs || []).map((c) => {
+        const type = c.config_type ?? 'string';
+        return {
+          key: c.config_key,
+          value: normalizeValue(c.config_value, type),
+          type,
+          description: c.description ?? '',
+          updated_at: c.updated_at ?? null
+        };
+      });
       res.json({
         success: true,
         data: {
@@ -241,7 +285,14 @@ class SystemConfigController {
             results.skipped++;
             continue;
           }
-          await systemConfigService.set(key, value, type, description, userId);
+          const configType = normalizeType(type);
+          await systemConfigService.set(
+            key,
+            normalizeValue(value, configType),
+            configType,
+            description,
+            userId
+          );
           results.success++;
         } catch (err: unknown) {
           const error = err instanceof Error ? err : new Error(String(err));

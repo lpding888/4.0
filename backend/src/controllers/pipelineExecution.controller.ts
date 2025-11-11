@@ -3,6 +3,7 @@ import pipelineExecutionService from '../services/pipelineExecution.service.js';
 import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
+import type { ExecutionMode, ExecutionStatus, PipelineExecution } from '../engine/pipeline-types.js';
 
 interface CreateExecutionBody {
   schema_id: string;
@@ -55,6 +56,29 @@ interface CleanupBody {
   max_age?: string | number;
 }
 
+const parseExecutionMode = (value: unknown, fallback: ExecutionMode = 'mock'): ExecutionMode => {
+  if (value === 'real') return 'real';
+  return fallback;
+};
+
+const parseExecutionStatus = (value: unknown): ExecutionStatus | undefined => {
+  if (
+    value === 'pending' ||
+    value === 'running' ||
+    value === 'completed' ||
+    value === 'failed' ||
+    value === 'cancelled'
+  ) {
+    return value;
+  }
+  return undefined;
+};
+
+const toInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 class PipelineExecutionController {
   async createExecution(req: Request, res: Response, next: NextFunction) {
     try {
@@ -63,10 +87,11 @@ class PipelineExecutionController {
       if (!schema_id) {
         throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '缺少流程模板ID');
       }
+      const executionMode = parseExecutionMode(mode);
       const execution = await pipelineExecutionService.createExecution(
         schema_id,
         input_data || {},
-        mode,
+        executionMode,
         userId
       );
       res.status(201).json({
@@ -107,10 +132,11 @@ class PipelineExecutionController {
       if (!schema_id) {
         throw AppError.custom(ERROR_CODES.MISSING_PARAMETERS, '缺少流程模板ID');
       }
+      const executionMode = parseExecutionMode(mode);
       const execution = await pipelineExecutionService.createExecution(
         schema_id,
         input_data || {},
-        mode,
+        executionMode,
         userId
       );
       pipelineExecutionService.startExecution(execution.id).catch((error: unknown) => {
@@ -151,10 +177,10 @@ class PipelineExecutionController {
       } = req.query as unknown as GetExecutionOptionsQuery;
       const options = {
         schema_id,
-        status,
-        mode,
-        limit: parseInt(String(limit)),
-        offset: parseInt(String(offset))
+        status: parseExecutionStatus(status),
+        mode: mode ? parseExecutionMode(mode, 'mock') : undefined,
+        limit: toInt(limit, 20),
+        offset: toInt(offset, 0)
       };
       const result = pipelineExecutionService.getExecutions(options);
       res.json({ success: true, data: result, requestId: req.id });
@@ -345,7 +371,7 @@ class PipelineExecutionController {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         service: 'pipeline-execution',
-        active_executions: pipelineExecutionService.executions.size,
+        active_executions: pipelineExecutionService.getActiveExecutionCount(),
         memory_usage: process.memoryUsage(),
         uptime: process.uptime()
       };
