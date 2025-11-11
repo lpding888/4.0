@@ -2,16 +2,16 @@ import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
 
 const smtpHost = process.env.SMTP_HOST;
-const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465;
+const smtpPort = Number(process.env.SMTP_PORT ?? 465);
 const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : true;
 const smtpUser = process.env.SMTP_USER;
 const smtpPassword = process.env.SMTP_PASSWORD;
 const smtpFrom = process.env.SMTP_FROM || smtpUser;
 const smtpFromName = process.env.SMTP_FROM_NAME || 'AI衣柜';
 
-function ensureTransportConfig(): void {
+function ensureConfig(): void {
   if (!smtpHost || !smtpUser || !smtpPassword || !smtpFrom) {
-    throw new Error('SMTP配置缺失，请检查SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM');
+    throw new Error('SMTP 配置缺失，请检查 SMTP_HOST/SMTP_USER/SMTP_PASSWORD/SMTP_FROM');
   }
 }
 
@@ -21,7 +21,7 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
     return;
   }
 
-  ensureTransportConfig();
+  ensureConfig();
 
   const transporter = nodemailer.createTransport({
     host: smtpHost,
@@ -47,6 +47,6 @@ export async function sendVerificationEmail(to: string, code: string): Promise<v
     to,
     subject: '【AI衣柜】您的登录验证码',
     html,
-    text: `您的验证码是 ${code} ，5分钟内有效。`
+    text: `您的验证码为 ${code} ，5 分钟内有效。如非本人操作请忽略。`
   });
 }
