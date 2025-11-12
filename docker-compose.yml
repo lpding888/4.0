@@ -15,6 +15,8 @@
 # - MySQL: localhost:3306
 # - Redis: localhost:6379
 # - Swagger文档: http://localhost/api-docs
+# - Prometheus: http://localhost:9090
+# - Grafana: http://localhost:3000 (默认账号: admin/admin)
 # - Prometheus指标: http://localhost/metrics
 
 version: '3.8'
@@ -188,12 +190,77 @@ services:
       timeout: 10s
       retries: 3
 
+  # ========== Prometheus 监控 ==========
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai-photo-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      # 艹！Prometheus配置文件
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/rules:/etc/prometheus/rules:ro
+      # 艹！数据持久化
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'  # 艹！保留30天数据
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'  # 艹！允许热重载配置
+    networks:
+      - ai-photo-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========== Grafana 可视化 ==========
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-photo-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # 艹！默认管理员账号
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      # 艹！允许匿名访问仪表板（可选）
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      # 艹！数据持久化
+      - grafana_data:/var/lib/grafana
+      # 艹！预配置数据源
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      # 艹！仪表板配置
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - ai-photo-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # ========== 数据卷 ==========
 # 艹！持久化存储，删容器不删数据
 volumes:
   mysql_data:
     driver: local
   redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 # ========== 网络 ==========
