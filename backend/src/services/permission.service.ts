@@ -218,7 +218,7 @@ class PermissionService {
     try {
       // 1. 检查缓存
       const cacheKey = `user_permission:${userId}:${permission}`;
-      const cached = await cacheService.get(cacheKey);
+      const cached = await cacheService.get<string>(cacheKey);
       if (cached !== null) {
         return cached === 'true';
       }
@@ -281,15 +281,15 @@ class PermissionService {
     try {
       // 检查缓存
       const cacheKey = `user_permissions:${userId}`;
-      let permissions = await cacheService.get(cacheKey);
+      const cachedPermissions = await cacheService.get<string>(cacheKey);
 
-      if (permissions) {
-        return JSON.parse(permissions);
+      if (cachedPermissions) {
+        return JSON.parse(cachedPermissions) as PermissionCode[];
       }
 
       // 从数据库获取用户角色
       const userRoles = await this.getUserRoles(userId);
-      const allPermissions = new Set();
+      const allPermissions = new Set<PermissionCode>();
 
       // 收集所有角色的权限
       for (const role of userRoles) {
@@ -297,7 +297,7 @@ class PermissionService {
         rolePermissions.forEach((permission) => allPermissions.add(permission));
       }
 
-      permissions = Array.from(allPermissions);
+      const permissions = Array.from(allPermissions) as PermissionCode[];
 
       // 缓存结果
       await cacheService.set(cacheKey, JSON.stringify(permissions), this.cacheTTL);
@@ -318,10 +318,10 @@ class PermissionService {
     try {
       // 检查缓存
       const cacheKey = `user_roles:${userId}`;
-      let roles = await cacheService.get(cacheKey);
+      const cachedRoles = await cacheService.get<string>(cacheKey);
 
-      if (roles) {
-        return JSON.parse(roles);
+      if (cachedRoles) {
+        return JSON.parse(cachedRoles) as string[];
       }
 
       // 从数据库获取用户角色
@@ -331,7 +331,7 @@ class PermissionService {
         return [];
       }
 
-      roles = [userRecords.role];
+      const roles = [userRecords.role];
 
       // 获取额外的角色分配
       const additionalRoles = await db('user_roles')
@@ -363,10 +363,10 @@ class PermissionService {
     try {
       // 检查缓存
       const cacheKey = `role_permissions:${role}`;
-      let permissions = await cacheService.get(cacheKey);
+      const cached = await cacheService.get<string>(cacheKey);
 
-      if (permissions) {
-        return JSON.parse(permissions);
+      if (cached) {
+        return JSON.parse(cached) as PermissionCode[];
       }
 
       // 从数据库获取角色权限
@@ -377,7 +377,8 @@ class PermissionService {
         .pluck('permissions.code');
 
       // 如果数据库中没有，使用默认权限
-      permissions = dbPermissions.length > 0 ? dbPermissions : this.defaultPermissions[role] || [];
+      const permissions =
+        dbPermissions.length > 0 ? dbPermissions : this.defaultPermissions[role] || [];
 
       // 缓存结果
       await cacheService.set(cacheKey, JSON.stringify(permissions), this.cacheTTL);

@@ -27,7 +27,7 @@ class ProviderRegistryService {
   }
 
   private async registerBuiltinProviders() {
-    this.registerProvider('imageProcess', imageProcessService as ProviderInstance, {
+    this.registerProvider('imageProcess', imageProcessService as unknown as ProviderInstance, {
       circuitBreaker: {
         failureThreshold: 3,
         resetTimeout: 30000,
@@ -39,7 +39,7 @@ class ProviderRegistryService {
       timeout: 60000,
       cache: { ttl: 300, enabled: true }
     });
-    this.registerProvider('aiModel', aiModelService as ProviderInstance, {
+    this.registerProvider('aiModel', aiModelService as unknown as ProviderInstance, {
       circuitBreaker: {
         failureThreshold: 2,
         resetTimeout: 60000,

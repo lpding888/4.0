@@ -319,6 +319,8 @@ class FileManagementService {
 
       for (const [index, resultUrl] of normalizedResultUrls.entries()) {
         try {
+          const normalizedUrl =
+            typeof resultUrl === 'string' ? resultUrl : JSON.stringify(resultUrl ?? {});
           // 提取文件信息
           const fileName = `result_${index + 1}_${Date.now()}.jpg`;
           const mockFile: UploadFileDescriptor = {
@@ -336,7 +338,7 @@ class FileManagementService {
               taskId,
               userId: task.user_id,
               resultIndex: index,
-              originalUrl: resultUrl,
+              originalUrl: normalizedUrl,
               processingCompleted: new Date().toISOString(),
               processingDuration: options.processingDuration || 0
             }
@@ -424,7 +426,15 @@ class FileManagementService {
 
       if (filesToCleanup.length === 0) {
         logger.info(`[FileManagement] 任务无需要清理的文件: ${taskId}`);
-        return { success: true, cleanedCount: 0, files: [] };
+        return {
+          success: true,
+          taskId,
+          cleanedCount: 0,
+          totalFiles: 0,
+          cleanedFiles: [],
+          dryRun,
+          timestamp: new Date().toISOString()
+        };
       }
 
       let cleanedCount = 0;

@@ -249,7 +249,7 @@ class InviteCodeService {
     }
 
     const cacheKey = `${this.cachePrefix}validate:${normalizedCode}`;
-    const cachedData = await cacheService.get(cacheKey);
+    const cachedData = await cacheService.get<InviteCode>(cacheKey);
 
     if (cachedData) {
       logger.debug(`[InviteCodeService] Cache hit for code ${normalizedCode}`);
@@ -287,7 +287,7 @@ class InviteCodeService {
       });
     }
 
-    await cacheService.set(cacheKey, inviteCode, { ttl: this.cacheTTL });
+    await cacheService.set<InviteCode>(cacheKey, inviteCode, { ttl: this.cacheTTL });
     return inviteCode;
   }
 

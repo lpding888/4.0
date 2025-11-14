@@ -142,7 +142,7 @@ export class AuthController {
       // 生成Token
       const { accessToken, refreshToken } = tokenService.generateTokenPair({
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? undefined,
         role: user.role
       });
 
@@ -288,7 +288,7 @@ export class AuthController {
       // 生成Token
       const { accessToken, refreshToken } = tokenService.generateTokenPair({
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? undefined,
         role: user.role
       });
 
@@ -487,6 +487,15 @@ export class AuthController {
     } catch (error) {
       next(error);
     }
+  }
+
+  /**
+   * 邮箱验证码登录
+   * POST /api/auth/login/email
+   * 艹，用邮箱验证码登录，首次登录自动注册！
+   */
+  async loginEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
+    await this.loginWithEmailCode(req, res, next);
   }
 
   /**

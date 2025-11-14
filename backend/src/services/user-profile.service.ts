@@ -44,6 +44,30 @@ interface UserRecord {
   [key: string]: unknown;
 }
 
+type BasicProfileInfo = {
+  id: string;
+  username: string;
+  profile_updated_at?: Date | string | null;
+  updated_at?: Date | string | null;
+  profile_public?: boolean;
+  show_email?: boolean;
+  show_phone?: boolean;
+  privacy_settings?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
+type CountRow = {
+  count?: string | number | bigint | null;
+};
+
+const parseCount = (row?: CountRow): number => {
+  if (!row || row.count === null || row.count === undefined) return 0;
+  if (typeof row.count === 'number') return row.count;
+  if (typeof row.count === 'bigint') return Number(row.count);
+  const parsed = Number(row.count);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 /**
  * 完整度权重配置
  */
@@ -164,13 +188,13 @@ class UserProfileService {
   ): Promise<Record<string, unknown>> {
     try {
       const cacheKey = `${this.cachePrefix}full:${userId}:${viewerId || 'public'}`;
-      const cached = await cacheService.get(cacheKey);
+      const cached = await cacheService.get<Record<string, unknown>>(cacheKey);
       if (cached) {
         return cached;
       }
 
       // 并行获取用户信息
-      const [user, socialLinks, education, workExperience, skills, interests, completeness] =
+      const [basicInfo, socialLinks, education, workExperience, skills, interests, completeness] =
         await Promise.all([
           this.getUserBasicInfo(userId, viewerId),
           this.getUserSocialLinks(userId, viewerId),
@@ -181,16 +205,16 @@ class UserProfileService {
           this.getUserProfileCompleteness(userId)
         ]);
 
-      const profile = {
-        basicInfo: user,
+      const profile: Record<string, unknown> = {
+        basicInfo,
         socialLinks,
         education,
         workExperience,
         skills,
         interests,
         completeness,
-        privacy: this.getPrivacySettings(user),
-        lastUpdated: user.profile_updated_at || user.updated_at
+        privacy: this.getPrivacySettings(basicInfo),
+        lastUpdated: basicInfo.profile_updated_at || basicInfo.updated_at || null
       };
 
       // 记录查看日志
@@ -215,9 +239,9 @@ class UserProfileService {
   async getUserBasicInfo(
     userId: string,
     viewerId: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<BasicProfileInfo> {
     try {
-      const user = await db('users').where('id', userId).first();
+      const user = (await db('users').where('id', userId).first()) as UserRecord | undefined;
 
       if (!user) {
         throw AppError.create(ERROR_CODES.USER_NOT_FOUND, { userId });
@@ -225,9 +249,7 @@ class UserProfileService {
 
       // 检查隐私设置
       const isOwner = viewerId === userId;
-      const privacySettings = user.privacy_settings || {};
-
-      const publicInfo = {
+      const publicInfo: BasicProfileInfo = {
         id: user.id,
         username: user.username,
         first_name: user.first_name,
@@ -237,7 +259,12 @@ class UserProfileService {
         bio: user.bio,
         verification_level: user.verification_level,
         profile_updated_at: user.profile_updated_at,
-        created_at: user.created_at
+        updated_at: user.updated_at,
+        created_at: user.created_at,
+        profile_public: user.profile_public,
+        show_email: user.show_email,
+        show_phone: user.show_phone,
+        privacy_settings: user.privacy_settings || {}
       };
 
       // 如果是本人或资料公开，返回更多信息
@@ -313,7 +340,7 @@ class UserProfileService {
         'ui_preferences'
       ];
 
-      const filteredData = {};
+      const filteredData: Record<string, unknown> = {};
       for (const field of validFields) {
         if (updateData[field] !== undefined) {
           filteredData[field] = updateData[field];
@@ -580,7 +607,7 @@ class UserProfileService {
         .first();
 
       if (existingSkill) {
-        throw AppError.create(ERROR_CODES.DUPLICATE_RESOURCE, {
+        throw AppError.create(ERROR_CODES.DUPLICATE_VALUE, {
           message: '技能已存在'
         });
       }
@@ -1040,12 +1067,12 @@ class UserProfileService {
    */
   async calculateEducationScore(userId: string): Promise<number> {
     try {
-      const educationCount = await db('user_education')
+      const educationCount = (await db('user_education')
         .where('user_id', userId)
         .count('* as count')
-        .first();
+        .first()) as CountRow | undefined;
 
-      const count = parseInt(educationCount.count) || 0;
+      const count = parseCount(educationCount);
 
       if (count === 0) return 0;
       if (count === 1) return Math.round(this.completenessWeights.education * 0.6);
@@ -1064,12 +1091,12 @@ class UserProfileService {
    */
   async calculateWorkScore(userId: string): Promise<number> {
     try {
-      const workCount = await db('user_work_experience')
+      const workCount = (await db('user_work_experience')
         .where('user_id', userId)
         .count('* as count')
-        .first();
+        .first()) as CountRow | undefined;
 
-      const count = parseInt(workCount.count) || 0;
+      const count = parseCount(workCount);
 
       if (count === 0) return 0;
       if (count === 1) return Math.round(this.completenessWeights.work * 0.6);
@@ -1088,12 +1115,12 @@ class UserProfileService {
    */
   async calculateSkillsScore(userId: string): Promise<number> {
     try {
-      const skillCount = await db('user_skills')
+      const skillCount = (await db('user_skills')
         .where('user_id', userId)
         .count('* as count')
-        .first();
+        .first()) as CountRow | undefined;
 
-      const count = parseInt(skillCount.count) || 0;
+      const count = parseCount(skillCount);
 
       if (count === 0) return 0;
       if (count <= 3) return Math.round(this.completenessWeights.skills * 0.5);
@@ -1112,12 +1139,12 @@ class UserProfileService {
    */
   async calculateSocialScore(userId: string): Promise<number> {
     try {
-      const socialCount = await db('user_social_links')
+      const socialCount = (await db('user_social_links')
         .where('user_id', userId)
         .count('* as count')
-        .first();
+        .first()) as CountRow | undefined;
 
-      const count = parseInt(socialCount.count) || 0;
+      const count = parseCount(socialCount);
 
       if (count === 0) return 0;
       if (count === 1) return Math.round(this.completenessWeights.social * 0.4);
@@ -1286,11 +1313,11 @@ class UserProfileService {
    * @param user - 用户信息
    * @returns 隐私设置
    */
-  getPrivacySettings(user: UserRecord): Record<string, unknown> {
+  getPrivacySettings(user: BasicProfileInfo): Record<string, unknown> {
     return {
-      profile_public: user.profile_public,
-      show_email: user.show_email,
-      show_phone: user.show_phone,
+      profile_public: Boolean(user.profile_public),
+      show_email: Boolean(user.show_email),
+      show_phone: Boolean(user.show_phone),
       privacy_settings: user.privacy_settings || {}
     };
   }

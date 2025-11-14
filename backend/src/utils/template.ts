@@ -28,13 +28,14 @@ export function extractValue(obj: unknown, path: string): unknown {
 
   // 艹，支持点路径（如 user.profile.name）
   const keys = path.split('.');
-  let result = obj;
+  let result: unknown = obj;
 
   for (const key of keys) {
     if (result == null || typeof result !== 'object') {
       return undefined;
     }
-    result = result[key];
+    const record = result as Record<string, unknown>;
+    result = record[key];
   }
 
   return result;

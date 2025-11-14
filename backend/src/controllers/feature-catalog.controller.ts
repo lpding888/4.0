@@ -4,7 +4,11 @@ import logger from '../utils/logger.js';
 import AppError from '../utils/AppError.js';
 import { ERROR_CODES } from '../config/error-codes.js';
 import type { SupportedLanguageCode } from '../config/i18n-messages.js';
-import featureCatalogService from '../services/feature-catalog.service.js';
+import featureCatalogService, {
+  type FeatureUsageMetrics,
+  type FeatureUsageError,
+  type FeatureMetricValue
+} from '../services/feature-catalog.service.js';
 
 type FeatureListQuery = {
   category?: string;
@@ -59,6 +63,42 @@ const respondUnauthorized = (req: Request, res: Response): void => {
     },
     timestamp: timestamp()
   });
+};
+
+const sanitizeUsageMetrics = (metrics?: Record<string, unknown> | null): FeatureUsageMetrics => {
+  if (!metrics) {
+    return {};
+  }
+  const sanitized: FeatureUsageMetrics = {};
+  for (const [key, value] of Object.entries(metrics)) {
+    if (
+      value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
+      sanitized[key] = value as FeatureMetricValue;
+    }
+  }
+  return sanitized;
+};
+
+const sanitizeUsageError = (value: unknown): FeatureUsageError | undefined => {
+  if (value == null) {
+    return null;
+  }
+
+  const toRecord = (input: unknown): Record<string, unknown> | undefined =>
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : undefined;
+
+  if (Array.isArray(value)) {
+    const records = value.map(toRecord).filter((item): item is Record<string, unknown> => !!item);
+    return records.length > 0 ? records : undefined;
+  }
+
+  return toRecord(value) ?? undefined;
 };
 
 const respondNotFound = (req: Request, res: Response, code: number, fallback: string): void => {
@@ -430,12 +470,15 @@ class FeatureCatalogController {
 
       const normalizedStatus: 'success' | 'failed' = status === 'failed' ? 'failed' : 'success';
 
+      const sanitizedMetrics = sanitizeUsageMetrics(metrics);
+      const normalizedErrorDetails = sanitizeUsageError(errorDetails);
+
       await featureCatalogService.recordFeatureUsage(featureKey, req.user.id, {
         usageCount,
-        metrics,
+        metrics: sanitizedMetrics,
         cost,
         status: normalizedStatus,
-        errorDetails
+        errorDetails: normalizedErrorDetails
       });
 
       respondGenericSuccess(

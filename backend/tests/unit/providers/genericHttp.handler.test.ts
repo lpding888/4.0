@@ -6,7 +6,12 @@
 import axios from 'axios';
 import MockAdapter from 'axios-mock-adapter';
 import { GenericHttpProvider } from '../../../src/providers/handlers/genericHttp.handler.js';
-import { ExecContext, RetryPolicy, ProviderErrorCode } from '../../../src/providers/types.js';
+import {
+  ExecContext,
+  RetryPolicy,
+  ProviderErrorCode,
+  type ExecResult
+} from '../../../src/providers/types.js';
 import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
@@ -39,6 +44,12 @@ describe('GenericHTTP Provider - 单元测试', () => {
   let provider: GenericHttpProvider;
   let mockLogger: MockLogger;
   let mockAxios: MockAdapter;
+  type GenericHttpResult = {
+    statusCode: number;
+    body: unknown;
+    headers?: Record<string, unknown>;
+    fullResponse?: unknown;
+  };
 
   beforeEach(() => {
     mockLogger = new MockLogger();
@@ -52,6 +63,15 @@ describe('GenericHTTP Provider - 单元测试', () => {
     mockAxios.restore();
     mockLogger.clear();
   });
+
+  const executeProvider = (context: ExecContext) =>
+    provider.execute(context) as Promise<ExecResult<GenericHttpResult>>;
+
+  const expectSuccess = (result: ExecResult<GenericHttpResult>): GenericHttpResult => {
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    return result.data as GenericHttpResult;
+  };
 
   describe('参数校验', () => {
     test('应该拒绝空输入', () => {
@@ -113,11 +133,10 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data?.statusCode).toBe(200);
-      expect(result.data?.body).toEqual({ success: true, data: 'test-data' });
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.statusCode).toBe(200);
+      expect(data.body).toEqual({ success: true, data: 'test-data' });
     });
 
     test('应该替换URL中的变量', async () => {
@@ -139,10 +158,10 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data?.body.id).toBe(123);
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      const body = data.body as { id: number };
+      expect(body.id).toBe(123);
     });
 
     test('应该替换headers中的变量', async () => {
@@ -171,7 +190,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(true);
       expect(capturedHeaders?.['Authorization']).toBe('Bearer secret-token-123');
@@ -202,7 +221,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
       expect(result.success).toBe(true);
     });
   });
@@ -230,7 +249,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(true);
       expect(capturedBody.name).toBe('老王');
@@ -265,7 +284,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(true);
       expect(capturedBody.name).toBe('老王');
@@ -296,12 +315,11 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data?.body).toEqual({ id: 123, name: '老王' });
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.body).toEqual({ id: 123, name: '老王' });
       // fullResponse应该保留完整响应
-      expect(result.data?.fullResponse.success).toBe(true);
+      expect((data.fullResponse as { success: boolean }).success).toBe(true);
     });
 
     test('extractPath不存在时应该返回undefined', async () => {
@@ -320,10 +338,9 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data?.body).toBeUndefined();
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.body).toBeUndefined();
     });
   });
 
@@ -352,7 +369,8 @@ describe('GenericHTTP Provider - 单元测试', () => {
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_EXECUTION_FAILED);
       expect(result.error?.message).toContain('404');
-      expect(result.error?.details?.statusCode).toBe(404);
+      const errorDetails = result.error?.details as { statusCode?: number } | undefined;
+      expect(errorDetails?.statusCode).toBe(404);
     });
 
     test('应该处理5xx服务器错误', async () => {
@@ -423,7 +441,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe(ProviderErrorCode.ERR_PROVIDER_TIMEOUT);
@@ -459,7 +477,7 @@ describe('GenericHTTP Provider - 单元测试', () => {
         }
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(false);
       expect(attemptCount).toBeGreaterThan(1); // 应该有重试

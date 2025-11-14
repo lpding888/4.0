@@ -306,6 +306,13 @@ class APIClient {
       this.client.post<APIResponse>('/auth/reset-password', params),
 
     me: () => this.client.get<APIResponse>('/auth/me'),
+
+    // 邮箱登录相关
+    sendEmailCode: (email: string) =>
+      this.client.post<APIResponse>('/auth/send-email-code', { email }),
+
+    loginWithEmail: (email: string, code: string) =>
+      this.client.post<APIResponse>('/auth/login/email', { email, code }),
   };
 
   // 会员相关

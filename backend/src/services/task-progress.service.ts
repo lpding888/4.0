@@ -5,13 +5,36 @@ import cacheService from './cache.service.js';
 
 type AnyObject = Record<string, unknown>;
 
+type TaskProgressPayload = {
+  percentage: number;
+  currentStep: string;
+  totalSteps: number;
+  message: string;
+  eta: unknown;
+  details: AnyObject;
+  timestamp: number;
+};
+
 type PushQueueItem = {
   taskId: string;
-  progress: AnyObject;
+  progress: TaskProgressPayload;
   source: string;
   timestamp: number;
   targetUsers?: string[];
 };
+
+type UpdateProgressOptions = {
+  force?: boolean;
+  source?: string;
+};
+
+type OfflineMessage = {
+  type: string;
+  data: AnyObject;
+  timestamp: number;
+};
+
+type OfflineMessagePayload = Omit<OfflineMessage, 'timestamp'>;
 
 type TaskProgressStats = {
   totalPushes: number;
@@ -48,11 +71,11 @@ type TaskProgressConfig = {
 class TaskProgressService {
   private initialized = false;
 
-  private progressCache: Map<string, AnyObject>;
+  private progressCache: Map<string, TaskProgressPayload>;
 
   private subscribers: Map<string, Set<string>>;
 
-  private offlineMessages: Map<string, AnyObject[]>;
+  private offlineMessages: Map<string, OfflineMessage[]>;
 
   private config: TaskProgressConfig;
 
@@ -204,7 +227,7 @@ class TaskProgressService {
   async updateTaskProgress(
     taskId: string,
     progressData: AnyObject,
-    options: AnyObject = {}
+    options: UpdateProgressOptions = {}
   ): Promise<boolean> {
     try {
       const {
@@ -452,15 +475,24 @@ class TaskProgressService {
    * @returns {Object|null} 验证后的进度数据
    * @private
    */
-  validateProgressData(progressData: AnyObject): AnyObject | null {
+  validateProgressData(progressData: AnyObject): TaskProgressPayload | null {
     try {
+      const percentage = Number(progressData.percentage);
+      const normalizedPercentage = Number.isFinite(percentage)
+        ? Math.max(0, Math.min(100, percentage))
+        : 0;
       return {
-        percentage: Math.max(0, Math.min(100, parseInt(progressData.percentage) || 0)),
-        currentStep: progressData.currentStep || '',
-        totalSteps: progressData.totalSteps || 0,
-        message: progressData.message || '',
-        eta: progressData.eta || null,
-        details: progressData.details || {},
+        percentage: normalizedPercentage,
+        currentStep: typeof progressData.currentStep === 'string' ? progressData.currentStep : '',
+        totalSteps: Number.isFinite(Number(progressData.totalSteps))
+          ? Number(progressData.totalSteps)
+          : 0,
+        message: typeof progressData.message === 'string' ? progressData.message : '',
+        eta: progressData.eta ?? null,
+        details:
+          progressData.details && typeof progressData.details === 'object'
+            ? (progressData.details as AnyObject)
+            : {},
         timestamp: Date.now()
       };
     } catch (error) {
@@ -476,7 +508,10 @@ class TaskProgressService {
    * @returns {boolean} 是否应该推送
    * @private
    */
-  shouldPushProgress(currentProgress: AnyObject | undefined, newProgress: AnyObject): boolean {
+  shouldPushProgress(
+    currentProgress: TaskProgressPayload | undefined,
+    newProgress: TaskProgressPayload
+  ): boolean {
     if (!currentProgress) {
       return true; // 首次推送
     }
@@ -500,7 +535,11 @@ class TaskProgressService {
    * @returns {Promise<number>} 推送数量
    * @private
    */
-  async pushProgressToUser(userId: string, taskId: string, progress: AnyObject): Promise<number> {
+  async pushProgressToUser(
+    userId: string,
+    taskId: string,
+    progress: TaskProgressPayload
+  ): Promise<number> {
     try {
       const sent = websocketService.pushTaskProgress(userId, taskId, progress);
 
@@ -527,7 +566,7 @@ class TaskProgressService {
    * @param {Object} message - 消息内容
    * @private
    */
-  addOfflineMessage(userId: string, message: AnyObject): void {
+  addOfflineMessage(userId: string, message: OfflineMessagePayload): void {
     if (!this.offlineMessages.has(userId)) {
       this.offlineMessages.set(userId, []);
     }
@@ -537,10 +576,12 @@ class TaskProgressService {
       this.offlineMessages.set(userId, messages);
     }
 
-    messages.push({
+    const payload: OfflineMessage = {
       ...message,
       timestamp: Date.now()
-    });
+    };
+
+    messages.push(payload);
 
     // 限制消息数量
     if (messages.length > this.config.maxOfflineMessages) {
@@ -553,7 +594,7 @@ class TaskProgressService {
    * @param {string} userId - 用户ID
    * @returns {Array} 离线消息列表
    */
-  getUserOfflineMessages(userId: string): AnyObject[] {
+  getUserOfflineMessages(userId: string): OfflineMessage[] {
     const messages = this.offlineMessages.get(userId) ?? [];
     this.offlineMessages.set(userId, []); // 清空已获取的消息
     return messages;
@@ -566,7 +607,7 @@ class TaskProgressService {
    * @param {string} source - 推送来源
    * @private
    */
-  queuePush(taskId: string, progress: AnyObject, source: string): void {
+  queuePush(taskId: string, progress: TaskProgressPayload, source: string): void {
     this.pushQueue.push({
       taskId,
       progress,

@@ -631,6 +631,10 @@ class MCPEndpointsService {
         knex('mcp_endpoints').count('* as total').first()
       ]);
 
+      const statusRows = statusStats as Array<{
+        status: string;
+        count: string | number | bigint | null;
+      }>;
       const { endpoints } = await this.getEndpoints();
       const totalTools = endpoints.reduce((sum, ep) => sum + (ep.supportedTools?.length || 0), 0);
       const activeTools = endpoints
@@ -639,9 +643,9 @@ class MCPEndpointsService {
 
       return {
         total: (totalEndpoints?.total as number) || 0,
-        byStatus: statusStats.reduce(
-          (acc, row: Record<string, unknown>) => {
-            acc[row.status as string] = parseInt(String(row.count));
+        byStatus: statusRows.reduce(
+          (acc, row) => {
+            acc[row.status] = Number(row.count ?? 0);
             return acc;
           },
           {} as Record<string, number>

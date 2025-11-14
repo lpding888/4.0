@@ -37,6 +37,13 @@ type ProviderExecutor = {
 
 const FALLBACK_TIMEOUT = 30_000;
 
+const normalizeProviderOutput = (result: unknown): Record<string, unknown> => {
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return result as Record<string, unknown>;
+  }
+  return { result };
+};
+
 class PipelineEngine {
   async executePipeline(
     taskId: string,
@@ -216,8 +223,10 @@ class PipelineEngine {
       if (providerRegistryService.isProviderRegistered(type)) {
         logger.info(`[PipelineEngine] 使用注册的Provider type=${type}`);
         return {
-          execute: async (input, taskId) =>
-            providerRegistryService.execute(type, 'execute', [input, taskId])
+          execute: async (input, taskId) => {
+            const result = await providerRegistryService.execute(type, 'execute', [input, taskId]);
+            return normalizeProviderOutput(result);
+          }
         };
       }
 
@@ -242,7 +251,10 @@ class PipelineEngine {
       }
 
       return {
-        execute: (input, taskId) => providerInstance.execute(input, taskId)
+        execute: async (input, taskId) => {
+          const result = await providerInstance.execute(input, taskId);
+          return normalizeProviderOutput(result);
+        }
       };
     } catch (error) {
       logger.error(`[PipelineEngine] Provider加载失败 type=${type} ref=${providerRef}`, error);

@@ -19,63 +19,34 @@ type PasswordLoginForm = {
   password: string;
 };
 
-type SetPasswordForm = {
-  password: string;
-};
-
 type EmailLoginForm = {
   email: string;
   code: string;
 };
 
-type EmailRegisterForm = {
-  email: string;
-  code: string;
+type SetPasswordForm = {
   password: string;
-  confirmPassword: string;
 };
-
-type EmailResetForm = {
-  email: string;
-  code: string;
-  newPassword: string;
-  confirmPassword: string;
-};
-
-type EmailScene = 'login' | 'register' | 'reset';
 
 export default function LoginPage() {
   const [codeForm] = Form.useForm<CodeLoginForm>();
   const [passwordForm] = Form.useForm<PasswordLoginForm>();
+  const [emailForm] = Form.useForm<EmailLoginForm>();
   const [setPasswordForm] = Form.useForm<SetPasswordForm>();
-  const [emailLoginForm] = Form.useForm<EmailLoginForm>();
-  const [emailRegisterForm] = Form.useForm<EmailRegisterForm>();
-  const [emailResetForm] = Form.useForm<EmailResetForm>();
 
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
 
-  const [mode, setMode] = useState<'code' | 'password' | 'email-login' | 'email-register'>('code');
+  const [mode, setMode] = useState<'code' | 'password' | 'email'>('code');
   const [sendingCode, setSendingCode] = useState(false);
   const [codeCountdown, setCodeCountdown] = useState(0);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [emailCodeCountdown, setEmailCodeCountdown] = useState(0);
   const [codeLoading, setCodeLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [pwdModalOpen, setPwdModalOpen] = useState(false);
   const [settingPassword, setSettingPassword] = useState(false);
-  const [emailCountdowns, setEmailCountdowns] = useState<Record<EmailScene, number>>({
-    login: 0,
-    register: 0,
-    reset: 0,
-  });
-  const [emailSendingScene, setEmailSendingScene] = useState<EmailScene | null>(null);
-  const [emailLoginLoading, setEmailLoginLoading] = useState(false);
-  const [emailRegisterLoading, setEmailRegisterLoading] = useState(false);
-  const [resetModalOpen, setResetModalOpen] = useState(false);
-  const [resetSubmitting, setResetSubmitting] = useState(false);
-  const emailRules = [
-    { required: true, message: '请输入邮箱' },
-    { type: 'email' as const, message: '请输入有效的邮箱地址' }
-  ];
 
   useEffect(() => {
     if (codeCountdown <= 0) return;
@@ -84,22 +55,10 @@ export default function LoginPage() {
   }, [codeCountdown]);
 
   useEffect(() => {
-    if (!Object.values(emailCountdowns).some((value) => value > 0)) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setEmailCountdowns((prev) => {
-        const next = { ...prev };
-        (Object.keys(next) as EmailScene[]).forEach((key) => {
-          if (next[key] > 0) {
-            next[key] -= 1;
-          }
-        });
-        return next;
-      });
-    }, 1000);
+    if (emailCodeCountdown <= 0) return;
+    const timer = window.setTimeout(() => setEmailCodeCountdown((prev) => prev - 1), 1000);
     return () => window.clearTimeout(timer);
-  }, [emailCountdowns]);
+  }, [emailCodeCountdown]);
 
   const handleSendCode = async () => {
     try {
@@ -120,32 +79,6 @@ export default function LoginPage() {
       message.error(err?.message || '验证码发送失败');
     } finally {
       setSendingCode(false);
-    }
-  };
-
-  const handleSendEmailCode = async (scene: EmailScene) => {
-    const form =
-      scene === 'login' ? emailLoginForm : scene === 'register' ? emailRegisterForm : emailResetForm;
-    try {
-      await form.validateFields(['email']);
-      const email = form.getFieldValue('email');
-      if (!email) {
-        return;
-      }
-      setEmailSendingScene(scene);
-      const response: any = await api.auth.sendEmailCode(email, scene);
-      if (response?.success === false) {
-        throw new Error(response?.error?.message || '验证码发送失败');
-      }
-      message.success('验证码已发送');
-      setEmailCountdowns((prev) => ({ ...prev, [scene]: 60 }));
-    } catch (err: any) {
-      if (err?.errorFields) {
-        return;
-      }
-      message.error(err?.message || '验证码发送失败');
-    } finally {
-      setEmailSendingScene(null);
     }
   };
 
@@ -179,10 +112,32 @@ export default function LoginPage() {
     }
   };
 
+  const handleSendEmailCode = async () => {
+    try {
+      const email = emailForm.getFieldValue('email');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        message.error('请输入正确的邮箱地址');
+        return;
+      }
+      setSendingEmailCode(true);
+      const response: any = await api.auth.sendEmailCode(email);
+      if (response?.success) {
+        message.success('验证码已发送到邮箱');
+        setEmailCodeCountdown(60);
+      } else {
+        message.error(response?.error?.message || '验证码发送失败');
+      }
+    } catch (err: any) {
+      message.error(err?.message || '验证码发送失败');
+    } finally {
+      setSendingEmailCode(false);
+    }
+  };
+
   const onEmailLogin = async (values: EmailLoginForm) => {
     try {
-      setEmailLoginLoading(true);
-      const response: any = await api.auth.loginWithEmailCode(values.email, values.code);
+      setEmailLoading(true);
+      const response: any = await api.auth.loginWithEmail(values.email, values.code);
       if (!response?.success) {
         throw new Error(response?.error?.message || '登录失败，请重试');
       }
@@ -190,63 +145,8 @@ export default function LoginPage() {
     } catch (err: any) {
       message.error(err?.message || '登录失败，请重试');
     } finally {
-      setEmailLoginLoading(false);
+      setEmailLoading(false);
     }
-  };
-
-  const onEmailRegister = async (values: EmailRegisterForm) => {
-    if (values.password !== values.confirmPassword) {
-      message.error('两次输入的密码不一致');
-      return;
-    }
-    try {
-      setEmailRegisterLoading(true);
-      const response: any = await api.auth.registerWithEmail(
-        values.email,
-        values.code,
-        values.password
-      );
-      if (!response?.success) {
-        throw new Error(response?.error?.message || '注册失败，请重试');
-      }
-      handleLoginSuccess(response.data ?? response);
-    } catch (err: any) {
-      message.error(err?.message || '注册失败，请重试');
-    } finally {
-      setEmailRegisterLoading(false);
-    }
-  };
-
-  const onEmailReset = async (values: EmailResetForm) => {
-    if (values.newPassword !== values.confirmPassword) {
-      message.error('两次输入的密码不一致');
-      return;
-    }
-    try {
-      setResetSubmitting(true);
-      const response: any = await api.auth.resetPassword({
-        email: values.email,
-        code: values.code,
-        newPassword: values.newPassword
-      });
-      if (response?.success === false) {
-        throw new Error(response?.error?.message || '密码重置失败');
-      }
-      message.success(response?.message || '密码重置成功');
-      setResetModalOpen(false);
-      emailResetForm.resetFields();
-      setEmailCountdowns((prev) => ({ ...prev, reset: 0 }));
-    } catch (err: any) {
-      message.error(err?.message || '密码重置失败，请重试');
-    } finally {
-      setResetSubmitting(false);
-    }
-  };
-
-  const openResetModal = () => {
-    emailResetForm.resetFields();
-    setEmailCountdowns((prev) => ({ ...prev, reset: 0 }));
-    setResetModalOpen(true);
   };
 
   const handleLoginSuccess = (payload: any) => {
@@ -323,14 +223,12 @@ export default function LoginPage() {
           <Title level={2} style={{ marginBottom: 8 }}>
             AI服装处理平台
           </Title>
-          <Text type="secondary">手机号 / 邮箱验证码或密码任你选，首次登录可立即设置密码</Text>
+          <Text type="secondary">验证码 / 密码任你选，首次登录可立即设置密码</Text>
         </div>
 
         <Tabs
           activeKey={mode}
-          onChange={(key) =>
-            setMode(key as 'code' | 'password' | 'email-login' | 'email-register')
-          }
+          onChange={(key) => setMode(key as 'code' | 'password')}
           items={[
             {
               key: 'code',
@@ -475,7 +373,7 @@ export default function LoginPage() {
                     >
                       使用验证码登录
                     </Button>
-                    <Button type="link" onClick={openResetModal} style={{ padding: 0 }}>
+                    <Button type="link" href="/reset-password" style={{ padding: 0 }}>
                       忘记密码？
                     </Button>
                   </div>
@@ -483,166 +381,88 @@ export default function LoginPage() {
               ),
             },
             {
-              key: 'email-login',
+              key: 'email',
               label: '邮箱登录',
               children: (
                 <Form
                   layout="vertical"
-                  form={emailLoginForm}
+                  form={emailForm}
                   onFinish={onEmailLogin}
                   autoComplete="off"
                 >
-                  <Form.Item name="email" label="邮箱" rules={emailRules}>
+                  <Form.Item
+                    name="email"
+                    label="邮箱"
+                    rules={[
+                      { required: true, message: '请输入邮箱' },
+                      {
+                        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                        message: '请输入正确的邮箱地址',
+                      },
+                    ]}
+                  >
                     <Input
                       prefix={<MailOutlined />}
-                      placeholder="请输入邮箱"
-                      autoComplete="email"
+                      placeholder="请输入邮箱地址"
                     />
                   </Form.Item>
-                  <Form.Item label="验证码" required>
-                    <Input.Group compact>
-                      <Form.Item
-                        name="code"
-                        noStyle
-                        rules={[
-                          { required: true, message: '请输入验证码' },
-                          {
-                            pattern: /^\d{6}$/,
-                            message: '验证码为6位数字',
-                          },
-                        ]}
-                      >
-                        <Input
-                          placeholder="请输入6位验证码"
-                          maxLength={6}
-                          style={{ width: '60%' }}
-                        />
-                      </Form.Item>
-                      <Button
-                        style={{ width: '40%' }}
-                        onClick={() => handleSendEmailCode('login')}
-                        disabled={emailCountdowns.login > 0}
-                        loading={emailSendingScene === 'login'}
-                      >
-                        {emailCountdowns.login > 0
-                          ? `${emailCountdowns.login}秒后重试`
-                          : '发送验证码'}
-                      </Button>
-                    </Input.Group>
+
+                  <Form.Item
+                    name="code"
+                    label="验证码"
+                    rules={[
+                      { required: true, message: '请输入验证码' },
+                      {
+                        pattern: /^\d{6}$/,
+                        message: '验证码为6位数字',
+                      },
+                    ]}
+                  >
+                    <Input
+                      prefix={<SafetyOutlined />}
+                      placeholder="请输入6位验证码"
+                      maxLength={6}
+                    />
                   </Form.Item>
+
+                  <Form.Item>
+                    <Button
+                      block
+                      onClick={handleSendEmailCode}
+                      disabled={emailCodeCountdown > 0}
+                      loading={sendingEmailCode}
+                    >
+                      {emailCodeCountdown > 0
+                        ? `${emailCodeCountdown}秒后重试`
+                        : '获取验证码'}
+                    </Button>
+                  </Form.Item>
+
                   <Form.Item>
                     <Button
                       type="primary"
                       htmlType="submit"
-                      loading={emailLoginLoading}
+                      loading={emailLoading}
                       block
                     >
                       登录
                     </Button>
                   </Form.Item>
-                </Form>
-              ),
-            },
-            {
-              key: 'email-register',
-              label: '邮箱注册',
-              children: (
-                <Form
-                  layout="vertical"
-                  form={emailRegisterForm}
-                  onFinish={onEmailRegister}
-                  autoComplete="off"
-                >
-                  <Form.Item name="email" label="邮箱" rules={emailRules}>
-                    <Input
-                      prefix={<MailOutlined />}
-                      placeholder="请输入常用邮箱"
-                      autoComplete="email"
-                    />
-                  </Form.Item>
-                  <Form.Item label="验证码" required>
-                    <Input.Group compact>
-                      <Form.Item
-                        name="code"
-                        noStyle
-                        rules={[
-                          { required: true, message: '请输入验证码' },
-                          {
-                            pattern: /^\d{6}$/,
-                            message: '验证码为6位数字',
-                          },
-                        ]}
-                      >
-                        <Input
-                          placeholder="请输入6位验证码"
-                          maxLength={6}
-                          style={{ width: '60%' }}
-                        />
-                      </Form.Item>
-                      <Button
-                        style={{ width: '40%' }}
-                        onClick={() => handleSendEmailCode('register')}
-                        disabled={emailCountdowns.register > 0}
-                        loading={emailSendingScene === 'register'}
-                      >
-                        {emailCountdowns.register > 0
-                          ? `${emailCountdowns.register}秒后重试`
-                          : '发送验证码'}
-                      </Button>
-                    </Input.Group>
-                  </Form.Item>
-                  <Form.Item
-                    name="password"
-                    label="设置密码"
-                    rules={[
-                      { required: true, message: '请输入密码' },
-                      { min: 6, message: '密码不少于6位' },
-                    ]}
-                  >
-                    <Input.Password
-                      prefix={<LockOutlined />}
-                      placeholder="请输入至少6位的密码"
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    name="confirmPassword"
-                    label="确认密码"
-                    dependencies={['password']}
-                    rules={[
-                      { required: true, message: '请再次输入密码' },
-                      ({ getFieldValue }) => ({
-                        validator(_, value) {
-                          if (!value || getFieldValue('password') === value) {
-                            return Promise.resolve();
-                          }
-                          return Promise.reject(new Error('两次输入的密码不一致'));
-                        },
-                      }),
-                    ]}
-                  >
-                    <Input.Password placeholder="请再次输入密码" />
-                  </Form.Item>
-                  <Form.Item>
+
+                  <div style={{ textAlign: 'right' }}>
                     <Button
-                      type="primary"
-                      htmlType="submit"
-                      loading={emailRegisterLoading}
-                      block
+                      type="link"
+                      onClick={() => setMode('code')}
+                      style={{ padding: 0 }}
                     >
-                      注册并登录
+                      使用手机号登录
                     </Button>
-                  </Form.Item>
+                  </div>
                 </Form>
               ),
             },
           ]}
         />
-
-        <div style={{ textAlign: 'right', marginTop: 8 }}>
-          <Button type="link" onClick={openResetModal} style={{ padding: 0 }}>
-            使用邮箱验证码重置密码
-          </Button>
-        </div>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>
@@ -662,7 +482,7 @@ export default function LoginPage() {
           <Text type="secondary" style={{ fontSize: '13px' }}>
             <strong>提示:</strong>
             <br />
-            • 手机/邮箱验证码1分钟内仅可发送1次，注意查收
+            • 验证码1分钟内最多发送5次
             <br />
             • 首次登录将自动注册账号
             <br />
@@ -670,85 +490,6 @@ export default function LoginPage() {
           </Text>
         </div>
       </Card>
-
-      <Modal
-        title="邮箱验证码重置密码"
-        open={resetModalOpen}
-        onCancel={() => setResetModalOpen(false)}
-        okText="重置密码"
-        onOk={() => emailResetForm.submit()}
-        confirmLoading={resetSubmitting}
-        destroyOnClose
-      >
-        <Form layout="vertical" form={emailResetForm} onFinish={onEmailReset}>
-          <Form.Item name="email" label="邮箱" rules={emailRules}>
-            <Input
-              prefix={<MailOutlined />}
-              placeholder="请输入注册邮箱"
-              autoComplete="email"
-            />
-          </Form.Item>
-          <Form.Item label="验证码" required>
-            <Input.Group compact>
-              <Form.Item
-                name="code"
-                noStyle
-                rules={[
-                  { required: true, message: '请输入验证码' },
-                  { pattern: /^\d{6}$/, message: '验证码为6位数字' }
-                ]}
-              >
-                <Input
-                  placeholder="请输入6位验证码"
-                  maxLength={6}
-                  style={{ width: '60%' }}
-                />
-              </Form.Item>
-              <Button
-                style={{ width: '40%' }}
-                onClick={() => handleSendEmailCode('reset')}
-                disabled={emailCountdowns.reset > 0}
-                loading={emailSendingScene === 'reset'}
-              >
-                {emailCountdowns.reset > 0
-                  ? `${emailCountdowns.reset}秒后重试`
-                  : '发送验证码'}
-              </Button>
-            </Input.Group>
-          </Form.Item>
-          <Form.Item
-            name="newPassword"
-            label="新密码"
-            rules={[
-              { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码不少于6位' }
-            ]}
-          >
-            <Input.Password
-              prefix={<LockOutlined />}
-              placeholder="请输入至少6位的新密码"
-            />
-          </Form.Item>
-          <Form.Item
-            name="confirmPassword"
-            label="确认新密码"
-            dependencies={['newPassword']}
-            rules={[
-              { required: true, message: '请再次输入密码' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('newPassword') === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('两次输入的密码不一致'));
-                }
-              })
-            ]}
-          >
-            <Input.Password placeholder="请再次输入新密码" />
-          </Form.Item>
-        </Form>
-      </Modal>
 
       <Modal
         title="设置密码"

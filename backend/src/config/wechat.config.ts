@@ -299,3 +299,14 @@ export const verifyWechatState = (state: string, maxAge = 10 * 60 * 1000): boole
     return false;
   }
 };
+
+const wechatConfigService = {
+  common: wechatConfig.common,
+  getConfig: getWechatConfig,
+  validateConfig: validateWechatConfig,
+  getApiUrl: getWechatApiUrl,
+  generateState: generateWechatState,
+  verifyState: verifyWechatState
+};
+
+export default wechatConfigService;

@@ -288,7 +288,7 @@ class QueueService {
       data: j.data,
       opts: j.options || {}
     }));
-    const added = await queue.addBulk(bulk as BulkJobOptions[]);
+    const added = await queue.addBulk(bulk);
     this.stats.totalQueued += added.length;
     logger.info(`[QueueService] 批量添加任务: ${queueName}, 数量: ${added.length}`);
     return added;

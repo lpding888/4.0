@@ -366,14 +366,22 @@ class WechatLoginService {
 
       if (unionid) {
         // 优先通过unionid查找用户
-        const foundUser = await db('users').where('wechat_unionid', unionid).first();
-        user = foundUser as UserLoginData | undefined;
+        const foundUser = (await db('users').where('wechat_unionid', unionid).first()) as
+          | UserLoginData
+          | undefined;
+        if (foundUser) {
+          user = foundUser;
+        }
       }
 
       if (!user && openid) {
         // 通过openid查找用户
-        const foundUser = await db('users').where('wechat_openid', openid).first();
-        user = foundUser as UserLoginData | undefined;
+        const foundUser = (await db('users').where('wechat_openid', openid).first()) as
+          | UserLoginData
+          | undefined;
+        if (foundUser) {
+          user = foundUser;
+        }
       }
 
       if (!user) {
@@ -504,8 +512,8 @@ class WechatLoginService {
         id: userId,
         email: userData.email,
         username: userData.username,
-        wechat_nickname: userData.wechat_nickname,
-        wechat_avatar: userData.wechat_avatar,
+        wechat_nickname: userData.wechat_nickname ?? undefined,
+        wechat_avatar: userData.wechat_avatar ?? undefined,
         role: userData.role,
         isMember: userData.isMember,
         quota_remaining: userData.quota_remaining,

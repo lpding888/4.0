@@ -84,7 +84,17 @@ class VideoPollingService {
         await this.handleTimeoutTask(task);
         return;
       }
-      const statusResult = await videoGenerateService.pollVideoStatus(task.vendorTaskId);
+      const vendorTaskId = task.vendorTaskId;
+      if (!vendorTaskId) {
+        logger.warn(`[VideoPollingService] 任务缺少第三方ID，标记为失败 taskId=${task.id}`);
+        await this.handleFailedTask(task, {
+          vendorTaskId: '',
+          status: 'failed',
+          errorMessage: '缺少第三方任务ID'
+        });
+        return;
+      }
+      const statusResult = await videoGenerateService.pollVideoStatus(vendorTaskId);
       switch (statusResult.status) {
         case 'success':
           await this.handleSuccessTask(task, statusResult);
@@ -116,6 +126,9 @@ class VideoPollingService {
       logger.info(
         `[VideoPollingService] 处理成功任务 taskId=${task.id} videoUrl=${statusResult.videoUrl}`
       );
+      if (!statusResult.videoUrl) {
+        throw new Error('视频地址不存在');
+      }
       const cosResult = await this.downloadVideoToCOS(task, statusResult.videoUrl);
       await db('tasks')
         .where('id', task.id)

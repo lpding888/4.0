@@ -4,7 +4,12 @@
  */
 
 import { ScfProvider } from '../../../src/providers/handlers/scf.handler.js';
-import { ExecContext, RetryPolicy, ProviderErrorCode } from '../../../src/providers/types.js';
+import {
+  ExecContext,
+  RetryPolicy,
+  ProviderErrorCode,
+  type ExecResult
+} from '../../../src/providers/types.js';
 import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
@@ -61,6 +66,14 @@ jest.mock('tencentcloud-sdk-nodejs', () => {
 describe('SCF Provider - 单元测试', () => {
   let provider: ScfProvider;
   let mockLogger: MockLogger;
+  type ScfResultPayload = {
+    invokeType: string;
+    functionName: string;
+    requestId: string;
+    result: unknown;
+    namespace?: string;
+    qualifier?: string;
+  };
 
   beforeEach(() => {
     mockLogger = new MockLogger();
@@ -79,6 +92,15 @@ describe('SCF Provider - 单元测试', () => {
   afterEach(() => {
     mockLogger.clear();
   });
+
+  const executeProvider = (context: ExecContext) =>
+    provider.execute(context) as Promise<ExecResult<ScfResultPayload>>;
+
+  const expectSuccess = (result: ExecResult<ScfResultPayload>): ScfResultPayload => {
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    return result.data as ScfResultPayload;
+  };
 
   describe('参数校验', () => {
     test('应该拒绝空输入', () => {
@@ -220,15 +242,14 @@ describe('SCF Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 验证结果
-      expect(result.success).toBe(true);
-      expect(result.data).toBeDefined();
-      expect(result.data.invokeType).toBe('sync');
-      expect(result.data.functionName).toBe('test-function');
-      expect(result.data.requestId).toBe('test-request-id-123');
-      expect(result.data.result).toEqual({ success: true, data: 'test-result' });
+      const data = expectSuccess(result);
+      expect(data.invokeType).toBe('sync');
+      expect(data.functionName).toBe('test-function');
+      expect(data.requestId).toBe('test-request-id-123');
+      expect(data.result).toEqual({ success: true, data: 'test-result' });
 
       // 验证SCF客户端被正确调用
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
@@ -258,7 +279,7 @@ describe('SCF Provider - 单元测试', () => {
         input
       };
 
-      await provider.execute(context);
+      await executeProvider(context);
 
       // 验证payload被转成JSON字符串
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
@@ -285,11 +306,10 @@ describe('SCF Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.namespace).toBe('custom-ns');
-      expect(result.data.qualifier).toBe('v1.0.0');
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.namespace).toBe('custom-ns');
+      expect(data.qualifier).toBe('v1.0.0');
 
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -320,12 +340,12 @@ describe('SCF Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 验证结果
-      expect(result.success).toBe(true);
-      expect(result.data.invokeType).toBe('async');
-      expect(result.data.result.message).toContain('异步调用已提交');
+      const data = expectSuccess(result);
+      expect(data.invokeType).toBe('async');
+      expect((data.result as { message: string }).message).toContain('异步调用已提交');
 
       // 验证SCF客户端调用类型
       expect(mockScfClient.Invoke).toHaveBeenCalledWith(
@@ -367,7 +387,8 @@ describe('SCF Provider - 单元测试', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       expect(result.error!.message).toContain('认证失败');
-      expect(result.error!.details.category).toBe('auth');
+      const details = result.error?.details as { category?: string } | undefined;
+      expect(details?.category).toBe('auth');
     });
 
     test('应该处理权限不足错误', async () => {
@@ -398,7 +419,8 @@ describe('SCF Provider - 单元测试', () => {
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('权限不足');
-      expect(result.error!.details.category).toBe('permission');
+      const permDetails = result.error?.details as { category?: string } | undefined;
+      expect(permDetails?.category).toBe('permission');
     });
 
     test('应该处理参数错误', async () => {
@@ -421,11 +443,12 @@ describe('SCF Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       expect(result.success).toBe(false);
       expect(result.error!.code).toBe(ProviderErrorCode.ERR_PROVIDER_VALIDATION_FAILED);
-      expect(result.error!.details.category).toBe('parameter');
+      const paramDetails = result.error?.details as { category?: string } | undefined;
+      expect(paramDetails?.category).toBe('parameter');
     });
 
     test('应该处理资源不存在错误', async () => {
@@ -456,7 +479,8 @@ describe('SCF Provider - 单元测试', () => {
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('资源不存在');
-      expect(result.error!.details.category).toBe('not_found');
+      const notFoundDetails = result.error?.details as { category?: string } | undefined;
+      expect(notFoundDetails?.category).toBe('not_found');
     });
 
     test('应该处理内部错误（可重试）', async () => {
@@ -487,8 +511,9 @@ describe('SCF Provider - 单元测试', () => {
 
       expect(result.success).toBe(false);
       expect(result.error!.message).toContain('内部错误');
-      expect(result.error!.details.category).toBe('internal');
-      expect(result.error!.details.retryable).toBe(true);
+      const internalDetails = result.error?.details as { category?: string; retryable?: boolean } | undefined;
+      expect(internalDetails?.category).toBe('internal');
+      expect(internalDetails?.retryable).toBe(true);
     });
   });
 

@@ -1,0 +1,173 @@
+# ============================
+# AI照 Prometheus 告警规则
+# ============================
+# 艹！定义关键告警，及时发现问题
+
+groups:
+  # ========== API性能告警 ==========
+  - name: api_performance
+    interval: 30s
+    rules:
+      # 艹！API错误率过高告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(aiphoto_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(aiphoto_http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API错误率过高"
+          description: "5XX错误率超过5%，当前值{{ $value | humanizePercentage }}"
+
+      # 艹！API延迟过高告警
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(aiphoto_http_request_duration_seconds_bucket[5m])
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API延迟过高"
+          description: "P95延迟超过3秒，当前值{{ $value }}秒"
+
+  # ========== 任务队列告警 ==========
+  - name: task_queue
+    interval: 30s
+    rules:
+      # 艹！任务失败率过高
+      - alert: HighTaskFailureRate
+        expr: |
+          (
+            sum(rate(aiphoto_task_failed_total[5m]))
+            /
+            sum(rate(aiphoto_task_created_total[5m]))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "任务失败率过高"
+          description: "任务失败率超过10%，当前值{{ $value | humanizePercentage }}"
+
+      # 艹！任务积压过多
+      - alert: TaskQueueBacklog
+        expr: aiphoto_active_tasks > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "任务队列积压"
+          description: "活跃任务数超过100，当前值{{ $value }}"
+
+  # ========== 数据库性能告警 ==========
+  - name: database_performance
+    interval: 30s
+    rules:
+      # 艹！慢查询过多
+      - alert: HighSlowQueries
+        expr: rate(aiphoto_db_slow_queries_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "慢查询频率过高"
+          description: "每秒慢查询超过1次，当前值{{ $value }}/s"
+
+      # 艹！数据库查询延迟过高
+      - alert: HighDbLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(aiphoto_db_query_duration_seconds_bucket[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "数据库查询延迟过高"
+          description: "P95延迟超过1秒，当前值{{ $value }}秒"
+
+  # ========== 系统资源告警 ==========
+  - name: system_resources
+    interval: 30s
+    rules:
+      # 艹！Node.js进程内存过高
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job="backend"}
+            /
+            (1024 * 1024 * 1024)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node.js进程内存过高"
+          description: "进程内存超过2GB，当前值{{ $value }}GB"
+
+      # 艹！事件循环延迟过高
+      - alert: HighEventLoopLag
+        expr: nodejs_eventloop_lag_seconds > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "事件循环延迟过高"
+          description: "事件循环延迟超过1秒，当前值{{ $value }}秒"
+
+  # ========== AI服务告警 ==========
+  - name: ai_services
+    interval: 30s
+    rules:
+      # 艹！AI API失败率过高
+      - alert: HighAiApiFailureRate
+        expr: |
+          (
+            sum(rate(aiphoto_ai_api_requests_total{result="failure"}[5m]))
+            /
+            sum(rate(aiphoto_ai_api_requests_total[5m]))
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI服务失败率过高"
+          description: "AI API失败率超过20%，当前值{{ $value | humanizePercentage }}"
+
+      # 艹！AI API延迟过高
+      - alert: HighAiApiLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(aiphoto_ai_api_latency_seconds_bucket[5m])
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI服务延迟过高"
+          description: "AI API P95延迟超过10秒，当前值{{ $value }}秒"
+
+  # ========== 配额系统告警 ==========
+  - name: quota_system
+    interval: 30s
+    rules:
+      # 艹！配额操作失败率过高
+      - alert: HighQuotaFailureRate
+        expr: |
+          (
+            sum(rate(aiphoto_quota_events_total{result="failure"}[5m]))
+            /
+            sum(rate(aiphoto_quota_events_total[5m]))
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "配额操作失败率过高"
+          description: "配额操作失败率超过5%，当前值{{ $value | humanizePercentage }}"

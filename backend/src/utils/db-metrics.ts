@@ -136,6 +136,24 @@ export interface MetricsReport {
   };
 }
 
+type PoolWithEvents = {
+  on: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
+type ExplainRow = {
+  id: number;
+  select_type: string;
+  table: string | null;
+  type: string | null;
+  possible_keys: string | null;
+  key: string | null;
+  key_len: number | null;
+  ref: string | null;
+  rows: number;
+  filtered: number | null;
+  extra: string | null;
+};
+
 /**
  * 数据库监控指标类
  * 艹，这个类负责所有数据库性能监控！
@@ -177,9 +195,8 @@ class DatabaseMetrics {
     const knexClient = db as unknown;
     if (knexClient && typeof knexClient === 'object' && 'client' in knexClient) {
       const client = (knexClient as { client?: { pool?: unknown } }).client;
-      if (client && 'pool' in client && client.pool) {
-        const pool = client.pool;
-
+      const pool = client?.pool as PoolWithEvents | undefined;
+      if (pool) {
         pool.on('acquire', (connection: unknown) => {
           this.metrics.connections.active++;
           this.metrics.connections.idle--;
@@ -331,30 +348,31 @@ class DatabaseMetrics {
    * @param row - EXPLAIN查询结果
    */
   private analyzeExplainResult(row: Record<string, unknown>): ExplainAnalysis {
+    const normalized = this.normalizeExplainRow(row);
     return {
-      id: row.id,
-      select_type: row.select_type,
-      table: row.table,
-      type: row.type,
-      possible_keys: row.possible_keys,
-      key: row.key,
-      key_len: row.key_len,
-      ref: row.ref,
-      rows: row.rows,
-      filtered: row.filtered,
-      extra: row.extra,
+      id: normalized.id,
+      select_type: normalized.select_type,
+      table: normalized.table ?? 'unknown',
+      type: normalized.type ?? 'UNKNOWN',
+      possible_keys: normalized.possible_keys,
+      key: normalized.key,
+      key_len: normalized.key_len,
+      ref: normalized.ref,
+      rows: normalized.rows,
+      filtered: normalized.filtered,
+      extra: normalized.extra,
       // 分析结果
-      queryType: this.classifyQuery(row),
-      indexUsage: this.analyzeIndexUsage(row),
-      performance: this.analyzePerformance(row),
-      recommendations: this.generateRecommendations(row)
+      queryType: this.classifyQuery(normalized),
+      indexUsage: this.analyzeIndexUsage(normalized),
+      performance: this.analyzePerformance(normalized),
+      recommendations: this.generateRecommendations(normalized)
     };
   }
 
   /**
    * 分类查询类型
    */
-  private classifyQuery(row: Record<string, unknown>): string {
+  private classifyQuery(row: ExplainRow): string {
     const extra = row.extra || '';
 
     if (extra.includes('Using where') && extra.includes('Using index')) {
@@ -375,7 +393,7 @@ class DatabaseMetrics {
   /**
    * 分析索引使用情况
    */
-  private analyzeIndexUsage(row: Record<string, unknown>): ExplainAnalysis['indexUsage'] {
+  private analyzeIndexUsage(row: ExplainRow): ExplainAnalysis['indexUsage'] {
     if (!row.key) {
       return {
         usingIndex: false,
@@ -396,15 +414,15 @@ class DatabaseMetrics {
             : efficiency > 0.3
               ? 'medium'
               : 'poor',
-      indexName: row.key,
-      keyLen: row.key_len
+      indexName: row.key ?? undefined,
+      keyLen: row.key_len ?? undefined
     };
   }
 
   /**
    * 估算期望的键长度
    */
-  private getExpectedKeyLength(row: Record<string, unknown>): number {
+  private getExpectedKeyLength(row: ExplainRow): number {
     // 简单的启发式估算
     if (row.table === 'users') return 20;
     if (row.table === 'tasks') return 32;
@@ -415,8 +433,8 @@ class DatabaseMetrics {
   /**
    * 分析性能
    */
-  private analyzePerformance(row: Record<string, unknown>): ExplainAnalysis['performance'] {
-    const estimatedRows = parseInt(row.rows) || 0;
+  private analyzePerformance(row: ExplainRow): ExplainAnalysis['performance'] {
+    const estimatedRows = row.rows || 0;
 
     if (estimatedRows === 0) {
       return { level: 'excellent', reason: 'empty-result' };
@@ -434,9 +452,7 @@ class DatabaseMetrics {
   /**
    * 生成优化建议
    */
-  private generateRecommendations(
-    row: Record<string, unknown>
-  ): ExplainAnalysis['recommendations'] {
+  private generateRecommendations(row: ExplainRow): ExplainAnalysis['recommendations'] {
     const recommendations: ExplainAnalysis['recommendations'] = [];
     const extra = row.extra || '';
 
@@ -491,6 +507,55 @@ class DatabaseMetrics {
       .reduce((acc, char) => {
         return ((acc << 5) - acc + char.charCodeAt(0)) & 0xffffffff;
       }, 0);
+  }
+
+  private normalizeExplainRow(row: Record<string, unknown>): ExplainRow {
+    return {
+      id: this.toNumber(row.id),
+      select_type: this.toString(row.select_type, 'UNKNOWN'),
+      table: this.toStringOrNull(row.table),
+      type: this.toStringOrNull(row.type),
+      possible_keys: this.toStringOrNull(row.possible_keys),
+      key: this.toStringOrNull(row.key),
+      key_len: this.toNumberOrNull(row.key_len),
+      ref: this.toStringOrNull(row.ref),
+      rows: this.toNumber(row.rows),
+      filtered: this.toNumberOrNull(row.filtered),
+      extra: this.toStringOrNull(row.extra)
+    };
+  }
+
+  private toNumber(value: unknown, fallback = 0): number {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    return fallback;
+  }
+
+  private toNumberOrNull(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  }
+
+  private toString(value: unknown, fallback = ''): string {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+    return fallback;
+  }
+
+  private toStringOrNull(value: unknown): string | null {
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+    return null;
   }
 
   /**

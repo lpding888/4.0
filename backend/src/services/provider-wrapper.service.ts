@@ -229,8 +229,9 @@ class ProviderWrapperService {
   async healthCheck(): Promise<HealthCheckResponse> {
     try {
       const states = this.getAllProviderStates();
+      const activeProviders = states.activeProviders ?? 0;
       return {
-        status: states.activeProviders > 0 ? 'healthy' : 'degraded',
+        status: activeProviders > 0 ? 'healthy' : 'degraded',
         ...states
       };
     } catch (error: unknown) {

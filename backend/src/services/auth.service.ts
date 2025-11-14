@@ -34,15 +34,15 @@ export interface AuthResult extends TokenPair {
 
 export interface AuthProvider {
   sendCode(phone: string, ip: string): Promise<{ expireIn: number }>;
+  sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }>;
   loginWithCode(phone: string, code: string, referrerId?: string | null): Promise<AuthResult>;
+  loginWithEmailCode(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
   loginWithPassword(phone: string, password: string): Promise<AuthResult>;
   registerWithPassword(
     phone: string,
     password: string,
     referrerId?: string | null
   ): Promise<AuthResult>;
-  sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }>;
-  loginWithEmailCode(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
   registerWithEmail(
     email: string,
     code: string,
@@ -188,6 +188,9 @@ class AuthService implements AuthProvider {
   }
 
   /**
+   * 邮箱防刷限制检查
+   */
+  /**
    * 发送短信验证码
    * 艹，生产环境要对接腾讯云短信！
    */
@@ -249,11 +252,15 @@ class AuthService implements AuthProvider {
       user = await db('users').where('phone', phone).first();
     }
 
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
     // 3. 标记验证码已使用
     await this.markCodeUsed(record.id);
 
     // 4. 生成双Token对
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
     logger.info(`[AuthService] 用户登录成功: userId=${user.id}, phone=${phone}`);
 
@@ -285,7 +292,7 @@ class AuthService implements AuthProvider {
     }
 
     // 3. 生成Token对
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
     logger.info(`[AuthService] 密码登录成功: userId=${user.id}, phone=${phone}`);
 
@@ -325,7 +332,7 @@ class AuthService implements AuthProvider {
     });
 
     // 4. 生成Token
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user as userRepo.User));
 
     logger.info(`[AuthService] 用户注册成功: userId=${user.id}, phone=${phone}`);
 
@@ -416,10 +423,14 @@ class AuthService implements AuthProvider {
       user = await userRepo.findUserById(user.id);
     }
 
+    if (!user) {
+      throw new Error('邮箱用户创建失败');
+    }
+
     await this.markCodeUsed(record.id);
     await cacheService.delete(`email:${normalized}`);
 
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
     logger.info(`[AuthService] 邮箱验证码登录成功: email=${normalized}, userId=${user?.id}`);
 
     return {
@@ -472,7 +483,7 @@ class AuthService implements AuthProvider {
     await this.markCodeUsed(record.id);
     await cacheService.delete(`email:${normalized}`);
 
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
     logger.info(`[AuthService] 邮箱注册成功: email=${normalized}, userId=${user.id}`);
 
     return {
@@ -508,6 +519,14 @@ class AuthService implements AuthProvider {
 
   private isValidEmail(email: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  private buildTokenUser(user: userRepo.User): UserForToken {
+    return {
+      id: user.id,
+      role: user.role,
+      phone: user.phone ?? undefined
+    };
   }
 
   private async verifyEmailCode(email: string, code: string): Promise<VerificationCodeRecord> {
@@ -676,7 +695,7 @@ class AuthService implements AuthProvider {
       }
 
       // 3. 生成访问令牌
-      const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+      const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
       logger.info(`微信登录成功: userId=${user.id}, openid=${openid}`);
 

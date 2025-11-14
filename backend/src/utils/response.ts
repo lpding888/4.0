@@ -44,15 +44,16 @@ export interface PaginatedResponse<T = unknown> {
  * 创建成功响应
  */
 export function createSuccessResponse<T = unknown>(
-  data: T = null as unknown,
+  data?: T,
   message: string = '操作成功',
   code: number = 200
-): SuccessResponse<T> {
+): SuccessResponse<T | null> {
+  const payload = (data === undefined ? null : data) as T | null;
   return {
     success: true,
     code,
     message,
-    data,
+    data: payload,
     timestamp: new Date().toISOString()
   };
 }
