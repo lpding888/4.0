@@ -142,7 +142,7 @@ export class AuthController {
       // 生成Token
       const { accessToken, refreshToken } = tokenService.generateTokenPair({
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? undefined,
         role: user.role
       });
 
@@ -288,7 +288,7 @@ export class AuthController {
       // 生成Token
       const { accessToken, refreshToken } = tokenService.generateTokenPair({
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? undefined,
         role: user.role
       });
 
@@ -490,82 +490,12 @@ export class AuthController {
   }
 
   /**
-   * 发送邮箱验证码
-   * POST /api/auth/send-email-code
-   * 艹，给邮箱发送6位数验证码！
-   */
-  async sendEmailCode(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { email } = req.body as { email?: string };
-
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        res.status(400).json({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: '邮箱格式错误' }
-        });
-        return;
-      }
-
-      const ip = (req.ip || (req.socket?.remoteAddress ?? '')) as string;
-      const result = await authService.sendEmailCode(email, ip);
-
-      res.json({
-        success: true,
-        data: result,
-        message: '验证码已发送到邮箱'
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
    * 邮箱验证码登录
    * POST /api/auth/login/email
    * 艹，用邮箱验证码登录，首次登录自动注册！
    */
   async loginEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { email, code, referrer_id } = req.body as {
-        email?: string;
-        code?: string;
-        referrer_id?: string | null;
-      };
-
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        res.status(400).json({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: '邮箱格式错误' }
-        });
-        return;
-      }
-
-      if (!code || !/^\d{6}$/.test(code)) {
-        res.status(400).json({
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: '验证码格式错误' }
-        });
-        return;
-      }
-
-      const result = await authService.loginWithEmail(email, code, referrer_id ?? null);
-
-      // 艹，设置Cookie！
-      res.cookie('access_token', result.accessToken, COOKIE_OPTIONS);
-      res.cookie('refresh_token', result.refreshToken, COOKIE_OPTIONS);
-      res.cookie('roles', result.user.role, { ...COOKIE_OPTIONS, httpOnly: false });
-
-      res.json({
-        success: true,
-        data: {
-          user: result.user,
-          access_token: result.accessToken,
-          refresh_token: result.refreshToken
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
+    await this.loginWithEmailCode(req, res, next);
   }
 
   /**

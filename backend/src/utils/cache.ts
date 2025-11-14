@@ -57,14 +57,18 @@ export interface CacheStats {
 /**
  * 两层缓存管理器
  */
+type L1CacheEntry = {
+  value: unknown;
+};
+
 export class CacheManager {
-  private l1Cache: LRUCache<string, unknown>;
+  private l1Cache: LRUCache<string, L1CacheEntry, never>;
   private l2Cache: Redis | null = null;
   private namespace: string;
   private l2DefaultTtl: number;
 
   // 统计信息
-  private stats = {
+  private stats: Omit<CacheStats, 'l1Size'> = {
     l1Hits: 0,
     l1Misses: 0,
     l2Hits: 0,
@@ -84,11 +88,11 @@ export class CacheManager {
     this.l2DefaultTtl = l2DefaultTtl;
 
     // 初始化L1缓存（LRU）
-    this.l1Cache = new LRUCache({
+    this.l1Cache = new LRUCache<string, L1CacheEntry, never>({
       max: l1MaxSize,
       ttl: l1DefaultTtl,
       updateAgeOnGet: true // 访问时更新age
-    });
+    } satisfies LRUCache.Options<string, L1CacheEntry, never>);
 
     // 初始化L2缓存（Redis）
     if (redisConfig || process.env.REDIS_HOST) {
@@ -146,7 +150,7 @@ export class CacheManager {
     if (l1Value !== undefined) {
       this.stats.l1Hits++;
       console.log(`[CACHE] L1命中: ${key}`);
-      return l1Value as T;
+      return l1Value.value as T;
     }
     this.stats.l1Misses++;
 
@@ -162,7 +166,7 @@ export class CacheManager {
           const l2Value = JSON.parse(l2ValueStr) as T;
 
           // 回写L1
-          this.l1Cache.set(fullKey, l2Value);
+          this.l1Cache.set(fullKey, { value: l2Value });
 
           return l2Value;
         }
@@ -188,7 +192,7 @@ export class CacheManager {
 
     // 1. 写L1缓存
     const l1Ttl = ttl ? ttl * 1000 : undefined; // 转换为毫秒
-    this.l1Cache.set(fullKey, value, { ttl: l1Ttl });
+    this.l1Cache.set(fullKey, { value }, { ttl: l1Ttl });
 
     // 2. 写L2缓存
     if (this.l2Cache) {

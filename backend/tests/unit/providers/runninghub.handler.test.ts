@@ -4,7 +4,7 @@
  */
 
 import { RunningHubProvider } from '../../../src/providers/handlers/runninghub.handler.js';
-import { ExecContext, ProviderErrorCode } from '../../../src/providers/types.js';
+import { ExecContext, ProviderErrorCode, type ExecResult } from '../../../src/providers/types.js';
 import { ILogger } from '../../../src/providers/base/base-provider.js';
 
 // Mock Logger
@@ -35,6 +35,13 @@ class MockLogger implements ILogger {
 describe('RunningHub Provider - 单元测试', () => {
   let provider: RunningHubProvider;
   let mockLogger: MockLogger;
+  type RunningHubResultPayload = {
+    message: string;
+    workflowId: string;
+    params: Record<string, unknown>;
+    pollInterval: number;
+    maxPollTime: number;
+  };
 
   beforeEach(() => {
     mockLogger = new MockLogger();
@@ -44,6 +51,15 @@ describe('RunningHub Provider - 单元测试', () => {
   afterEach(() => {
     mockLogger.clear();
   });
+
+  const executeProvider = (context: ExecContext) =>
+    provider.execute(context) as Promise<ExecResult<RunningHubResultPayload>>;
+
+  const expectSuccess = (result: ExecResult<RunningHubResultPayload>): RunningHubResultPayload => {
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    return result.data as RunningHubResultPayload;
+  };
 
   describe('参数校验', () => {
     test('应该拒绝空输入', () => {
@@ -206,16 +222,15 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 验证结果
-      expect(result.success).toBe(true);
-      expect(result.data).toBeDefined();
-      expect(result.data.message).toContain('RunningHubProvider尚未实现');
-      expect(result.data.workflowId).toBe('workflow-123');
-      expect(result.data.params).toEqual(input.params);
-      expect(result.data.pollInterval).toBe(5000); // 默认值
-      expect(result.data.maxPollTime).toBe(300000); // 默认值
+      const data = expectSuccess(result);
+      expect(data.message).toContain('RunningHubProvider尚未实现');
+      expect(data.workflowId).toBe('workflow-123');
+      expect(data.params).toEqual(input.params);
+      expect(data.pollInterval).toBe(5000); // 默认值
+      expect(data.maxPollTime).toBe(300000); // 默认值
     });
 
     test('应该使用自定义的pollInterval和maxPollTime', async () => {
@@ -234,11 +249,10 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.pollInterval).toBe(2000);
-      expect(result.data.maxPollTime).toBe(60000);
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.pollInterval).toBe(2000);
+      expect(data.maxPollTime).toBe(60000);
     });
 
     test('应该支持自定义baseUrl', async () => {
@@ -254,10 +268,9 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.workflowId).toBe('workflow-789');
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.workflowId).toBe('workflow-789');
     });
 
     test('应该记录warning日志提示未实现', async () => {
@@ -272,7 +285,7 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      await provider.execute(context);
+      await executeProvider(context);
 
       // 验证日志
       const warnLogs = mockLogger.logs.filter((log) => log.level === 'warn');
@@ -292,7 +305,7 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      await provider.execute(context);
+      await executeProvider(context);
 
       // 验证日志
       const infoLogs = mockLogger.logs.filter((log) => log.level === 'info');
@@ -322,7 +335,7 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 参数校验失败应该返回错误
       expect(result.success).toBe(false);
@@ -344,10 +357,9 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.params).toEqual({});
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.params).toEqual({});
     });
 
     test('应该处理复杂的params对象', async () => {
@@ -372,10 +384,9 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.params).toEqual(input.params);
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.params).toEqual(input.params);
     });
 
     test('应该处理很长的workflowId', async () => {
@@ -391,10 +402,9 @@ describe('RunningHub Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.workflowId).toBe(longWorkflowId);
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.workflowId).toBe(longWorkflowId);
     });
   });
 });

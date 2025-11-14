@@ -2,7 +2,9 @@ import { db } from '../config/database.js';
 import { nanoid } from 'nanoid';
 import quotaService from './quota.service.js';
 import videoGenerateService from './videoGenerate.service.js';
-import featureService from './feature.service.js';
+import featureService, {
+  type FeatureDefinition as FeatureServiceDefinition
+} from './feature.service.js';
 import pipelineEngine from './pipelineEngine.service.js';
 import { checkFeatureRateLimit } from '../middlewares/rateLimiter.middleware.js';
 import logger from '../utils/logger.js';
@@ -17,7 +19,6 @@ import type {
   TaskParams,
   TaskInputData,
   RateLimitResult,
-  FeatureDefinition,
   VideoGenerateResult,
   TaskWebSocketData,
   TaskError
@@ -106,7 +107,7 @@ class TaskService {
       const feature = (await db('feature_definitions')
         .where('feature_id', featureId)
         .whereNull('deleted_at')
-        .first()) as FeatureDefinition | undefined;
+        .first()) as FeatureServiceDefinition | undefined;
 
       if (!feature) throw { errorCode: 4004, message: '功能不存在' } as TaskError;
       if (!feature.is_enabled) throw { errorCode: 4003, message: '功能已禁用' } as TaskError;

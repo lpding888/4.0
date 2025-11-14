@@ -8,17 +8,17 @@ import {
   type LocaleMessages
 } from '../config/i18n-messages.js';
 
-export type MessageVariables = Record<string, string | number | boolean | null | undefined>;
+export type MessageVariables = Record<string, unknown>;
 
 export interface I18nContext {
   locale: SupportedLanguageCode;
   getMessage: (key: string, variables?: MessageVariables) => string;
-  getErrorMessage: (code: number, variables?: MessageVariables) => string;
+  getErrorMessage: (code: string | number, variables?: MessageVariables) => string;
   formatNumber: (value: number) => string;
   formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
   formatCurrency: (amount: number, currency?: string) => string;
   formatRelativeTime: (value: Date | string | number) => string;
-  setLanguage: (locale: SupportedLanguageCode) => void;
+  setLanguage: (locale: string) => void;
 }
 
 type LocaleCache = Map<string, string>;
@@ -218,7 +218,7 @@ class I18nService {
   }
 
   getErrorMessage(
-    errorCode: number,
+    errorCode: string | number,
     locale: SupportedLanguageCode = this.defaultLocale,
     variables: MessageVariables = {}
   ): string {
@@ -337,10 +337,11 @@ class I18nService {
         formatCurrency: (amount, currency) =>
           this.formatCurrency(amount, currency, detectedLanguage),
         formatRelativeTime: (value) => this.formatRelativeTime(value, detectedLanguage),
-        setLanguage: (locale) => {
-          if (this.isSupported(locale)) {
-            context.locale = locale;
-            this.setLanguageCookie(res, locale);
+        setLanguage: (locale: string) => {
+          if (this.isSupported(locale as SupportedLanguageCode)) {
+            const normalized = locale as SupportedLanguageCode;
+            context.locale = normalized;
+            this.setLanguageCookie(res, normalized);
           }
         }
       };

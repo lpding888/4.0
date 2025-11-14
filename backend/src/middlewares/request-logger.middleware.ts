@@ -3,10 +3,7 @@ import logger from '../utils/logger.js';
 
 type RequestWithId = Request & { id?: string };
 
-const DEFAULT_SLOW_THRESHOLD = Number.parseInt(
-  process.env.HTTP_SLOW_THRESHOLD_MS ?? '1000',
-  10
-);
+const DEFAULT_SLOW_THRESHOLD = Number.parseInt(process.env.HTTP_SLOW_THRESHOLD_MS ?? '1000', 10);
 
 /**
  * HTTP请求日志中间件
@@ -29,11 +26,10 @@ export function requestLoggerMiddleware(
           : 'info';
 
     const message =
-      level === 'warn' && duration >= DEFAULT_SLOW_THRESHOLD
-        ? '[HTTP] 慢请求'
-        : '[HTTP] 请求完成';
+      level === 'warn' && duration >= DEFAULT_SLOW_THRESHOLD ? '[HTTP] 慢请求' : '[HTTP] 请求完成';
 
-    (logger[level] ?? logger.info).call(logger, message, {
+    const logFn = (logger[level] ?? logger.info).bind(logger);
+    logFn(message, {
       requestId: req.id,
       method: req.method,
       url: req.originalUrl,

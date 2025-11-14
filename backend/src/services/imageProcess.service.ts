@@ -38,6 +38,8 @@ interface CosProcessResultObject {
   [key: string]: unknown;
 }
 
+type CosClient = InstanceType<typeof COS>;
+
 class ImageProcessService {
   private config = {
     bucket: process.env.COS_BUCKET,
@@ -46,11 +48,14 @@ class ImageProcessService {
     secretKey: process.env.TENCENT_SECRET_KEY
   };
 
-  private cos: COS;
+  private cos: CosClient;
   private useMock: boolean;
 
   constructor() {
-    this.cos = new COS({ SecretId: this.config.secretId, SecretKey: this.config.secretKey });
+    this.cos = new COS({
+      SecretId: this.config.secretId,
+      SecretKey: this.config.secretKey
+    }) as CosClient;
     if (!this.config.bucket || !this.config.secretId || !this.config.secretKey) {
       logger.warn('[ImageProcessService] 腾讯云配置不完整，将使用Mock模式');
       this.useMock = true;
@@ -280,7 +285,10 @@ class ImageProcessService {
     const format = String(info.format || '').toLowerCase();
     if (!['jpg', 'jpeg', 'png'].includes(format)) throw new Error('不支持的图片格式,仅支持JPG/PNG');
     const maxSize = 10 * 1024 * 1024;
-    if (info.size > maxSize) throw new Error('图片大小超过10MB限制');
+    if (typeof info.size !== 'number' || info.size > maxSize)
+      throw new Error('图片大小超过10MB限制');
+    if (typeof info.width !== 'number' || typeof info.height !== 'number')
+      throw new Error('图片尺寸信息异常');
     if (info.width < 100 || info.height < 100) throw new Error('图片尺寸过小,最小100x100像素');
     return true;
   }

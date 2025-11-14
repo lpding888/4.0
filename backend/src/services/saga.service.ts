@@ -233,13 +233,17 @@ export class SagaService extends EventEmitter {
 
           return { quotaCost, reservedAt: new Date() };
         },
-        compensate: async (data) => {
+        compensate: async (data: CompensationData) => {
+          const quotaCostValue = Number(data?.quotaCost ?? 0);
+          if (!Number.isFinite(quotaCostValue) || quotaCostValue <= 0) {
+            return;
+          }
           // 回滚配额预扣
           await knex('users')
             .where('id', userId)
             .update({
-              quota_remaining: knex.raw('quota_remaining + ?', [data.quotaCost]),
-              quota_reserved: knex.raw('quota_reserved - ?', [data.quotaCost])
+              quota_remaining: knex.raw('quota_remaining + ?', [quotaCostValue]),
+              quota_reserved: knex.raw('quota_reserved - ?', [quotaCostValue])
             });
         }
       },
@@ -258,9 +262,11 @@ export class SagaService extends EventEmitter {
           });
           return { taskId };
         },
-        compensate: async (data) => {
+        compensate: async (data: CompensationData) => {
+          const taskId = typeof data?.taskId === 'string' ? data.taskId : null;
+          if (!taskId) return;
           // 删除创建的任务
-          await knex('tasks').where('id', data.taskId).del();
+          await knex('tasks').where('id', taskId).del();
         }
       }
     ];
@@ -353,13 +359,13 @@ export class SagaService extends EventEmitter {
    * 获取Saga统计信息
    */
   async getStats(): Promise<Record<string, number>> {
-    const stats = await knex('saga_transactions')
+    const stats = (await knex('saga_transactions')
       .select('status')
       .count('* as count')
-      .groupBy('status');
+      .groupBy('status')) as StatsRow[];
 
-    return stats.reduce((acc: Record<string, number>, row: StatsRow) => {
-      acc[row.status] = parseInt(String(row.count));
+    return stats.reduce((acc: Record<string, number>, row) => {
+      acc[row.status] = Number(row.count ?? 0);
       return acc;
     }, {});
   }

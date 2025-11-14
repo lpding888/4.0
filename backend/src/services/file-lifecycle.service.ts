@@ -18,7 +18,9 @@ import type {
   LifecycleSchedule,
   LifecycleStrategyConfig,
   LifecycleTransitionExecutionResult,
-  LifecycleTransitionState
+  LifecycleTransitionState,
+  LifecycleStatsResponse,
+  LifecycleTransitionConfig
 } from '../types/file.types.js';
 
 type LifecycleStrategyMap = Record<FileCategory, LifecycleStrategyConfig>;
@@ -204,7 +206,8 @@ class FileLifecycleService {
         next_transition_at: lifecycleSchedule.nextTransitionAt,
         size,
         transitions: JSON.stringify(lifecycleSchedule.transitions),
-        auto_delete: strategy.autoDelete
+        auto_delete: strategy.autoDelete,
+        deleted_at: null
       };
 
       // 保存到数据库
@@ -234,7 +237,7 @@ class FileLifecycleService {
     fileId: string,
     updates: Partial<FileLifecycleRecord> & {
       metadata?: FileMetadata;
-      transitions?: LifecycleTransitionState[] | string;
+      transitions?: LifecycleTransitionState[];
     }
   ): Promise<boolean> {
     try {
@@ -248,10 +251,7 @@ class FileLifecycleService {
       }
 
       if (updates.transitions) {
-        updateData.transitions =
-          typeof updates.transitions === 'string'
-            ? updates.transitions
-            : JSON.stringify(updates.transitions);
+        updateData.transitions = JSON.stringify(updates.transitions);
       }
 
       const affected = await db('file_lifecycle_records').where('id', fileId).update(updateData);
@@ -401,7 +401,7 @@ class FileLifecycleService {
 
       await this.updateFileStatus(file.id, {
         storage_class: transition.storageClass,
-        transitions: JSON.stringify(updatedTransitions)
+        transitions: updatedTransitions
       });
 
       // 计算成本节省
@@ -727,7 +727,7 @@ class FileLifecycleService {
   }
 
   private mapLifecycleRecord(record: Record<string, unknown>): FileLifecycleRecord {
-    const row = record as FileLifecycleRecordRow;
+    const row = record as unknown as FileLifecycleRecordRow;
 
     if (typeof row.id !== 'string' || typeof row.key !== 'string') {
       throw new Error('Invalid file lifecycle row');

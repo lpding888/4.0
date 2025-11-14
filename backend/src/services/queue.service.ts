@@ -1,11 +1,4 @@
-import {
-  Queue,
-  QueueEvents,
-  type JobsOptions,
-  type BulkJobOptions,
-  Worker,
-  Job
-} from 'bullmq';
+import { Queue, QueueEvents, type JobsOptions, type BulkJobOptions, Worker, Job } from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
 import pLimit from 'p-limit';
 import logger from '../utils/logger.js';
@@ -295,7 +288,7 @@ class QueueService {
       data: j.data,
       opts: j.options || {}
     }));
-    const added = await queue.addBulk(bulk as BulkJobOptions[]);
+    const added = await queue.addBulk(bulk);
     this.stats.totalQueued += added.length;
     logger.info(`[QueueService] 批量添加任务: ${queueName}, 数量: ${added.length}`);
     return added;

@@ -10,7 +10,7 @@ export type FileStorageClass = 'Standard' | 'Standard_IA' | 'Archive';
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
-export type JsonRecord = Record<string, JsonValue>;
+export type JsonRecord = Record<string, JsonValue | undefined>;
 
 export type FileMetadata = JsonRecord;
 
@@ -178,6 +178,10 @@ export interface TaskFileRecordInput {
   originalUrl?: string | null;
   metadata?: FileMetadata;
   status?: 'active' | 'deleted';
+  type?: string;
+  inputFrom?: string;
+  outputTo?: string;
+  processingTime?: number;
 }
 
 export interface TaskFileRecord {

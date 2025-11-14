@@ -723,7 +723,9 @@ class CosStorageService {
 
     return new Promise((resolve, reject) => {
       const stream = createReadStream(file.path as string);
-      stream.on('data', (data: Buffer) => hash.update(data));
+      stream.on('data', (chunk: string | Buffer) => {
+        hash.update(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      });
       stream.on('end', () => resolve(hash.digest('hex')));
       stream.on('error', reject);
     });
@@ -820,10 +822,11 @@ class CosStorageService {
 
   async mockUploadFile(options: UnknownRecord): Promise<UnknownRecord> {
     await this.sleep(Math.random() * 2000 + 1000);
+    const key = typeof options.key === 'string' ? options.key : '';
     return {
-      key: options.key,
+      key,
       etag: crypto.randomBytes(16).toString('hex'),
-      location: this.getFileUrl(options.key)
+      location: this.getFileUrl(key)
     };
   }
 

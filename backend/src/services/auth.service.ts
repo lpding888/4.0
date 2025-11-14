@@ -36,15 +36,13 @@ export interface AuthProvider {
   sendCode(phone: string, ip: string): Promise<{ expireIn: number }>;
   sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }>;
   loginWithCode(phone: string, code: string, referrerId?: string | null): Promise<AuthResult>;
-  loginWithEmail(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
+  loginWithEmailCode(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
   loginWithPassword(phone: string, password: string): Promise<AuthResult>;
   registerWithPassword(
     phone: string,
     password: string,
     referrerId?: string | null
   ): Promise<AuthResult>;
-  sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }>;
-  loginWithEmailCode(email: string, code: string, referrerId?: string | null): Promise<AuthResult>;
   registerWithEmail(
     email: string,
     code: string,
@@ -127,49 +125,6 @@ class AuthService implements AuthProvider {
   }
 
   /**
-   * 发送邮箱验证码
-   * 支持邮箱登录/注册
-   */
-  async sendEmailCode(email: string, ip: string): Promise<{ expireIn: number }> {
-    // 1. 邮箱格式验证
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw AppError.custom(ERROR_CODES.EMAIL_FORMAT_INVALID, '邮箱格式不正确');
-    }
-
-    // 2. 防刷限制检查 (复用phone的逻辑)
-    await this.checkEmailRateLimit(email, ip);
-
-    // 3. 生成验证码
-    const code = generateCode(6);
-    const expireAt = new Date(Date.now() + 5 * 60 * 1000); // 5分钟有效期
-
-    // 4. 保存验证码到数据库
-    await db('verification_codes').insert({
-      email,
-      code,
-      ip,
-      channel: 'email',
-      expireAt,
-      used: false,
-      created_at: new Date(),
-      updated_at: new Date()
-    });
-
-    // 5. 发送邮件
-    await sendVerificationEmail(email, code);
-
-    // 6. 写入缓存用于后续校验
-    await setCache(`email:${email}`, code, 5 * 60);
-
-    logger.info(`[AuthService] 邮箱验证码已发送: email=${email}, ip=${ip}`);
-
-    return {
-      expireIn: 300 // 5分钟
-    };
-  }
-
-  /**
    * 防刷限制检查
    * 艹，不能让恶意用户刷爆短信！
    */
@@ -235,36 +190,6 @@ class AuthService implements AuthProvider {
   /**
    * 邮箱防刷限制检查
    */
-  private async checkEmailRateLimit(email: string, ip: string): Promise<void> {
-    const now = new Date();
-    const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-
-    // 同一邮箱 1分钟内最多1次
-    const emailCount = await db('verification_codes')
-      .where('email', email)
-      .where('created_at', '>=', oneMinuteAgo)
-      .count('* as count')
-      .first();
-
-    const emailCountNum = emailCount ? Number(emailCount.count) : 0;
-    if (emailCountNum >= 1) {
-      throw new Error('验证码发送过于频繁，请1分钟后再试');
-    }
-
-    // 同一IP 1小时内最多20次
-    const ipCount = await db('verification_codes')
-      .where('ip', ip)
-      .where('created_at', '>=', oneHourAgo)
-      .count('* as count')
-      .first();
-
-    const ipCountNum = ipCount ? Number(ipCount.count) : 0;
-    if (ipCountNum >= 20) {
-      throw new Error('请求过于频繁，请稍后再试');
-    }
-  }
-
   /**
    * 发送短信验证码
    * 艹，生产环境要对接腾讯云短信！
@@ -327,79 +252,17 @@ class AuthService implements AuthProvider {
       user = await db('users').where('phone', phone).first();
     }
 
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
     // 3. 标记验证码已使用
     await this.markCodeUsed(record.id);
 
     // 4. 生成双Token对
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
     logger.info(`[AuthService] 用户登录成功: userId=${user.id}, phone=${phone}`);
-
-    return {
-      ...tokens,
-      user: userRepo.toSafeUser(user)
-    };
-  }
-
-  /**
-   * 邮箱验证码登录/注册
-   * 支持邮箱方式登录或自动注册
-   */
-  async loginWithEmail(
-    email: string,
-    code: string,
-    referrerId?: string | null
-  ): Promise<AuthResult> {
-    // 1. 验证邮箱格式
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw AppError.custom(ERROR_CODES.EMAIL_FORMAT_INVALID, '邮箱格式不正确');
-    }
-
-    // 2. 验证码校验
-    await this.verifyEmailCode(email, code);
-
-    // 3. 查询或创建用户
-    let user = await db('users').where('email', email).first();
-
-    if (!user) {
-      // 用户不存在，创建新用户（在事务中处理）
-      await db.transaction(async (trx) => {
-        const userId = generateId();
-
-        // 创建用户
-        await trx('users').insert({
-          id: userId,
-          email,
-          referrer_id: referrerId || null,
-          isMember: false,
-          quota_remaining: 0,
-          quota_expireAt: null,
-          role: 'user',
-          created_at: new Date(),
-          updated_at: new Date()
-        });
-
-        // 如果有推荐人，绑定推荐关系
-        if (referrerId) {
-          logger.info(`[AuthService] 推荐关系绑定尝试: referrerId=${referrerId}, userId=${userId}`);
-        }
-
-        logger.info(
-          `[AuthService] 新用户注册(邮箱): userId=${userId}, email=${email}, referrerId=${referrerId}`
-        );
-      });
-
-      user = await db('users').where('email', email).first();
-    }
-
-    // 4. 标记验证码已使用
-    await db('verification_codes').where('email', email).where('code', code).update({ used: true });
-
-    // 5. 生成双Token对
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
-
-    logger.info(`[AuthService] 用户登录成功(邮箱): userId=${user.id}, email=${email}`);
 
     return {
       ...tokens,
@@ -429,7 +292,7 @@ class AuthService implements AuthProvider {
     }
 
     // 3. 生成Token对
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
     logger.info(`[AuthService] 密码登录成功: userId=${user.id}, phone=${phone}`);
 
@@ -469,7 +332,7 @@ class AuthService implements AuthProvider {
     });
 
     // 4. 生成Token
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user as userRepo.User));
 
     logger.info(`[AuthService] 用户注册成功: userId=${user.id}, phone=${phone}`);
 
@@ -560,10 +423,14 @@ class AuthService implements AuthProvider {
       user = await userRepo.findUserById(user.id);
     }
 
+    if (!user) {
+      throw new Error('邮箱用户创建失败');
+    }
+
     await this.markCodeUsed(record.id);
     await cacheService.delete(`email:${normalized}`);
 
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
     logger.info(`[AuthService] 邮箱验证码登录成功: email=${normalized}, userId=${user?.id}`);
 
     return {
@@ -616,7 +483,7 @@ class AuthService implements AuthProvider {
     await this.markCodeUsed(record.id);
     await cacheService.delete(`email:${normalized}`);
 
-    const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+    const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
     logger.info(`[AuthService] 邮箱注册成功: email=${normalized}, userId=${user.id}`);
 
     return {
@@ -654,6 +521,14 @@ class AuthService implements AuthProvider {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
+  private buildTokenUser(user: userRepo.User): UserForToken {
+    return {
+      id: user.id,
+      role: user.role,
+      phone: user.phone ?? undefined
+    };
+  }
+
   private async verifyEmailCode(email: string, code: string): Promise<VerificationCodeRecord> {
     const normalized = this.normalizeEmail(email);
     const record = (await db('verification_codes')
@@ -676,25 +551,6 @@ class AuthService implements AuthProvider {
     await db('verification_codes')
       .where({ id: recordId })
       .update({ used: true, updated_at: new Date() });
-  }
-
-  /**
-   * 验证邮箱验证码
-   * 艹，检查邮箱验证码是否有效！
-   */
-  private async verifyEmailCode(email: string, code: string): Promise<void> {
-    const record = await db('verification_codes')
-      .where('email', email)
-      .where('code', code)
-      .where('channel', 'email')
-      .where('used', false)
-      .where('expireAt', '>=', new Date())
-      .orderBy('created_at', 'desc')
-      .first();
-
-    if (!record) {
-      throw AppError.custom(ERROR_CODES.DATA_VALIDATION_FAILED, '验证码错误或已过期');
-    }
   }
 
   /**
@@ -839,7 +695,7 @@ class AuthService implements AuthProvider {
       }
 
       // 3. 生成访问令牌
-      const tokens = this.tokenSigner.generateTokenPair(user as UserForToken);
+      const tokens = this.tokenSigner.generateTokenPair(this.buildTokenUser(user));
 
       logger.info(`微信登录成功: userId=${user.id}, openid=${openid}`);
 

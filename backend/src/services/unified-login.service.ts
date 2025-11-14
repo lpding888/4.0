@@ -5,6 +5,9 @@ import { db } from '../config/database.js';
 import tokenService from './token.service.js';
 import wechatLoginService from './wechat-login.service.js';
 import cacheService from './cache.service.js';
+import type { OAuthCallbackResult, MiniProgramLoginResult } from '../types/wechat-login.types.js';
+
+type WechatLoginResponse = OAuthCallbackResult | MiniProgramLoginResult;
 
 // Type definitions
 interface LoginMethodConfig {
@@ -337,7 +340,7 @@ class UnifiedLoginService {
     loginData: Record<string, unknown>
   ): Promise<LoginResult> {
     try {
-      let result;
+      let result: WechatLoginResponse;
 
       switch (platform) {
         case 'officialAccount':
@@ -363,22 +366,25 @@ class UnifiedLoginService {
       }
 
       // 更新统计
-      this.updateStats('wechat', (result as LoginResult).isNewUser === true);
+      const loginResult: LoginResult = {
+        success: result.success,
+        user: this.sanitizeUser(result.user as unknown as User),
+        tokens: {
+          accessToken: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken
+        },
+        loginMethod: 'wechat',
+        platform: result.platform ?? (platform as string),
+        isNewUser: result.isNewUser
+      };
+
+      this.updateStats('wechat', loginResult.isNewUser === true);
 
       logger.info(
-        `[UnifiedLogin] 微信登录成功: platform=${platform}, userId=${
-          (result as LoginResult).user.id
-        }`
+        `[UnifiedLogin] 微信登录成功: platform=${loginResult.platform}, userId=${loginResult.user.id}`
       );
 
-      return {
-        success: true,
-        user: (result as LoginResult).user,
-        tokens: (result as LoginResult).tokens,
-        loginMethod: 'wechat',
-        platform,
-        isNewUser: (result as LoginResult).isNewUser
-      } as LoginResult;
+      return loginResult;
     } catch (error) {
       logger.error('[UnifiedLogin] 微信登录失败:', error);
       this.stats.failedLogins++;
@@ -443,14 +449,18 @@ class UnifiedLoginService {
   async registerUser(userData: Record<string, unknown>, loginMethod: string): Promise<LoginResult> {
     try {
       const { email, phone, password, username } = userData;
+      const emailValue = typeof email === 'string' ? email : undefined;
+      const phoneValue = typeof phone === 'string' ? phone : undefined;
+      const usernameValue = typeof username === 'string' ? username : undefined;
+      const passwordValue = typeof password === 'string' ? password : undefined;
 
       // 检查用户是否已存在
       let existingUser = null;
-      if (email) {
-        existingUser = await db('users').where('email', email).first();
+      if (emailValue) {
+        existingUser = await db('users').where('email', emailValue).first();
       }
-      if (phone && !existingUser) {
-        existingUser = await db('users').where('phone', phone).first();
+      if (phoneValue && !existingUser) {
+        existingUser = await db('users').where('phone', phoneValue).first();
       }
 
       if (existingUser) {
@@ -463,16 +473,16 @@ class UnifiedLoginService {
 
       // 加密密码
       let hashedPassword = null;
-      if (password) {
-        hashedPassword = await bcrypt.hash(password, 10);
+      if (passwordValue) {
+        hashedPassword = await bcrypt.hash(passwordValue, 10);
       }
 
       // 构建用户数据
       const newUserData = {
         id: userId,
-        email: email || `user_${userId}@placeholder.com`,
-        username: username || `user_${userId.substr(0, 8)}`,
-        phone: phone || null,
+        email: emailValue || `user_${userId}@placeholder.com`,
+        username: usernameValue || `user_${userId.substr(0, 8)}`,
+        phone: phoneValue || null,
         password: hashedPassword,
         auth_type: loginMethod,
         status: 'active',

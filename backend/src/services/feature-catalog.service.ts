@@ -38,11 +38,11 @@ type UsageFilterOptions = {
 
 type FeatureUsageStatus = 'success' | 'failed' | 'partial';
 
-type FeatureMetricValue = string | number | boolean | null;
+export type FeatureMetricValue = string | number | boolean | null;
 
-type FeatureUsageMetrics = Record<string, FeatureMetricValue>;
+export type FeatureUsageMetrics = Record<string, FeatureMetricValue>;
 
-type FeatureUsageError = Record<string, unknown> | Record<string, unknown>[] | null;
+export type FeatureUsageError = Record<string, unknown> | Record<string, unknown>[] | null;
 
 interface FeatureUsageRecordInput {
   usageCount?: number;

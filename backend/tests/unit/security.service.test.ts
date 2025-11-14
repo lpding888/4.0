@@ -14,7 +14,7 @@ describe('SecurityService data masking', () => {
     const masked = securityService.maskData(payload, [
       { field: 'user.email', type: 'email' },
       { field: 'profile.phone', type: 'phone' }
-    ]);
+    ]) as typeof payload;
 
     expect(masked.user.email).toContain('*');
     expect(masked.profile.phone).toContain('*');
@@ -25,7 +25,7 @@ describe('SecurityService data masking', () => {
     const payload = { token: 'abcdef1234567890' };
     const masked = securityService.maskData(payload, [
       { field: 'token', type: 'custom', customPattern: '[a-f]+' }
-    ]);
+    ]) as typeof payload;
 
     expect(masked.token).toMatch(/\*/);
   });

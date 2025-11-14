@@ -27,6 +27,49 @@ const toNumber = (value: string | number | bigint | null | undefined): number =>
 const parseCount = (row?: CountRow): number => toNumber(row?.count);
 const parseTotal = (row?: SumRow): number => toNumber(row?.total);
 
+const normalizeString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  return fallback;
+};
+
+const maskPhone = (phone: unknown): string => {
+  const normalized = normalizeString(phone);
+  if (normalized.length < 7) return normalized;
+  return normalized.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+};
+
+type ReferralRow = {
+  userId: string;
+  phone: string | null;
+  registeredAt: Date | string;
+  hasPaid?: number | boolean | null;
+  paidAt?: Date | string | null;
+  commissionAmount?: string | number | bigint | null;
+};
+
+type CommissionRow = {
+  id: string;
+  orderId: string;
+  phone: string | null;
+  orderAmount?: string | number | bigint | null;
+  commissionAmount?: string | number | bigint | null;
+  status: string;
+  createdAt: Date | string;
+  settledAt?: Date | string | null;
+};
+
+type WithdrawalRow = {
+  id: string;
+  amount?: string | number | bigint | null;
+  method: string | null;
+  account_info: string | Record<string, unknown> | null;
+  status: string;
+  reject_reason?: string | null;
+  created_at: Date | string;
+  approved_at?: Date | string | null;
+};
+
 /**
  * 分销代理服务
  */
@@ -53,6 +96,21 @@ class DistributionService {
    */
   async applyDistributor(userId: string, applyData: AnyObject): Promise<AnyObject> {
     const { realName, idCard, contact, channel } = applyData;
+
+    if (
+      typeof realName !== 'string' ||
+      typeof idCard !== 'string' ||
+      typeof contact !== 'string' ||
+      !realName.trim() ||
+      !idCard.trim() ||
+      !contact.trim()
+    ) {
+      throw {
+        statusCode: 400,
+        errorCode: 6000,
+        message: '请填写完整的申请资料'
+      };
+    }
 
     // 检查用户是否存在
     const user = await db('users').where({ id: userId }).first();
@@ -102,7 +160,7 @@ class DistributionService {
       real_name: realName,
       id_card: encryptedIdCard, // 🔥 存储加密后的身份证号
       contact,
-      channel,
+      channel: typeof channel === 'string' ? channel : null,
       status: 'pending',
       invite_code: inviteCode,
       total_commission: 0,
@@ -378,18 +436,21 @@ class DistributionService {
 
     // 获取总数
     const countQuery = query.clone();
-    const totalResult = (await countQuery.count('* as count').first()) as CountRow | undefined;
-    const total = parseCount(totalResult);
+    const totalResult = await countQuery.count<{ count: number }>('* as count').first();
+    const total = Number(totalResult?.count ?? 0);
 
     // 分页查询
-    const referrals = await query.orderBy('rr.created_at', 'desc').limit(limit).offset(offset);
+    const referrals = (await query
+      .orderBy('rr.created_at', 'desc')
+      .limit(limit)
+      .offset(offset)) as ReferralRow[];
 
     // 脱敏手机号
-    const formattedReferrals = referrals.map((r: AnyObject) => ({
-      userId: r.userId,
-      phone: r.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2'),
+    const formattedReferrals = referrals.map((r) => ({
+      userId: r.userId as string,
+      phone: maskPhone(r.phone),
       registeredAt: r.registeredAt,
-      hasPaid: r.hasPaid,
+      hasPaid: Boolean(r.hasPaid),
       paidAt: r.paidAt,
       commissionAmount: toNumber(r.commissionAmount)
     }));
@@ -438,20 +499,23 @@ class DistributionService {
 
     // 状态过滤
     if (status !== 'all') {
-      query = query.where('c.status', status);
+      query = query.where('c.status', String(status));
     }
 
     // 获取总数
     const totalRow = (await query.clone().count('* as count').first()) as CountRow | undefined;
 
     // 分页查询
-    const commissions = await query.orderBy('c.created_at', 'desc').limit(limit).offset(offset);
+    const commissions = (await query
+      .orderBy('c.created_at', 'desc')
+      .limit(limit)
+      .offset(offset)) as CommissionRow[];
 
     // 脱敏手机号
-    const formattedCommissions = commissions.map((c: AnyObject) => ({
+    const formattedCommissions = commissions.map((c) => ({
       id: c.id,
       orderId: c.orderId,
-      referredUserPhone: c.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2'),
+      referredUserPhone: maskPhone(c.phone),
       orderAmount: toNumber(c.orderAmount),
       commissionAmount: toNumber(c.commissionAmount),
       status: c.status,
@@ -470,9 +534,10 @@ class DistributionService {
    */
   async createWithdrawal(userId: string, withdrawalData: AnyObject): Promise<string> {
     const { amount, method, accountInfo } = withdrawalData;
+    const numericAmount = Number(amount);
 
     // 校验金额格式
-    if (!amount || amount < 0) {
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       throw {
         statusCode: 400,
         errorCode: 6006,
@@ -504,7 +569,7 @@ class DistributionService {
       const settings = await trx('distribution_settings').where({ id: 1 }).first();
       const minAmount = settings?.min_withdrawal_amount || 100;
 
-      if (amount < minAmount) {
+      if (numericAmount < minAmount) {
         throw {
           statusCode: 400,
           errorCode: 6009,
@@ -513,7 +578,7 @@ class DistributionService {
       }
 
       // 检查可提现余额
-      if (distributor.available_commission < amount) {
+      if (distributor.available_commission < numericAmount) {
         throw {
           statusCode: 400,
           errorCode: 6010,
@@ -524,21 +589,24 @@ class DistributionService {
       // 扣除可提现余额
       await trx('distributors')
         .where({ id: distributor.id })
-        .decrement('available_commission', amount);
+        .decrement('available_commission', numericAmount);
 
       // 创建提现记录
       const withdrawalId = generateId(8);
+      const accountInfoPayload =
+        typeof accountInfo === 'string' ? accountInfo : JSON.stringify(accountInfo ?? {});
+
       await trx('withdrawals').insert({
         id: withdrawalId,
         distributor_id: distributor.id,
-        amount,
+        amount: numericAmount,
         method,
-        account_info: JSON.stringify(accountInfo),
+        account_info: accountInfoPayload,
         status: 'pending',
         created_at: new Date()
       });
 
-      logger.info(`提现申请创建成功: withdrawalId=${withdrawalId}, amount=${amount}`);
+      logger.info(`提现申请创建成功: withdrawalId=${withdrawalId}, amount=${numericAmount}`);
 
       return withdrawalId;
     });
@@ -562,12 +630,12 @@ class DistributionService {
     }
 
     // 查询提现记录
-    const withdrawals = await db('withdrawals')
+    const withdrawals = (await db('withdrawals')
       .where({ distributor_id: distributor.id })
       .select('*')
       .orderBy('created_at', 'desc')
       .limit(limit)
-      .offset(offset);
+      .offset(offset)) as WithdrawalRow[];
 
     // 获取总数
     const totalRow = (await db('withdrawals')
@@ -576,11 +644,12 @@ class DistributionService {
       .first()) as CountRow | undefined;
 
     // 格式化结果
-    const formattedWithdrawals = withdrawals.map((w: AnyObject) => ({
+    const formattedWithdrawals = withdrawals.map((w) => ({
       id: w.id,
       amount: toNumber(w.amount),
-      method: w.method,
-      accountInfo: JSON.parse(w.account_info),
+      method: normalizeString(w.method),
+      accountInfo:
+        typeof w.account_info === 'string' ? JSON.parse(w.account_info) : (w.account_info ?? null),
       status: w.status,
       rejectReason: w.reject_reason,
       createdAt: w.created_at,

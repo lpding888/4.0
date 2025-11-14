@@ -175,19 +175,22 @@ class SwaggerService {
   }
 
   getSchemas(): SchemaEntry[] {
-    const spec = this.generatedSpec as Record<string, unknown>;
-    if (!spec?.components?.schemas) return [];
-    return Object.entries(spec.components.schemas as Record<string, unknown>).map(
-      ([name, schema]) => {
-        const schemaRecord = schema as Record<string, unknown>;
-        return {
-          name,
-          schema,
-          required: (schemaRecord.required || []) as unknown[],
-          properties: (schemaRecord.properties || {}) as Record<string, unknown>
-        };
-      }
-    );
+    const spec = this.generatedSpec as {
+      components?: {
+        schemas?: Record<string, unknown>;
+      };
+    };
+    const schemas = spec?.components?.schemas;
+    if (!schemas) return [];
+    return Object.entries(schemas).map(([name, schema]) => {
+      const schemaRecord = schema as Record<string, unknown>;
+      return {
+        name,
+        schema,
+        required: (schemaRecord.required || []) as unknown[],
+        properties: (schemaRecord.properties || {}) as Record<string, unknown>
+      };
+    });
   }
 
   validateDocs(): ValidationResult {

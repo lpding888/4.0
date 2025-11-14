@@ -46,9 +46,23 @@ interface ProcessError extends Error {
 /**
  * Cache Service 接口
  */
-interface CacheServiceType {
-  deletePattern?: (pattern: string) => Promise<void>;
+interface AiModelEnhanceCapable {
+  enhanceImage: (
+    taskId: string,
+    imageUrl?: string,
+    params?: Record<string, unknown>
+  ) => Promise<unknown>;
 }
+
+interface AiModelGenerateCapable {
+  generateImage: (taskId: string, params?: Record<string, unknown>) => Promise<unknown>;
+}
+
+const hasEnhanceCapability = (service: unknown): service is AiModelEnhanceCapable =>
+  typeof (service as AiModelEnhanceCapable)?.enhanceImage === 'function';
+
+const hasGenerateCapability = (service: unknown): service is AiModelGenerateCapable =>
+  typeof (service as AiModelGenerateCapable)?.generateImage === 'function';
 
 /**
  * 任务处理器服务（TS 版）
@@ -56,6 +70,15 @@ interface CacheServiceType {
  */
 class JobProcessorsService {
   private processors = new Map<string, (job: ProcessJob) => Promise<ProcessResult>>();
+
+  private async invalidateTaskCache(taskId?: string): Promise<void> {
+    if (!taskId) return;
+    try {
+      await cacheService.deletePattern(`user_data:user:*:${taskId}*`);
+    } catch (error: unknown) {
+      logger.warn(`[JobProcessors] 缓存清理失败: ${taskId}`, error);
+    }
+  }
 
   /** 图像处理任务处理器 */
   async imageProcessingHandler(job: ProcessJob): Promise<ProcessResult> {
@@ -81,7 +104,7 @@ class JobProcessorsService {
         string,
         unknown
       >);
-      await (cacheService as CacheServiceType).deletePattern?.(`user_data:user:*:${taskId}*`);
+      await this.invalidateTaskCache(taskId);
       logger.info(`[JobProcessors] 图像处理任务完成: ${taskId}`);
       return { resultUrls: result };
     } catch (error: unknown) {
@@ -111,17 +134,16 @@ class JobProcessorsService {
           );
           break;
         case 'ai_enhance':
-          result = await (aiModelService as Record<string, unknown>).enhanceImage?.(
-            taskId,
-            imageUrl,
-            params
-          );
+          if (!hasEnhanceCapability(aiModelService)) {
+            throw new Error('AI模型服务未实现增强功能');
+          }
+          result = await aiModelService.enhanceImage(taskId as string, imageUrl, params);
           break;
         case 'ai_generate':
-          result = await (aiModelService as Record<string, unknown>).generateImage?.(
-            taskId,
-            params
-          );
+          if (!hasGenerateCapability(aiModelService)) {
+            throw new Error('AI模型服务未实现生成功能');
+          }
+          result = await aiModelService.generateImage(taskId as string, params);
           break;
         default:
           throw new Error(`不支持的AI模型类型: ${modelType}`);
@@ -131,7 +153,7 @@ class JobProcessorsService {
         string,
         unknown
       >);
-      await (cacheService as CacheServiceType).deletePattern?.(`user_data:user:*:${taskId}*`);
+      await this.invalidateTaskCache(taskId);
       logger.info(`[JobProcessors] AI处理任务完成: ${taskId}`);
       return { resultUrls: result };
     } catch (error: unknown) {
@@ -156,7 +178,7 @@ class JobProcessorsService {
         inputData as Record<string, unknown>
       );
       await taskService.updateStatus(taskId as string, 'success', {} as Record<string, unknown>);
-      await (cacheService as CacheServiceType).deletePattern?.(`user_data:user:*:${taskId}*`);
+      await this.invalidateTaskCache(taskId);
       logger.info(`[JobProcessors] Pipeline任务完成: ${taskId}`);
       return { completed: true };
     } catch (error: unknown) {

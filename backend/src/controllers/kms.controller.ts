@@ -102,10 +102,11 @@ class KMSController {
         });
       }
       const svc = await loadKmsService();
-      const result = await svc.encrypt({
-        data,
-        keyNameOrId: String(keyNameOrId).trim(),
-        options: { dataType, resourceId, resourceType, additionalData }
+      const result = await svc.encrypt(data, String(keyNameOrId).trim(), {
+        dataType,
+        resourceId,
+        resourceType,
+        additionalData
       });
       res.json({ success: true, data: result });
     } catch (error) {
@@ -137,10 +138,12 @@ class KMSController {
         });
       }
       const svc = await loadKmsService();
-      const result = await svc.decrypt({
-        cipherText,
-        keyNameOrId: String(keyNameOrId).trim(),
-        options: { dataType, resourceId, resourceType, additionalData }
+      const result = await svc.decrypt(cipherText, {
+        keyId: String(keyNameOrId).trim(),
+        dataType,
+        resourceId,
+        resourceType,
+        additionalData
       });
       res.json({ success: true, data: result });
     } catch (error) {

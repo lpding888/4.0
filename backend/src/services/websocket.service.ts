@@ -1,4 +1,4 @@
-import WebSocket, { type Server as WebSocketServer, type WebSocket as WSClient } from 'ws';
+import { WebSocketServer, WebSocket as WSClient } from 'ws';
 import type { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
@@ -194,8 +194,10 @@ class WebSocketService {
       await permissionService.initialize();
 
       // 创建WebSocket服务器
-      this.wss = new WebSocket.Server({
-        port: this.config.port,
+      const port =
+        typeof this.config.port === 'string' ? Number(this.config.port) : this.config.port;
+      this.wss = new WebSocketServer({
+        port,
         verifyClient: this.verifyClient.bind(this)
       });
 
@@ -246,8 +248,14 @@ class WebSocketService {
    * @private
    */
   setupEventListeners(): void {
-    this.wss.on('connection', this.handleConnection.bind(this));
-    this.wss.on('error', this.handleServerError.bind(this));
+    const server = this.wss;
+    if (!server) {
+      throw new Error('WebSocket server not initialized');
+    }
+    server.on('connection', (ws, req) => {
+      void this.handleConnection(ws as WSClient, req);
+    });
+    server.on('error', this.handleServerError.bind(this));
 
     logger.info('[WebSocket] 事件监听器设置完成');
   }
@@ -354,7 +362,7 @@ class WebSocketService {
 
     switch (type) {
       case 'auth':
-        await this.handleAuthentication(ws, data, id);
+        await this.handleAuthentication(ws, data, id ?? null);
         break;
 
       case 'ping':
@@ -366,15 +374,15 @@ class WebSocketService {
         break;
 
       case 'subscribe':
-        await this.handleSubscription(ws, data, id);
+        await this.handleSubscription(ws, data, id ?? null);
         break;
 
       case 'unsubscribe':
-        await this.handleUnsubscription(ws, data, id);
+        await this.handleUnsubscription(ws, data, id ?? null);
         break;
 
       case 'chat_message':
-        await this.handleChatMessage(ws, data, id);
+        await this.handleChatMessage(ws, data, id ?? null);
         break;
 
       default:
@@ -391,7 +399,8 @@ class WebSocketService {
    */
   async handleAuthentication(ws: WSClient, data: unknown, messageId: string | null): Promise<void> {
     try {
-      const { token } = data;
+      const payload = (data as AuthData) || {};
+      const token = typeof payload.token === 'string' ? payload.token : null;
 
       if (!token) {
         this.sendError(ws, 'MISSING_TOKEN', '缺少认证令牌', messageId);
@@ -407,8 +416,8 @@ class WebSocketService {
       }
 
       // 检查Token是否在黑名单中
-      const isBlacklisted = await tokenService.isTokenBlacklisted(decoded.jti);
-      if (isBlacklisted) {
+      const tokenId = typeof decoded.jti === 'string' ? decoded.jti : null;
+      if (tokenId && (await tokenService.isTokenBlacklisted(tokenId))) {
         this.stats.authFailures++;
         this.sendError(ws, 'TOKEN_BLACKLISTED', '令牌已失效', messageId);
         return;
@@ -424,10 +433,12 @@ class WebSocketService {
       }
 
       // 添加到用户连接集合
-      if (!this.clients.has(decoded.uid)) {
-        this.clients.set(decoded.uid, new Set());
+      let userConnections = this.clients.get(decoded.uid);
+      if (!userConnections) {
+        userConnections = new Set();
+        this.clients.set(decoded.uid, userConnections);
       }
-      this.clients.get(decoded.uid).add(ws);
+      userConnections.add(ws);
 
       // 清除认证超时
       if (ws.authTimeout) {
@@ -467,16 +478,19 @@ class WebSocketService {
       return;
     }
 
-    const { channels = [] } = data;
+    const payload = (data as SubscriptionData) || {};
+    const channels = Array.isArray(payload.channels)
+      ? payload.channels.filter((channel): channel is string => typeof channel === 'string')
+      : [];
 
     // 初始化订阅列表
     if (!connectionInfo.subscriptions) {
-      connectionInfo.subscriptions = new Set();
+      connectionInfo.subscriptions = new Set<string>();
     }
 
-    // 添加订阅
+    const subscriptions = connectionInfo.subscriptions;
     channels.forEach((channel) => {
-      connectionInfo.subscriptions.add(channel);
+      subscriptions.add(channel);
     });
 
     this.sendMessage(ws, {
@@ -506,11 +520,15 @@ class WebSocketService {
       return;
     }
 
-    const { channels = [] } = data;
+    const payload = (data as UnsubscriptionData) || {};
+    const channels = Array.isArray(payload.channels)
+      ? payload.channels.filter((channel): channel is string => typeof channel === 'string')
+      : [];
 
-    if (connectionInfo.subscriptions) {
+    const subscriptions = connectionInfo.subscriptions;
+    if (subscriptions) {
       channels.forEach((channel) => {
-        connectionInfo.subscriptions.delete(channel);
+        subscriptions.delete(channel);
       });
     }
 
@@ -541,7 +559,16 @@ class WebSocketService {
       return;
     }
 
-    const { content, type = 'text', targetId = null } = data;
+    const payload = (data as ChatMessageData) || {};
+    if (payload.content === undefined) {
+      this.sendError(ws, 'INVALID_CHAT_MESSAGE', '缺少聊天内容', messageId);
+      return;
+    }
+
+    const content = payload.content;
+    const messageType = typeof payload.type === 'string' ? payload.type : 'text';
+    const targetId =
+      typeof payload.targetId === 'string' || payload.targetId === null ? payload.targetId : null;
 
     const message = {
       id: this.generateMessageId(),
@@ -549,7 +576,7 @@ class WebSocketService {
       data: {
         from: connectionInfo.userId,
         content,
-        type,
+        type: messageType,
         targetId,
         timestamp: Date.now()
       }
@@ -566,7 +593,7 @@ class WebSocketService {
     this.sendMessage(ws, {
       type: 'message_sent',
       data: {
-        messageId: message.data.id,
+        messageId: message.id,
         timestamp: Date.now()
       },
       id: messageId
@@ -624,6 +651,9 @@ class WebSocketService {
    * @returns {number} 发送数量
    */
   sendToUser(userId: string | null, message: WSMessage): number {
+    if (!userId) {
+      return 0;
+    }
     const userConnections = this.clients.get(userId);
     if (!userConnections || userConnections.size === 0) {
       return 0;
@@ -631,7 +661,7 @@ class WebSocketService {
 
     let sentCount = 0;
     userConnections.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WSClient.OPEN) {
         this.sendMessage(ws, message);
         sentCount++;
       }
@@ -656,7 +686,7 @@ class WebSocketService {
 
     this.connections.forEach((connectionInfo, ws) => {
       // 检查连接状态
-      if (ws.readyState !== WebSocket.OPEN) {
+      if (ws.readyState !== WSClient.OPEN) {
         return;
       }
 
@@ -688,7 +718,7 @@ class WebSocketService {
    * @param {Object} message - 消息对象
    */
   sendMessage(ws: WSClient, message: WSMessage): void {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws.readyState === WSClient.OPEN) {
       try {
         ws.send(JSON.stringify(message));
         this.stats.messagesSent++;
@@ -724,7 +754,7 @@ class WebSocketService {
    * @param {string} reason - 关闭原因
    */
   closeConnection(ws: WSClient, code: number = 1000, reason: string = 'Normal closure'): void {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws.readyState === WSClient.OPEN) {
       ws.close(code, reason);
     }
   }
@@ -736,11 +766,12 @@ class WebSocketService {
    * @param {Object} progressData - 进度数据
    */
   pushTaskProgress(userId: string, taskId: string, progressData: unknown): number {
+    const normalizedProgress = this.normalizePayload(progressData);
     const message = {
       type: this.messageTypes.TASK_PROGRESS,
       data: {
         taskId,
-        ...progressData,
+        ...normalizedProgress,
         timestamp: Date.now()
       }
     };
@@ -764,12 +795,13 @@ class WebSocketService {
     status: string,
     extraData: unknown = {}
   ): number {
+    const normalizedExtra = this.normalizePayload(extraData);
     const message = {
       type: this.messageTypes.TASK_STATUS_CHANGED,
       data: {
         taskId,
         status,
-        ...extraData,
+        ...normalizedExtra,
         timestamp: Date.now()
       }
     };
@@ -788,10 +820,11 @@ class WebSocketService {
    * @param {Object} notification - 通知数据
    */
   pushNotification(userId: string, notification: unknown): number {
+    const normalizedNotification = this.normalizePayload(notification);
     const message = {
       type: this.messageTypes.USER_NOTIFICATION,
       data: {
-        ...notification,
+        ...normalizedNotification,
         timestamp: Date.now()
       }
     };
@@ -807,10 +840,11 @@ class WebSocketService {
    * @param {Object} maintenanceData - 维护数据
    */
   pushMaintenanceAlert(maintenanceData: unknown): number {
+    const normalizedMaintenance = this.normalizePayload(maintenanceData);
     const message = {
       type: this.messageTypes.MAINTENANCE_ALERT,
       data: {
-        ...maintenanceData,
+        ...normalizedMaintenance,
         timestamp: Date.now()
       }
     };
@@ -826,8 +860,16 @@ class WebSocketService {
    * @private
    */
   startHeartbeat(): void {
-    setInterval(() => {
-      this.wss.clients.forEach((ws) => {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+    }
+
+    this.heartbeatTimer = setInterval(() => {
+      const server = this.wss;
+      if (!server) {
+        return;
+      }
+      server.clients.forEach((ws) => {
         if (!ws.isAlive) {
           logger.warn(`[WebSocket] 心跳超时，断开连接: ${ws.connectionId}`);
           this.closeConnection(ws, 1000, '心跳超时');
@@ -897,6 +939,10 @@ class WebSocketService {
    * 关闭WebSocket服务
    */
   async close(): Promise<void> {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     if (this.wss) {
       // 关闭所有连接
       this.wss.clients.forEach((ws) => {
@@ -911,6 +957,13 @@ class WebSocketService {
     }
 
     this.initialized = false;
+  }
+
+  private normalizePayload(payload: unknown): Record<string, unknown> {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return payload as Record<string, unknown>;
+    }
+    return {};
   }
 }
 

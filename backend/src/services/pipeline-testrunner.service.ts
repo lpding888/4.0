@@ -205,7 +205,9 @@ class PipelineTestRunnerService extends EventEmitter {
 
       // 按顺序执行每个节点
       for (const node of mockPipeline.nodes) {
-        if (execution.status === 'cancelled') {
+        const latestStatus = this.activeExecutions.get(executionId)?.status;
+        if (latestStatus === 'cancelled') {
+          execution.status = 'cancelled';
           break;
         }
 
@@ -213,13 +215,13 @@ class PipelineTestRunnerService extends EventEmitter {
       }
 
       // 完成执行
-      if (execution.status !== 'cancelled') {
-        execution.status = execution.summary.failedSteps === 0 ? 'completed' : 'failed';
-        execution.endTime = new Date();
-        execution.summary.totalDuration =
-          execution.endTime.getTime() - execution.startTime.getTime();
-        execution.summary.success = execution.summary.failedSteps === 0;
+      if (execution.status === 'cancelled') {
+        return;
       }
+      execution.status = execution.summary.failedSteps === 0 ? 'completed' : 'failed';
+      execution.endTime = new Date();
+      execution.summary.totalDuration = execution.endTime.getTime() - execution.startTime.getTime();
+      execution.summary.success = execution.summary.failedSteps === 0;
 
       // 发送完成事件
       this.emitExecutionEvent(

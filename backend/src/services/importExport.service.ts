@@ -5,28 +5,77 @@
  */
 
 import * as textRepo from '../repositories/contentTexts.repo.js';
+import type { CreateTextInput } from '../repositories/contentTexts.repo.js';
 import * as announcementRepo from '../repositories/announcements.repo.js';
 import * as bannerRepo from '../repositories/banners.repo.js';
 import * as planRepo from '../repositories/membershipPlans.repo.js';
 import * as benefitRepo from '../repositories/membershipBenefits.repo.js';
 
+interface CSVRow {
+  [key: string]: unknown;
+}
+
+const toStringSafe = (value: unknown, fallback = ''): string => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean')
+    return String(value);
+  return fallback;
+};
+
+const toNullableString = (value: unknown): string | null => {
+  const normalized = toStringSafe(value, '');
+  return normalized ? normalized : null;
+};
+
+const toNumberSafe = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+};
+
+const toBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value === 'true';
+  return Boolean(value);
+};
+
+const toStatus = (value: unknown): 'active' | 'inactive' =>
+  value === 'inactive' ? 'inactive' : 'active';
+
+const toNullableDateString = (value: unknown): string | null => {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? trimmed : parsed.toISOString();
+  }
+  return null;
+};
+
 /**
  * 内容文案导出对象
  */
-export interface ContentTextExport {
+export interface ContentTextExport extends CSVRow {
   page: string;
-  section: string;
+  section: string | null;
   key: string;
   language: string;
   value: string;
   description?: string;
-  status: string;
+  status: 'active' | 'inactive';
 }
 
 /**
  * 公告导出对象
  */
-interface AnnouncementExport {
+interface AnnouncementExport extends CSVRow {
   title: string;
   content: string;
   type: string;
@@ -41,7 +90,7 @@ interface AnnouncementExport {
 /**
  * 轮播图导出对象
  */
-interface BannerExport {
+interface BannerExport extends CSVRow {
   title: string;
   image_url: string;
   link_url: string;
@@ -56,7 +105,7 @@ interface BannerExport {
 /**
  * 套餐导出对象
  */
-interface PlanExport {
+interface PlanExport extends CSVRow {
   name: string;
   slug: string;
   description?: string;
@@ -75,7 +124,7 @@ interface PlanExport {
 /**
  * 权益导出对象
  */
-interface BenefitExport {
+interface BenefitExport extends CSVRow {
   name: string;
   key: string;
   description?: string;
@@ -112,12 +161,7 @@ interface ExportOptions {
   [key: string]: unknown;
 }
 
-/**
- * CSV行对象
- */
-interface CSVRow {
-  [key: string]: unknown;
-}
+// CSVRow 已提前定义
 
 /**
  * 导出文案为JSON
@@ -132,13 +176,13 @@ export async function exportContentTextsJSON(
   });
 
   return texts.map((t) => ({
-    page: t.page,
-    section: t.section,
-    key: t.key,
-    language: t.language,
-    value: t.value,
-    description: t.description,
-    status: t.status
+    page: toStringSafe(t.page),
+    section: t.section ?? null,
+    key: toStringSafe(t.key),
+    language: toStringSafe(t.language || 'zh-CN', 'zh-CN'),
+    value: toStringSafe(t.value),
+    description: t.description ? toStringSafe(t.description) : undefined,
+    status: toStatus(t.status)
   }));
 }
 
@@ -186,8 +230,19 @@ export async function importContentTextsJSON(
   let created = 0;
   let updated = 0;
 
+  const payload: CreateTextInput[] = data.map((item) => ({
+    page: toStringSafe(item.page),
+    section: item.section ?? null,
+    key: toStringSafe(item.key),
+    language: toStringSafe(item.language || 'zh-CN', 'zh-CN'),
+    value: toStringSafe(item.value),
+    description: item.description ? toStringSafe(item.description) : undefined,
+    status: toStatus(item.status),
+    created_by: updated_by
+  }));
+
   try {
-    const result = await textRepo.batchUpsertTexts(data, updated_by);
+    const result = await textRepo.batchUpsertTexts(payload, updated_by);
     created = result.created;
     updated = result.updated;
   } catch (error: unknown) {
@@ -237,15 +292,15 @@ export async function exportAnnouncementsJSON(): Promise<AnnouncementExport[]> {
   });
 
   return announcements.map((a) => ({
-    title: a.title,
-    content: a.content,
-    type: a.type,
-    position: a.position,
-    priority: a.priority,
-    status: a.status,
-    publish_at: a.publish_at,
-    expire_at: a.expire_at,
-    target_audience: a.target_audience
+    title: toStringSafe(a.title),
+    content: toStringSafe(a.content),
+    type: toStringSafe(a.type),
+    position: toStringSafe(a.position),
+    priority: toNumberSafe(a.priority),
+    status: toStringSafe(a.status),
+    publish_at: toNullableDateString(a.publish_at),
+    expire_at: toNullableDateString(a.expire_at),
+    target_audience: toNullableString(a.target_audience) ?? undefined
   }));
 }
 
@@ -258,15 +313,15 @@ export async function exportBannersJSON(): Promise<BannerExport[]> {
   });
 
   return banners.map((b) => ({
-    title: b.title,
-    image_url: b.image_url,
-    link_url: b.link_url,
-    description: b.description,
-    sort_order: b.sort_order,
-    status: b.status,
-    publish_at: b.publish_at,
-    expire_at: b.expire_at,
-    target_audience: b.target_audience
+    title: toStringSafe(b.title),
+    image_url: toStringSafe(b.image_url),
+    link_url: toStringSafe(b.link_url, ''),
+    description: b.description ? toStringSafe(b.description) : undefined,
+    sort_order: toNumberSafe(b.sort_order),
+    status: toStringSafe(b.status),
+    publish_at: toNullableDateString(b.publish_at),
+    expire_at: toNullableDateString(b.expire_at),
+    target_audience: toNullableString(b.target_audience) ?? undefined
   }));
 }
 
@@ -279,19 +334,19 @@ export async function exportPlansJSON(): Promise<PlanExport[]> {
   });
 
   return plans.map((p) => ({
-    name: p.name,
-    slug: p.slug,
-    description: p.description,
-    price: p.price,
-    currency: p.currency,
-    duration_days: p.duration_days,
-    quota_uploads: p.quota_uploads,
-    quota_storage: p.quota_storage,
-    quota_features: p.quota_features,
-    status: p.status,
-    sort_order: p.sort_order,
-    is_default: p.is_default,
-    is_popular: p.is_popular
+    name: toStringSafe(p.name),
+    slug: toStringSafe(p.slug),
+    description: p.description ? toStringSafe(p.description) : undefined,
+    price: toNumberSafe(p.price),
+    currency: toStringSafe(p.currency),
+    duration_days: toNumberSafe(p.duration_days),
+    quota_uploads: toNumberSafe(p.quota_uploads, 0),
+    quota_storage: toNumberSafe(p.quota_storage, 0),
+    quota_features: toNumberSafe(p.quota_features, 0),
+    status: toStringSafe(p.status),
+    sort_order: toNumberSafe(p.sort_order, 0),
+    is_default: toBoolean(p.is_default),
+    is_popular: toBoolean(p.is_popular)
   }));
 }
 
@@ -304,14 +359,14 @@ export async function exportBenefitsJSON(): Promise<BenefitExport[]> {
   });
 
   return benefits.map((b) => ({
-    name: b.name,
-    key: b.key,
-    description: b.description,
-    type: b.type,
+    name: toStringSafe(b.name),
+    key: toStringSafe(b.key),
+    description: b.description ? toStringSafe(b.description) : undefined,
+    type: toStringSafe(b.type),
     value: b.value,
-    icon: b.icon,
-    color: b.color,
-    status: b.status
+    icon: b.icon ? toStringSafe(b.icon) : undefined,
+    color: b.color ? toStringSafe(b.color) : undefined,
+    status: toStringSafe(b.status)
   }));
 }
 
@@ -330,7 +385,12 @@ export async function exportEntity(
   | BenefitExport[]
   | string
 > {
-  let data: CSVRow[];
+  let data:
+    | ContentTextExport[]
+    | AnnouncementExport[]
+    | BannerExport[]
+    | PlanExport[]
+    | BenefitExport[];
 
   switch (entityType) {
     case 'content_texts':
@@ -353,8 +413,9 @@ export async function exportEntity(
   }
 
   if (format === 'csv') {
-    const fields = Object.keys(data[0] || {});
-    return convertToCSV(data, fields);
+    const csvData = data as CSVRow[];
+    const fields = Object.keys(csvData[0] || {});
+    return convertToCSV(csvData, fields);
   }
 
   return data;

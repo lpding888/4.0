@@ -4,7 +4,11 @@
  */
 
 import { TencentCiProvider } from '../../../src/providers/handlers/tencentCi.handler.ts';
-import { ExecContext, ProviderErrorCode } from '../../../src/providers/types.ts';
+import {
+  ExecContext,
+  ProviderErrorCode,
+  type ExecResult
+} from '../../../src/providers/types.ts';
 import { ILogger } from '../../../src/providers/base/base-provider.ts';
 
 // Mock Logger
@@ -35,6 +39,14 @@ class MockLogger implements ILogger {
 describe('TencentCI Provider - 单元测试', () => {
   let provider: TencentCiProvider;
   let mockLogger: MockLogger;
+  type TencentCiResult = {
+    message: string;
+    action: string;
+    bucket: string;
+    region: string;
+    objectKey: string;
+    params: Record<string, unknown>;
+  };
 
   beforeEach(() => {
     mockLogger = new MockLogger();
@@ -44,6 +56,15 @@ describe('TencentCI Provider - 单元测试', () => {
   afterEach(() => {
     mockLogger.clear();
   });
+
+  const executeProvider = (context: ExecContext) =>
+    provider.execute(context) as Promise<ExecResult<TencentCiResult>>;
+
+  const expectSuccess = (result: ExecResult<TencentCiResult>): TencentCiResult => {
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    return result.data as TencentCiResult;
+  };
 
   describe('参数校验', () => {
     test('应该拒绝空输入', () => {
@@ -239,17 +260,16 @@ describe('TencentCI Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 验证结果
-      expect(result.success).toBe(true);
-      expect(result.data).toBeDefined();
-      expect(result.data.message).toContain('TencentCiProvider尚未实现');
-      expect(result.data.action).toBe('imageProcess');
-      expect(result.data.bucket).toBe('test-bucket-123');
-      expect(result.data.region).toBe('ap-guangzhou');
-      expect(result.data.objectKey).toBe('images/test.jpg');
-      expect(result.data.params).toEqual(input.params);
+      const data = expectSuccess(result);
+      expect(data.message).toContain('TencentCiProvider尚未实现');
+      expect(data.action).toBe('imageProcess');
+      expect(data.bucket).toBe('test-bucket-123');
+      expect(data.region).toBe('ap-guangzhou');
+      expect(data.objectKey).toBe('images/test.jpg');
+      expect(data.params).toEqual(input.params);
     });
 
     test('应该成功执行视频处理（占位）', async () => {
@@ -269,10 +289,9 @@ describe('TencentCI Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.action).toBe('videoProcess');
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.action).toBe('videoProcess');
     });
 
     test('应该成功执行内容审核（占位）', async () => {
@@ -295,10 +314,9 @@ describe('TencentCI Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
-
-      expect(result.success).toBe(true);
-      expect(result.data.action).toBe('contentAudit');
+      const result = await executeProvider(context);
+      const data = expectSuccess(result);
+      expect(data.action).toBe('contentAudit');
     });
 
     test('应该记录warning日志提示未实现', async () => {
@@ -315,7 +333,7 @@ describe('TencentCI Provider - 单元测试', () => {
         input
       };
 
-      await provider.execute(context);
+      await executeProvider(context);
 
       // 验证日志
       const warnLogs = mockLogger.logs.filter((log) => log.level === 'warn');
@@ -344,7 +362,7 @@ describe('TencentCI Provider - 单元测试', () => {
         input
       };
 
-      const result = await provider.execute(context);
+      const result = await executeProvider(context);
 
       // 参数校验失败应该返回错误
       expect(result.success).toBe(false);
