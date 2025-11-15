@@ -13,6 +13,8 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const isTestEnvironment = process.env.NODE_ENV === 'test';
+
 export const redisConfig: RedisOptions = {
   host: process.env.REDIS_HOST ?? 'localhost',
   port: parseNumber(process.env.REDIS_PORT, 6379),
@@ -21,7 +23,7 @@ export const redisConfig: RedisOptions = {
   retryStrategy: (times): number => Math.min(times * 50, 2000),
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
-  lazyConnect: false
+  lazyConnect: isTestEnvironment
 };
 
 export const redis = new RedisClient(redisConfig as RedisOptions);

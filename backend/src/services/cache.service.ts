@@ -637,6 +637,11 @@ class CacheService {
         logger.debug(`[CacheService] 内存缓存清理: ${keysToDelete.length} 项`);
       }
     }, 60000); // 每分钟清理一次
+
+    // 测试环境下如果不调用 unref，Jest 会因为定时器保持运行而无法退出
+    if (typeof this.memoryCacheCleanupTimer.unref === 'function') {
+      this.memoryCacheCleanupTimer.unref();
+    }
   }
 
   /**

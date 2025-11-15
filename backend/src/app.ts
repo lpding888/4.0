@@ -302,5 +302,6 @@ export const stopSchedulers = (): void => {
 };
 
 // 艹，创建默认app实例供测试和老版本代码使用！
-const defaultApp = await createApp();
-export default defaultApp;
+// 注意：Jest在TS->JS转换时不支持顶层await，所以这里用Promise避免语法错误
+const defaultAppPromise = createApp();
+export default defaultAppPromise;
