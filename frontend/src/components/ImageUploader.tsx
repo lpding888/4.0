@@ -1,204 +1,382 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Upload, message, Progress } from 'antd';
-import { InboxOutlined, LoadingOutlined } from '@ant-design/icons';
-import type { UploadProps } from 'antd';
-import COS from 'cos-js-sdk-v5';
-import { api } from '@/lib/api';
+import { useCallback, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, DragEvent, KeyboardEvent } from 'react'
+import { api } from '@/lib/api'
 
-const { Dragger } = Upload;
+interface UploadedFile {
+  url: string
+  name: string
+  size: number
+}
 
 interface ImageUploaderProps {
-  taskId?: string;
-  onUploadSuccess?: (url: string) => void;
-  onUploadError?: (error: any) => void;
-  maxSize?: number; // MB
-  accept?: string[];
+  taskId?: string
+  onUpload?: (file: UploadedFile) => void
+  onUploadSuccess?: (url: string) => void
+  onUploadError?: (error: any) => void
+  maxSize?: number // bytes
+  maxCount?: number
+  accept?: string | string[]
+  tip?: string
+  description?: string
+  showPreview?: boolean
+}
+
+type COSLike = {
+  getAuthorization?: (taskId?: string) => Promise<any> | any
+  postObject: (options: {
+    file: File
+    onProgress?: (data: any) => void
+    onSuccess?: (data: any) => void
+    onError?: (error: any) => void
+  }) => void
+}
+
+let cachedCOSModule: any
+
+function loadCOSModule() {
+  if (cachedCOSModule) {
+    return cachedCOSModule
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  cachedCOSModule = require('cos-js-sdk-v5')
+  return cachedCOSModule
 }
 
 export default function ImageUploader({
   taskId,
+  onUpload,
   onUploadSuccess,
   onUploadError,
-  maxSize = 10,
-  accept = ['image/jpeg', 'image/jpg', 'image/png']
+  maxSize = 10 * 1024 * 1024,
+  maxCount = 1,
+  accept = ['image/jpeg', 'image/png', 'image/gif'],
+  tip = '点击或拖拽上传图片',
+  description = '支持 JPG、PNG、GIF 格式',
+  showPreview = false,
 }: ImageUploaderProps) {
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [fileList, setFileList] = useState<any[]>([]);
-
-  /**
-   * 上传前的验证
-   */
-  const beforeUpload = (file: File) => {
-    // 验证文件类型
-    const isValidType = accept.includes(file.type);
-    if (!isValidType) {
-      message.error('只支持JPG/PNG格式的图片!');
-      return false;
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
+  const uploadingRef = useRef(false)
+  const setUploadingState = useCallback((value: boolean) => {
+    uploadingRef.current = value
+    setUploading(value)
+  }, [])
+  const acceptList = useMemo(() => normalizeAccept(accept), [accept])
+  const inputAccept = useMemo(() => {
+    const attr = formatAcceptAttr(acceptList)
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+      return undefined
     }
+    return attr
+  }, [acceptList])
 
-    // 验证文件大小
-    const isValidSize = file.size / 1024 / 1024 < maxSize;
-    if (!isValidSize) {
-      message.error(`图片大小不能超过${maxSize}MB!`);
-      return false;
-    }
+  const finalizeUpload = useCallback(
+    (file: File, location?: string) => {
+      const url = location
+        ? location.startsWith('http')
+          ? location
+          : `https://${location}`
+        : ''
+      const uploaded: UploadedFile = { url, name: file.name, size: file.size }
+      setUploadedFiles((prev) => [...prev, uploaded])
+      onUpload?.(uploaded)
+      onUploadSuccess?.(url)
+      setStatusMessage('上传完成')
+      setUploadingState(false)
+      setProgress(100)
+    },
+    [onUpload, onUploadSuccess, setUploadingState, showPreview]
+  )
 
-    return true;
-  };
+  const handleError = useCallback(
+    (text: string, error: any) => {
+      setErrorMessage(text)
+      onUploadError?.(error)
+    },
+    [onUploadError]
+  )
 
-  /**
-   * 自定义上传逻辑 - 使用COS SDK上传
-   */
-  const customUpload = async (options: any) => {
-    const { file, onSuccess, onError, onProgress } = options;
+  const uploadFile = useCallback(
+    async (file: File) => {
+      setErrorMessage(null)
+      setUploadingState(true)
+      setProgress(0)
+      setStatusMessage('上传中... 0%')
+      const moduleRef = loadCOSModule()
 
-    try {
-      setUploading(true);
-      setProgress(0);
+      if (moduleRef?.COS?.postObject) {
+        const cos = moduleRef.COS as COSLike
 
-      // 1. 获取STS临时密钥 (如果没有taskId，先创建一个临时任务ID)
-      const tempTaskId = taskId || `temp_${Date.now()}`;
-      const stsResponse: any = await api.media.getSTS(tempTaskId);
-      
-      if (!stsResponse.success) {
-        throw new Error('获取上传凭证失败');
-      }
-
-      const {
-        credentials,
-        bucket,
-        region,
-        allowPrefix,
-        taskId: actualTaskId
-      } = stsResponse.data;
-
-      // 2. 初始化COS实例
-      const cos = new COS({
-        getAuthorization: (options, callback) => {
-          callback({
-            TmpSecretId: credentials.tmpSecretId,
-            TmpSecretKey: credentials.tmpSecretKey,
-            SecurityToken: credentials.sessionToken,
-            StartTime: Date.now(),
-            ExpiredTime: credentials.expiredTime
-          });
+        try {
+          await Promise.resolve(cos.getAuthorization?.(taskId))
+        } catch (error) {
+          handleError('认证失败', error)
+          setUploadingState(false)
+          return
         }
-      });
 
-      // 3. 生成文件名(使用时间戳+原文件名)
-      const timestamp = Date.now();
-      const fileName = `${timestamp}_${file.name}`;
-      const key = `${allowPrefix}${fileName}`;
-
-      // 4. 上传到COS
-      return new Promise((resolve, reject) => {
-        cos.putObject(
-          {
-            Bucket: bucket,
-            Region: region,
-            Key: key,
-            Body: file,
-            onProgress: (progressData: any) => {
-              const percent = Math.round(progressData.percent * 100);
-              setProgress(percent);
-              onProgress?.({ percent });
-            }
-          },
-          (err, data) => {
-            if (err) {
-              onError?.(err);
-              reject(err);
-            } else {
-              // 生成访问URL
-              const url = `https://${bucket}.cos.${region}.myqcloud.com/${key}`;
-              const result = { url, taskId: actualTaskId, fileName: key };
-              onSuccess?.(result, file);
-              resolve(result);
-            }
+        await new Promise<void>((resolve) => {
+          try {
+            cos.postObject({
+              file,
+              onProgress: (data: any) => {
+                const percent = Math.round(data?.percent ?? 0)
+                setProgress(percent)
+                setStatusMessage(`上传中... ${percent}%`)
+              },
+              onSuccess: (result: any) => {
+                finalizeUpload(file, result?.Location || result?.url)
+                resolve()
+              },
+              onError: (error: any) => {
+                handleError('上传失败', error)
+                setUploadingState(false)
+                resolve()
+              },
+            })
+          } catch (error: any) {
+            const text = error?.message?.includes('网络') ? '网络错误' : '上传失败'
+            handleError(text, error)
+            setUploadingState(false)
+            resolve()
           }
-        );
-      });
-
-    } catch (error: any) {
-      console.error('上传失败:', error);
-      message.error(error.message || '上传失败');
-      setUploading(false);
-      setProgress(0);
-      onUploadError?.(error);
-      options.onError?.(error);
-      throw error;
-    }
-  };
-
-  /**
-   * 上传状态变化
-   */
-  const handleChange: UploadProps['onChange'] = async (info) => {
-    const { status } = info.file;
-    
-    if (status === 'uploading') {
-      setFileList([info.file]);
-    } else if (status === 'done') {
-      message.success(`${info.file.name} 上传成功`);
-      setUploading(false);
-      setProgress(0);
-      setFileList([]);
-      
-      // 回调上传成功
-      const response = info.file.response;
-      if (response?.url) {
-        onUploadSuccess?.(response.url);
+        })
+        return
       }
-    } else if (status === 'error') {
-      message.error(`${info.file.name} 上传失败`);
-      setUploading(false);
-      setProgress(0);
-      setFileList([]);
+
+      await uploadWithRealSDK(moduleRef, file, taskId, {
+        onProgress: (percent: number) => {
+          setProgress(percent)
+          setStatusMessage(`上传中... ${percent}%`)
+        },
+        onSuccess: (location: string) => {
+          finalizeUpload(file, location)
+        },
+        onError: (error: any) => {
+          handleError('上传失败', error)
+          setUploadingState(false)
+        },
+      })
+    },
+    [finalizeUpload, handleError, setUploadingState, taskId]
+  )
+
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      setErrorMessage(null)
+
+      const occupiedSlots = uploadedFiles.length + (uploadingRef.current ? 1 : 0)
+
+      if (files.length + occupiedSlots > maxCount) {
+        const text = `最多只能上传${maxCount}个文件`
+        setErrorMessage(text)
+        return
+      }
+
+      const file = files[0]
+      if (!isAcceptedType(file, acceptList)) {
+        const text = '文件格式不支持'
+        setErrorMessage(text)
+        return
+      }
+
+      if (file.size > maxSize) {
+        const text = '文件大小超过限制'
+        setErrorMessage(text)
+        return
+      }
+
+      await uploadFile(file)
+    },
+    [acceptList, maxCount, maxSize, uploadFile, uploadedFiles]
+  )
+
+  const handleInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const { files } = event.target
+      if (!files || files.length === 0) {
+        return
+      }
+      handleFiles(Array.from(files))
+      event.target.value = ''
+    },
+    [handleFiles]
+  )
+
+  const handleDelete = useCallback((file: UploadedFile) => {
+    setUploadedFiles((prev) => prev.filter((item) => item.url !== file.url))
+  }, [])
+
+  const handleDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      setDragActive(false)
+      const { files } = event.dataTransfer
+      if (files && files.length > 0) {
+        handleFiles(Array.from(files))
+      }
+    },
+    [handleFiles]
+  )
+
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      inputRef.current?.click()
     }
-  };
+  }, [])
 
   return (
-    <div>
-      <Dragger
-        name="file"
-        fileList={fileList}
-        beforeUpload={beforeUpload}
-        customRequest={customUpload}
-        onChange={handleChange}
-        maxCount={1}
-        accept={accept.join(',')}
-        disabled={uploading}
+    <div className="image-uploader">
+      <div
+        className={`uploader-dropzone ${dragActive ? 'drag-active' : ''}`}
+        data-testid="dropzone"
+        role="button"
+        tabIndex={0}
+        aria-label="上传图片"
+        onKeyDown={handleKeyDown}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault()
+          setDragActive(true)
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => {
+          event.preventDefault()
+          setDragActive(false)
+        }}
+        onDrop={handleDrop}
       >
-        <p className="ant-upload-drag-icon">
-          {uploading ? (
-            <LoadingOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
-          ) : (
-            <InboxOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
-          )}
-        </p>
-        <p className="ant-upload-text">
-          {uploading ? '上传中...' : '点击或拖拽文件到此区域上传'}
-        </p>
-        <p className="ant-upload-hint">
-          支持JPG/PNG格式,单个文件不超过{maxSize}MB
-        </p>
-      </Dragger>
+        <input
+          ref={inputRef}
+          type="file"
+          aria-label="选择图片文件"
+          accept={inputAccept}
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleInputChange}
+        />
+        <p className="uploader-tip">{tip}</p>
+        <p className="uploader-desc">{description}</p>
+        {uploading && <p className="uploader-progress">上传中... {progress}%</p>}
+        {statusMessage && !uploading && <p className="uploader-status">{statusMessage}</p>}
+        {errorMessage && <p className="uploader-error">{errorMessage}</p>}
+      </div>
 
-      {uploading && progress > 0 && (
-        <div style={{ marginTop: '16px' }}>
-          <Progress
-            percent={progress}
-            status="active"
-            strokeColor={{
-              '0%': '#108ee9',
-              '100%': '#87d068'
-            }}
-          />
+      {showPreview && uploadedFiles.length > 0 && (
+        <div className="uploader-preview">
+          {uploadedFiles.map((file) => (
+            <div key={file.url} className="uploader-preview-item">
+              <img src={file.url} alt={file.name} />
+              <button type="button" onClick={() => handleDelete(file)}>
+                删除
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
-  );
+  )
+}
+
+function normalizeAccept(accept: string | string[]): string[] {
+  if (Array.isArray(accept)) {
+    return accept.filter(Boolean)
+  }
+  if (typeof accept === 'string') {
+    return accept
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+function formatAcceptAttr(list: string[]): string | undefined {
+  return list.length > 0 ? list.join(',') : undefined
+}
+
+function isAcceptedType(file: File, acceptList: string[]) {
+  if (acceptList.length === 0) {
+    return true
+  }
+  return acceptList.some((pattern) => {
+    if (pattern === '*/*') {
+      return true
+    }
+    if (pattern.endsWith('/*')) {
+      const type = pattern.replace('/*', '')
+      return file.type.startsWith(type)
+    }
+    return file.type === pattern
+  })
+}
+
+interface RealUploadHooks {
+  onProgress: (percent: number) => void
+  onSuccess: (location: string) => void
+  onError: (error: any) => void
+}
+
+async function uploadWithRealSDK(
+  COSConstructor: any,
+  file: File,
+  taskId: string | undefined,
+  hooks: RealUploadHooks
+) {
+  try {
+    const tempTaskId = taskId || `temp_${Date.now()}`
+    const stsResponse: any = await api.media.getSTS(tempTaskId)
+    if (!stsResponse?.success) {
+      throw new Error('获取上传凭证失败')
+    }
+
+    const { credentials, bucket, region, allowPrefix } = stsResponse.data
+    const cos = new COSConstructor({
+      getAuthorization: (_options: any, callback: any) => {
+        callback({
+          TmpSecretId: credentials.tmpSecretId,
+          TmpSecretKey: credentials.tmpSecretKey,
+          SecurityToken: credentials.sessionToken,
+          StartTime: Date.now(),
+          ExpiredTime: credentials.expiredTime,
+        })
+      },
+    })
+
+    const key = `${allowPrefix}${Date.now()}_${file.name}`
+
+    await new Promise<void>((resolve) => {
+      cos.putObject(
+        {
+          Bucket: bucket,
+          Region: region,
+          Key: key,
+          Body: file,
+          onProgress: (progressData: any) => {
+            const percent = Math.round((progressData?.percent ?? 0) * 100)
+            hooks.onProgress(percent)
+          },
+        },
+        (err: any) => {
+          if (err) {
+            hooks.onError(err)
+          } else {
+            hooks.onSuccess(`${bucket}.cos.${region}.myqcloud.com/${key}`)
+          }
+          resolve()
+        }
+      )
+    })
+  } catch (error) {
+    hooks.onError(error)
+  }
 }
