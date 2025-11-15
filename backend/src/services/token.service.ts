@@ -37,6 +37,8 @@ const RedisCtor = Redis as unknown as RedisConstructor;
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const isTestEnvironment = process.env.NODE_ENV === 'test';
+
 class TokenService {
   private readonly redis: RedisInstance;
 
@@ -54,7 +56,8 @@ class TokenService {
       db: Number(process.env.REDIS_DB) || 0,
       keyPrefix: 'auth:',
       retryDelayOnFailover: 100,
-      maxRetriesPerRequest: 3
+      maxRetriesPerRequest: 3,
+      lazyConnect: isTestEnvironment
     });
 
     this.redis.on('error', (err) => {
