@@ -1,10 +1,10 @@
-import axios from 'axios';
 import { nanoid } from 'nanoid';
 import logger from '../utils/logger.js';
 import taskService from './task.service.js';
 import contentAuditService from './contentAudit.service.js';
 import systemConfigService from './systemConfig.service.js';
 import { db } from '../config/database.js';
+import { createHttpClient } from '../utils/httpClient.js';
 
 interface SystemConfigService {
   get(key: string, defaultValue?: string): Promise<string | unknown>;
@@ -34,6 +34,12 @@ class AIModelService {
     apiUrl: process.env.RUNNING_HUB_API_URL || 'https://www.runninghub.cn/task/openapi/ai-app/run',
     timeout: 180000
   };
+
+  private runningHubClient = createHttpClient({
+    serviceName: 'runninghub',
+    timeoutMs: this.config.timeout,
+    maxRetries: 2
+  });
 
   private dynamicConfig: {
     webappId: string | null;
@@ -208,11 +214,11 @@ class AIModelService {
         nodeImage: this.dynamicConfig.nodeImage,
         imageKey
       });
-      const response = await axios.post<RunningHubResponse>(this.config.apiUrl, requestBody, {
+      const data = await this.runningHubClient.post<RunningHubResponse>(this.config.apiUrl, requestBody, {
         headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json' },
-        timeout: 30000
+        timeoutMs: 30000
       });
-      const taskId = (response.data?.data?.taskId ?? response.data?.taskId) as string | undefined;
+      const taskId = (data?.data?.taskId ?? data?.taskId) as string | undefined;
       if (!taskId) throw new Error('RunningHub未返回任务ID');
       logger.info(`[AIModelService] RunningHub任务已创建 taskId=${taskId}`);
       return taskId;
@@ -300,14 +306,14 @@ class AIModelService {
   async queryRunningHubStatus(runningHubTaskId: string): Promise<'SUCCESS' | 'FAILED' | 'PENDING'> {
     try {
       const apiKey = await this.getApiKey();
-      const response = await axios.get<RunningHubResponse>(
+      const data = await this.runningHubClient.get<RunningHubResponse>(
         `${this.config.apiUrl}/v1/status/${runningHubTaskId}`,
         {
           headers: { Authorization: `Bearer ${apiKey}` },
-          timeout: 10000
+          timeoutMs: 10000
         }
       );
-      const status = String(response.data?.status || 'PENDING');
+      const status = String(data?.status || 'PENDING');
       if (['SUCCESS', 'FAILED', 'PENDING'].includes(status)) {
         return status as 'SUCCESS' | 'FAILED' | 'PENDING';
       }
@@ -324,14 +330,14 @@ class AIModelService {
   async fetchResults(runningHubTaskId: string): Promise<string[]> {
     try {
       const apiKey = await this.getApiKey();
-      const response = await axios.get<RunningHubResponse>(
+      const data = await this.runningHubClient.get<RunningHubResponse>(
         `${this.config.apiUrl}/v1/outputs/${runningHubTaskId}`,
         {
           headers: { Authorization: `Bearer ${apiKey}` },
-          timeout: 30000
+          timeoutMs: 30000
         }
       );
-      const outputs = response.data?.outputs;
+      const outputs = data?.outputs;
       if (Array.isArray(outputs)) {
         return outputs as string[];
       }

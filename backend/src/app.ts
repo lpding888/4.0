@@ -6,6 +6,9 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
 import swaggerUi from 'swagger-ui-express';
+import { ExpressAdapter } from '@bull-board/express';
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 
 import { requestIdMiddleware } from './middlewares/request-id.middleware.js';
 import { appErrorHandler, notFoundHandler } from './middlewares/error-handler.js';
@@ -17,6 +20,7 @@ import swaggerSpec from './config/swagger.config.js';
 import logger from './utils/logger.js';
 import metricsMiddleware from './middlewares/metrics.middleware.js';
 import metricsService from './services/metrics.service.js';
+import queueService from './services/queue.service.js';
 
 type RouterModule = { default?: express.Router } | express.Router;
 
@@ -233,6 +237,30 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });
+
+  // P1-XXX: BullMQ 队列监控面板（艹！只在非生产环境默认开启，生产环境请用Nginx/IP白名单保护）
+  const enableQueuesDashboard =
+    process.env.ENABLE_BULL_BOARD === 'true' || process.env.NODE_ENV !== 'production';
+  if (enableQueuesDashboard) {
+    try {
+      const serverAdapter = new ExpressAdapter();
+      serverAdapter.setBasePath('/admin/queues');
+
+      const bullQueues = queueService.getAllQueues().map(
+        (q) => new BullMQAdapter(q, { readOnlyMode: false })
+      );
+
+      createBullBoard({
+        queues: bullQueues,
+        serverAdapter
+      });
+
+      app.use('/admin/queues', serverAdapter.getRouter());
+      logger.info('[BullBoard] 队列监控面板已挂载在 /admin/queues');
+    } catch (error) {
+      logger.error('[BullBoard] 初始化队列监控面板失败', { error });
+    }
+  }
 
   await registerRoutes(app);
 

@@ -4,6 +4,7 @@ import imageProcessService from '../services/imageProcess.service.js';
 import aiModelService from '../services/aiModel.service.js';
 import paginationService, { type TaskFilters } from '../services/pagination.service.js';
 import logger from '../utils/logger.js';
+import { saveIdempotencyResponse } from '../middlewares/idempotency.middleware.js';
 import type {
   CreateFeatureTaskRequest,
   CreateTaskRequest,
@@ -98,7 +99,10 @@ class TaskController {
           });
         });
       }
-      res.json({ success: true, data: task });
+      const responseBody = { success: true, data: task };
+      res.json(responseBody);
+      // 幂等结果异步写Redis，这个SB操作失败也不能影响主流程
+      void saveIdempotencyResponse(res, responseBody);
     } catch (error) {
       const err = error as Error;
       logger.error(`[TaskController] 创建任务失败: ${err.message}`, error);

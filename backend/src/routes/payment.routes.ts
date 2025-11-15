@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import paymentController from '../controllers/payment.controller.js';
 import rateLimit from 'express-rate-limit';
+import { idempotencyMiddleware } from '../middlewares/idempotency.middleware.js';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post(
   '/create',
   authenticate,
   createOrderLimiter,
+  idempotencyMiddleware('payment_create'),
   [
     body('productType')
       .isIn(['membership', 'quota', 'premium'])

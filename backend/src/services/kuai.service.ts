@@ -1,5 +1,5 @@
-import axios from 'axios';
 import logger from '../utils/logger.js';
+import { createHttpClient } from '../utils/httpClient.js';
 
 type KuaiCreateResponse = {
   id: string;
@@ -21,6 +21,12 @@ class KuaiService {
   private baseUrl = 'https://apis.kuai.host';
 
   private initialized = false;
+
+  private client = createHttpClient({
+    serviceName: 'kuai',
+    timeoutMs: 15_000,
+    maxRetries: 1
+  });
 
   private initialize() {
     if (this.initialized) return;
@@ -58,7 +64,7 @@ class KuaiService {
         scriptLength: script.length
       });
 
-      const response = await axios.post<KuaiCreateResponse>(
+      const data = await this.client.post<KuaiCreateResponse>(
         `${this.baseUrl}/v1/video/create`,
         requestData,
         {
@@ -67,20 +73,20 @@ class KuaiService {
             'Content-Type': 'application/json',
             Accept: 'application/json'
           },
-          timeout: 15000
+          timeoutMs: 15_000
         }
       );
 
-      if (response.data?.id) {
+      if (data?.id) {
         logger.info('[KuaiService] 视频任务创建成功', {
-          vendorTaskId: response.data.id,
-          status: response.data.status
+          vendorTaskId: data.id,
+          status: data.status
         });
 
         return {
-          vendorTaskId: response.data.id,
-          status: response.data.status,
-          enhancedPrompt: response.data.enhanced_prompt
+          vendorTaskId: data.id,
+          status: data.status,
+          enhancedPrompt: data.enhanced_prompt
         };
       }
 
@@ -122,16 +128,17 @@ class KuaiService {
     try {
       logger.info('[KuaiService] 查询视频任务状态', { vendorTaskId });
 
-      const response = await axios.get<KuaiStatusResponse>(`${this.baseUrl}/v1/video/query`, {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          Accept: 'application/json'
-        },
-        params: { id: vendorTaskId },
-        timeout: 10000
-      });
-
-      const data = response.data;
+      const data = await this.client.get<KuaiStatusResponse>(
+        `${this.baseUrl}/v1/video/query`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            Accept: 'application/json'
+          },
+          params: { id: vendorTaskId },
+          timeoutMs: 10_000
+        }
+      );
       if (data) {
         logger.info('[KuaiService] 视频状态查询成功', {
           vendorTaskId: data.id,

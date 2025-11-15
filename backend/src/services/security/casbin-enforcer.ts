@@ -1,5 +1,5 @@
 import { newEnforcer, type Enforcer } from 'casbin';
-import SequelizeAdapter from 'casbin-sequelize-adapter';
+import { SequelizeAdapter } from 'casbin-sequelize-adapter';
 import path from 'node:path';
 import logger from '../../utils/logger.js';
 import {

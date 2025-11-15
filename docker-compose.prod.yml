@@ -121,7 +121,8 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_BASE: https://api.aizhao.icu/api  # 艹！修改为你的API域名
       NEXT_PUBLIC_API_URL: https://api.aizhao.icu/api
-      NEXT_PUBLIC_WS_URL: https://api.aizhao.icu
+      NEXT_PUBLIC_API_BASE_URL: https://api.aizhao.icu/api
+      NEXT_PUBLIC_WS_URL: wss://api.aizhao.icu
     networks:
       - ai-photo-network
     deploy:
@@ -133,9 +134,9 @@ services:
           cpus: '0.25'
           memory: 256M
 
-  # ========== MySQL 8.0 数据库 ==========
+  # ========== MySQL 8.4 LTS 数据库 ==========
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: ai-photo-mysql
     restart: always
     environment:

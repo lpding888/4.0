@@ -237,6 +237,15 @@ class QueueService {
     this.ensureQueueInfrastructure(name, { defaultJobOptions: options?.defaultJobOptions });
   }
 
+  // 给队列监控面板用的访问器，这个SB方法只读队列实例，别在外面乱关连接
+  public getQueue(name: string): Queue | undefined {
+    return this.queues.get(name);
+  }
+
+  public getAllQueues(): Queue[] {
+    return Array.from(this.queues.values());
+  }
+
   public async addJob(
     queueName: string,
     jobName: string,

@@ -1,6 +1,6 @@
-import axios from 'axios';
 import logger from '../utils/logger.js';
 import systemConfigService from './systemConfig.service.js';
+import { createHttpClient } from '../utils/httpClient.js';
 
 type PromptParameters = {
   clothingType?: string;
@@ -36,6 +36,13 @@ class HunyuanService {
   private apiSecret?: string;
 
   private baseUrl: string = process.env.HUNYUAN_API_URL ?? 'https://hunyuan.tencentcloudapi.com';
+
+  private client = createHttpClient({
+    serviceName: 'hunyuan',
+    // 不设置baseURL，直接在调用里拼完整URL，避免和动态配置打架
+    timeoutMs: 10_000,
+    maxRetries: 1
+  });
 
   private async _initialize(): Promise<void> {
     if (this.initialized) {
@@ -171,7 +178,7 @@ class HunyuanService {
     };
 
     try {
-      const response = await axios.post<HunyuanResponse>(
+      const data = await this.client.post<HunyuanResponse>(
         `${this.baseUrl}/v1/chat/completions`,
         requestData,
         {
@@ -179,11 +186,11 @@ class HunyuanService {
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 10_000
+          timeoutMs: 10_000
         }
       );
 
-      const content = response.data?.choices?.[0]?.message?.content?.trim();
+      const content = data?.choices?.[0]?.message?.content?.trim();
       if (content) {
         return content;
       }
