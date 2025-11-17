@@ -1,9 +1,22 @@
-import { WebSocketServer, WebSocket as WSClient } from 'ws';
+import { WebSocketServer, WebSocket as WSClient, RawData } from 'ws';
 import type { IncomingMessage } from 'http';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';
 import tokenService from './token.service.js';
 import permissionService from './permission.service.js';
+
+// 扩展 WebSocket 类型，添加自定义属性
+declare module 'ws' {
+  interface WebSocket {
+    isAlive?: boolean;
+    connectionId?: string;
+    ip?: string | unknown;
+    userAgent?: string;
+    connectedAt?: number;
+    lastPing?: number;
+    authTimeout?: NodeJS.Timeout | null;
+  }
+}
 
 /**
  * WebSocket配置接口
@@ -252,8 +265,8 @@ class WebSocketService {
     if (!server) {
       throw new Error('WebSocket server not initialized');
     }
-    server.on('connection', (ws, req) => {
-      void this.handleConnection(ws as WSClient, req);
+    server.on('connection', (ws: WSClient, req: IncomingMessage) => {
+      void this.handleConnection(ws, req);
     });
     server.on('error', this.handleServerError.bind(this));
 
@@ -326,7 +339,7 @@ class WebSocketService {
    * @private
    */
   setupConnectionListeners(ws: WSClient): void {
-    ws.on('message', async (data) => {
+    ws.on('message', async (data: RawData) => {
       try {
         this.stats.messagesReceived++;
         const message = JSON.parse(data.toString());
@@ -337,11 +350,11 @@ class WebSocketService {
       }
     });
 
-    ws.on('close', (code, reason) => {
+    ws.on('close', (code: number, reason: Buffer) => {
       this.handleDisconnection(ws, code, reason);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       logger.error(`[WebSocket] 连接错误: ${ws.connectionId}`, error);
       this.handleDisconnection(ws, 1006, '连接错误');
     });
@@ -869,7 +882,7 @@ class WebSocketService {
       if (!server) {
         return;
       }
-      server.clients.forEach((ws) => {
+      server.clients.forEach((ws: WSClient) => {
         if (!ws.isAlive) {
           logger.warn(`[WebSocket] 心跳超时，断开连接: ${ws.connectionId}`);
           this.closeConnection(ws, 1000, '心跳超时');
@@ -945,7 +958,7 @@ class WebSocketService {
     }
     if (this.wss) {
       // 关闭所有连接
-      this.wss.clients.forEach((ws) => {
+      this.wss.clients.forEach((ws: WSClient) => {
         this.closeConnection(ws, 1001, '服务器关闭');
       });
 
