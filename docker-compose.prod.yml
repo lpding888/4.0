@@ -111,10 +111,7 @@ services:
 
   # ========== 前端服务 ==========
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: ai-photo-frontend:latest
+    image: ghcr.io/lpding888/aiygw4.0/frontend:latest
     container_name: ai-photo-frontend
     restart: always
     environment:
