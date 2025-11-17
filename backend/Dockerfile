@@ -3,7 +3,7 @@
 FROM node:20.11-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 FROM node:20.11-alpine AS build
 WORKDIR /app
