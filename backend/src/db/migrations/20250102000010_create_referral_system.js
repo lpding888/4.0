@@ -301,7 +301,10 @@ exports.up = async function (knex) {
     table.foreign('user_id').references('id').inTable('users').onDelete('CASCADE');
 
     // 唯一约束
-    table.unique(['user_id', 'stat_type', 'stat_period', 'stat_date'], 'ref_stats_user_period_unique');
+    table.unique(
+      ['user_id', 'stat_type', 'stat_period', 'stat_date'],
+      'ref_stats_user_period_unique'
+    );
 
     // 索引
     table.index(['user_id']);

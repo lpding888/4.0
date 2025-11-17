@@ -4,6 +4,7 @@
     "plugin:jsx-a11y/recommended"
   ],
   "plugins": [
+    "@typescript-eslint",
     "jsx-a11y"
   ],
   "rules": {
@@ -41,6 +42,7 @@
     "react/jsx-key": "off",
     "jsx-a11y/media-has-caption": "off",
     "react/display-name": "off",
-    "import/no-anonymous-default-export": "off"
+    "import/no-anonymous-default-export": "off",
+    "@typescript-eslint/no-var-requires": "off"
   }
 }

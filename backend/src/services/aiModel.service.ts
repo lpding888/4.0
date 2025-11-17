@@ -214,10 +214,14 @@ class AIModelService {
         nodeImage: this.dynamicConfig.nodeImage,
         imageKey
       });
-      const data = await this.runningHubClient.post<RunningHubResponse>(this.config.apiUrl, requestBody, {
-        headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json' },
-        timeoutMs: 30000
-      });
+      const data = await this.runningHubClient.post<RunningHubResponse>(
+        this.config.apiUrl,
+        requestBody,
+        {
+          headers: { Host: 'www.runninghub.cn', 'Content-Type': 'application/json' },
+          timeoutMs: 30000
+        }
+      );
       const taskId = (data?.data?.taskId ?? data?.taskId) as string | undefined;
       if (!taskId) throw new Error('RunningHub未返回任务ID');
       logger.info(`[AIModelService] RunningHub任务已创建 taskId=${taskId}`);

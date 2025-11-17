@@ -8,12 +8,7 @@ const router = Router();
 // 艹，系统配置都是全局影响的东西，一律限制管理员并记录审计日志
 router.get('/', authenticate, requireAdmin, systemConfigController.list);
 router.get('/categories', authenticate, requireAdmin, systemConfigController.getCategories);
-router.get(
-  '/category/:category',
-  authenticate,
-  requireAdmin,
-  systemConfigController.getCategory
-);
+router.get('/category/:category', authenticate, requireAdmin, systemConfigController.getCategory);
 router.post(
   '/reload-cache',
   authenticate,

@@ -29,8 +29,9 @@ export async function saveChat(session: {
   const db = await withDB();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(session);
-    tx.oncomplete = () => resolve();
+    const request = tx.objectStore(STORE).put(session);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || tx.error);
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -59,8 +60,9 @@ export async function deleteChat(id: string) {
   const db = await withDB();
   return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
+    const request = tx.objectStore(STORE).delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || tx.error);
     tx.onerror = () => reject(tx.error);
   });
 }

@@ -59,16 +59,8 @@ exports.up = async function (knex) {
       table.text('payment_result').nullable().comment('支付结果(JSON)');
       table.datetime('paid_at').nullable().comment('支付时间');
       table.datetime('expired_at').nullable().comment('过期时间');
-      table
-        .datetime('created_at')
-        .defaultTo(knex.fn.now())
-        .notNullable()
-        .comment('创建时间');
-      table
-        .datetime('updated_at')
-        .defaultTo(knex.fn.now())
-        .notNullable()
-        .comment('更新时间');
+      table.datetime('created_at').defaultTo(knex.fn.now()).notNullable().comment('创建时间');
+      table.datetime('updated_at').defaultTo(knex.fn.now()).notNullable().comment('更新时间');
 
       // 外键
       table.foreign('user_id').references('users.id').onDelete('CASCADE');
@@ -86,32 +78,32 @@ exports.up = async function (knex) {
 
   // 支付记录表
   await createTableIfMissing(knex, 'payment_transactions', function (table) {
-      table.string('id', 32).primary().comment('支付记录ID');
-      table.string('order_id', 32).notNullable().comment('支付订单ID');
-      table.string('user_id', 32).notNullable().comment('用户ID');
-      table.string('transaction_no', 64).notNullable().comment('交易流水号');
-      table.string('payment_method', 20).notNullable().comment('支付方式');
-      table.string('action_type', 20).notNullable().comment('操作类型: payment, refund');
-      table.decimal('amount', 10, 2).notNullable().comment('金额');
-      table.string('status', 20).notNullable().comment('状态: pending, success, failed');
-      table.string('gateway_transaction_no', 64).nullable().comment('支付网关交易号');
-      table.text('request_data').nullable().comment('请求数据(JSON)');
-      table.text('response_data').nullable().comment('响应数据(JSON)');
-      table.string('error_code', 50).nullable().comment('错误码');
-      table.text('error_message').nullable().comment('错误信息');
-      table.datetime('created_at').defaultTo(knex.fn.now()).comment('创建时间');
+    table.string('id', 32).primary().comment('支付记录ID');
+    table.string('order_id', 32).notNullable().comment('支付订单ID');
+    table.string('user_id', 32).notNullable().comment('用户ID');
+    table.string('transaction_no', 64).notNullable().comment('交易流水号');
+    table.string('payment_method', 20).notNullable().comment('支付方式');
+    table.string('action_type', 20).notNullable().comment('操作类型: payment, refund');
+    table.decimal('amount', 10, 2).notNullable().comment('金额');
+    table.string('status', 20).notNullable().comment('状态: pending, success, failed');
+    table.string('gateway_transaction_no', 64).nullable().comment('支付网关交易号');
+    table.text('request_data').nullable().comment('请求数据(JSON)');
+    table.text('response_data').nullable().comment('响应数据(JSON)');
+    table.string('error_code', 50).nullable().comment('错误码');
+    table.text('error_message').nullable().comment('错误信息');
+    table.datetime('created_at').defaultTo(knex.fn.now()).comment('创建时间');
 
-      // 外键
-      table.foreign('order_id').references('payment_orders.id').onDelete('CASCADE');
-      table.foreign('user_id').references('users.id').onDelete('CASCADE');
+    // 外键
+    table.foreign('order_id').references('payment_orders.id').onDelete('CASCADE');
+    table.foreign('user_id').references('users.id').onDelete('CASCADE');
 
-      // 索引
-      table.index('order_id', 'idx_payment_transactions_order');
-      table.index('user_id', 'idx_payment_transactions_user');
-      table.index('transaction_no', 'idx_payment_transactions_no');
-      table.index('status', 'idx_payment_transactions_status');
-      table.index('created_at', 'idx_payment_transactions_created');
-    });
+    // 索引
+    table.index('order_id', 'idx_payment_transactions_order');
+    table.index('user_id', 'idx_payment_transactions_user');
+    table.index('transaction_no', 'idx_payment_transactions_no');
+    table.index('status', 'idx_payment_transactions_status');
+    table.index('created_at', 'idx_payment_transactions_created');
+  });
 
   // 退款记录表
   await createTableIfMissing(
@@ -133,16 +125,8 @@ exports.up = async function (knex) {
       table.string('gateway_refund_no', 64).nullable().comment('支付网关退款单号');
       table.text('refund_result').nullable().comment('退款结果(JSON)');
       table.datetime('refunded_at').nullable().comment('退款成功时间');
-      table
-        .datetime('created_at')
-        .defaultTo(knex.fn.now())
-        .notNullable()
-        .comment('创建时间');
-      table
-        .datetime('updated_at')
-        .defaultTo(knex.fn.now())
-        .notNullable()
-        .comment('更新时间');
+      table.datetime('created_at').defaultTo(knex.fn.now()).notNullable().comment('创建时间');
+      table.datetime('updated_at').defaultTo(knex.fn.now()).notNullable().comment('更新时间');
 
       // 外键
       table.foreign('order_id').references('payment_orders.id').onDelete('CASCADE');

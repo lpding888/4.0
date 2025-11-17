@@ -1,5 +1,30 @@
 // Jest 测试环境配置
 import '@testing-library/jest-dom'
+import { ReadableStream } from 'stream/web'
+import { TextEncoder, TextDecoder } from 'util'
+
+if (typeof global.ReadableStream === 'undefined') {
+  global.ReadableStream = ReadableStream
+}
+
+if (typeof global.TextEncoder === 'undefined') {
+  global.TextEncoder = TextEncoder
+}
+
+if (typeof global.TextDecoder === 'undefined') {
+  global.TextDecoder = TextDecoder
+}
+
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = () => ({
+    matches: false,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })
+}
 
 // Mock Next.js router
 jest.mock('next/router', () => ({

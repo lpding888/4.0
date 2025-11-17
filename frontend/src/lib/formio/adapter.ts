@@ -249,6 +249,14 @@ export function convertFormioToUFS(formioSchema: FormioSchema): UFSSchema {
     );
   }
 
+  // 没有任何组件直接视为无可转换内容
+  if (formioSchema.components.length === 0) {
+    throw new AdapterError(
+      'No components provided in Formio Schema',
+      'NO_SUPPORTED_COMPONENTS'
+    );
+  }
+
   // 转换所有组件
   const fields: UFSField[] = [];
   const unsupportedTypes = new Set<string>();
@@ -284,7 +292,7 @@ export function convertFormioToUFS(formioSchema: FormioSchema): UFSSchema {
   }
 
   // 如果所有组件都不支持，抛出错误
-  if (fields.length === 0 && formioSchema.components.length > 0) {
+  if (fields.length === 0) {
     throw new AdapterError(
       'No supported components found in Formio Schema',
       'NO_SUPPORTED_COMPONENTS',

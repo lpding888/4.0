@@ -1,9 +1,45 @@
+const fs = require('fs');
+const path = require('path');
+
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 /** @type {import('next').NextConfig} */
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
   enabled: process.env.ANALYZE === 'true',
 });
+
+function buildAntdModularizeMap() {
+  try {
+    const componentsDir = path.join(__dirname, 'node_modules/antd/es');
+    const entries = fs.readdirSync(componentsDir, { withFileTypes: true });
+    return entries.reduce((acc, entry) => {
+      if (!entry.isDirectory()) {
+        return acc;
+      }
+      const segments = entry.name.split('-').filter(Boolean);
+      if (segments.length === 0) {
+        return acc;
+      }
+      const pascalName = segments
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join('');
+      if (!pascalName) {
+        return acc;
+      }
+      const camelName = pascalName.charAt(0).toLowerCase() + pascalName.slice(1);
+      const target = `antd/es/${entry.name}`;
+      acc[pascalName] = target;
+      acc[camelName] = target;
+      return acc;
+    }, {});
+  } catch (error) {
+    console.warn('[NextConfig] 构建AntD modularize映射失败:', error);
+    return {};
+  }
+}
+
+const antdModularizeMap = isTestEnv ? {} : buildAntdModularizeMap();
 
 const nextConfig = {
   reactStrictMode: true,
@@ -15,9 +51,14 @@ const nextConfig = {
   },
   // 艹!Ant Design按需加载,tree-shaking优化
   modularizeImports: {
-    'antd': {
-      transform: 'antd/es/{{member}}',
-    },
+    ...(isTestEnv
+      ? {}
+      : {
+          antd: {
+            transform: antdModularizeMap,
+            skipDefaultConversion: true,
+          },
+        }),
     '@ant-design/icons': {
       transform: '@ant-design/icons/{{member}}',
     },

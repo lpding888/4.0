@@ -28,9 +28,7 @@ const resolveColumn = async (knex, tableName, candidates) => {
 
   for (const candidate of candidates) {
     if (columns.includes(candidate)) {
-      console.log(
-        `[Migration:add_core_indexes] 列 ${candidate} 在 ${tableName} 直接匹配`
-      );
+      console.log(`[Migration:add_core_indexes] 列 ${candidate} 在 ${tableName} 直接匹配`);
       return candidate;
     }
     const normalizedMatch = normalizedMap.get(normalize(candidate));
@@ -53,7 +51,11 @@ const indexExists = async (knex, tableName, indexName) => {
 const addIndexSafe = async (knex, tableName, columnCandidates, indexName) => {
   const actualColumns = [];
   for (const candidates of columnCandidates) {
-    const column = await resolveColumn(knex, tableName, Array.isArray(candidates) ? candidates : [candidates]);
+    const column = await resolveColumn(
+      knex,
+      tableName,
+      Array.isArray(candidates) ? candidates : [candidates]
+    );
     if (!column) {
       console.warn(
         `[Migration:add_core_indexes] 跳过索引 ${indexName}，列 ${candidates} 在 ${tableName} 不存在`
@@ -89,123 +91,65 @@ exports.up = async function (knex) {
   await addIndexSafe(
     knex,
     'tasks',
-    [
-      ['user_id', 'userId'],
-      ['created_at', 'createdAt'],
-      ['id']
-    ],
+    [['user_id', 'userId'], ['created_at', 'createdAt'], ['id']],
     'idx_tasks_user_time'
   );
+  await addIndexSafe(knex, 'tasks', [['user_id', 'userId'], ['status']], 'idx_tasks_user_status');
   await addIndexSafe(
     knex,
     'tasks',
-    [
-      ['user_id', 'userId'],
-      ['status']
-    ],
-    'idx_tasks_user_status'
-  );
-  await addIndexSafe(
-    knex,
-    'tasks',
-    [
-      ['status'],
-      ['created_at', 'createdAt'],
-      ['id']
-    ],
+    [['status'], ['created_at', 'createdAt'], ['id']],
     'idx_tasks_status_time'
   );
   await addIndexSafe(knex, 'tasks', [['type']], 'idx_tasks_type');
   await addIndexSafe(knex, 'tasks', [['vendorTaskId']], 'idx_tasks_vendor_task');
+  await addIndexSafe(knex, 'tasks', [['type'], ['status']], 'idx_tasks_type_status');
   await addIndexSafe(
     knex,
     'tasks',
-    [
-      ['type'],
-      ['status']
-    ],
-    'idx_tasks_type_status'
-  );
-  await addIndexSafe(
-    knex,
-    'tasks',
-    [
-      ['user_id', 'userId'],
-      ['type'],
-      ['status'],
-      ['created_at', 'createdAt']
-    ],
+    [['user_id', 'userId'], ['type'], ['status'], ['created_at', 'createdAt']],
     'idx_tasks_user_type_status_time'
   );
 
   // quota_transactions (新表使用 snake_case)
   await addIndexSafe(knex, 'quota_transactions', [['user_id']], 'idx_quota_user');
   await addIndexSafe(knex, 'quota_transactions', [['phase']], 'idx_quota_phase');
-  await addIndexSafe(
-    knex,
-    'quota_transactions',
-    [
-      ['user_id'],
-      ['phase']
-    ],
-    'idx_quota_user_phase'
-  );
+  await addIndexSafe(knex, 'quota_transactions', [['user_id'], ['phase']], 'idx_quota_user_phase');
   await addIndexSafe(knex, 'quota_transactions', [['created_at']], 'idx_quota_created');
   await addIndexSafe(
     knex,
     'quota_transactions',
-    [
-      ['user_id'],
-      ['phase'],
-      ['created_at']
-    ],
+    [['user_id'], ['phase'], ['created_at']],
     'idx_quota_user_phase_time'
   );
 
   // feature_definitions
   await addIndexSafe(knex, 'feature_definitions', [['is_enabled']], 'idx_feature_enabled');
-  await addIndexSafe(knex, 'feature_definitions', [['pipeline_schema_ref']], 'idx_feature_pipeline');
+  await addIndexSafe(
+    knex,
+    'feature_definitions',
+    [['pipeline_schema_ref']],
+    'idx_feature_pipeline'
+  );
   await addIndexSafe(knex, 'feature_definitions', [['category']], 'idx_feature_category');
   await addIndexSafe(
     knex,
     'feature_definitions',
-    [
-      ['is_enabled'],
-      ['category']
-    ],
+    [['is_enabled'], ['category']],
     'idx_feature_enabled_category'
   );
 
   // task_steps
   await addIndexSafe(knex, 'task_steps', [['task_id']], 'idx_steps_task');
   await addIndexSafe(knex, 'task_steps', [['status']], 'idx_steps_status');
-  await addIndexSafe(
-    knex,
-    'task_steps',
-    [
-      ['task_id'],
-      ['step_index']
-    ],
-    'idx_steps_task_index'
-  );
-  await addIndexSafe(
-    knex,
-    'task_steps',
-    [
-      ['task_id'],
-      ['status']
-    ],
-    'idx_steps_task_status'
-  );
+  await addIndexSafe(knex, 'task_steps', [['task_id'], ['step_index']], 'idx_steps_task_index');
+  await addIndexSafe(knex, 'task_steps', [['task_id'], ['status']], 'idx_steps_task_status');
   await addIndexSafe(knex, 'task_steps', [['type']], 'idx_steps_type');
   await addIndexSafe(knex, 'task_steps', [['provider_ref']], 'idx_steps_provider');
   await addIndexSafe(
     knex,
     'task_steps',
-    [
-      ['status'],
-      ['created_at', 'createdAt']
-    ],
+    [['status'], ['created_at', 'createdAt']],
     'idx_steps_status_time'
   );
 
@@ -221,16 +165,13 @@ exports.up = async function (knex) {
   );
   await addIndexSafe(knex, 'orders', [['status']], 'idx_orders_status');
   await addIndexSafe(knex, 'orders', [['type']], 'idx_orders_type');
-  await addIndexSafe(knex, 'orders', [['external_order_id', 'transactionId']], 'idx_orders_external');
   await addIndexSafe(
     knex,
     'orders',
-    [
-      ['user_id', 'userId'],
-      ['status']
-    ],
-    'idx_orders_user_status'
+    [['external_order_id', 'transactionId']],
+    'idx_orders_external'
   );
+  await addIndexSafe(knex, 'orders', [['user_id', 'userId'], ['status']], 'idx_orders_user_status');
   await addIndexSafe(knex, 'orders', [['payment_status']], 'idx_orders_payment');
 
   console.log('✓ 核心索引优化完成（兼容旧列名）');

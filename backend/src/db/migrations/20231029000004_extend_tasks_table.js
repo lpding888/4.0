@@ -6,7 +6,10 @@ exports.up = function (knex) {
   return knex.schema
     .table('tasks', function (table) {
       // 功能卡片ID
-      table.string('feature_id', 100).nullable().comment('功能ID(引用feature_definitions.feature_id)');
+      table
+        .string('feature_id', 100)
+        .nullable()
+        .comment('功能ID(引用feature_definitions.feature_id)');
       table
         .foreign('feature_id')
         .references('feature_id')

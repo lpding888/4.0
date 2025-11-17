@@ -5,7 +5,37 @@
  * @author 老王
  */
 
-import DOMPurify from 'isomorphic-dompurify';
+/* eslint-disable @typescript-eslint/no-var-requires */
+import type { DOMPurifyI } from 'dompurify';
+
+type DOMPurifyInstance = DOMPurifyI & typeof import('dompurify');
+
+let DOMPurify: DOMPurifyInstance;
+
+function ensureDOMPurify(): DOMPurifyInstance {
+  if (DOMPurify) {
+    return DOMPurify;
+  }
+
+  try {
+    // 优先使用isomorphic版本，兼容SSR
+    DOMPurify = require('isomorphic-dompurify');
+  } catch (error) {
+    // Jest/某些环境可能无法解析isomorphic版本，回退到dompurify + jsdom
+    const createDOMPurify = require('dompurify');
+    if (typeof window !== 'undefined' && window.document) {
+      DOMPurify = createDOMPurify(window);
+    } else {
+      const { JSDOM } = require('jsdom');
+      const { window: jsdomWindow } = new JSDOM('<!DOCTYPE html>');
+      DOMPurify = createDOMPurify(jsdomWindow as unknown as Window);
+    }
+  }
+
+  return DOMPurify;
+}
+
+ensureDOMPurify();
 
 /**
  * 默认配置:允许的HTML标签
@@ -100,7 +130,8 @@ export function sanitizeHtml(
 
   try {
     // 使用DOMPurify净化
-    const clean = DOMPurify.sanitize(dirty, config);
+    const purifier = ensureDOMPurify();
+    const clean = purifier.sanitize(dirty, config);
     return clean;
   } catch (error) {
     console.error('[Sanitize] HTML净化失败:', error);

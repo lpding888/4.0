@@ -10,18 +10,6 @@ import '@testing-library/jest-dom';
 import UfsRenderer from '../src/components/ufs/UfsRenderer';
 import { UFSSchema, UFSFieldType } from '../src/lib/types/ufs';
 
-// Mock AntD message
-jest.mock('antd', () => {
-  const actual = jest.requireActual('antd');
-  return {
-    ...actual,
-    message: {
-      success: jest.fn(),
-      error: jest.fn(),
-    },
-  };
-});
-
 describe('UFS表单渲染器', () => {
   // ========== 测试1: 基本渲染 - INPUT类型 ==========
   test('应该正确渲染INPUT类型字段', () => {

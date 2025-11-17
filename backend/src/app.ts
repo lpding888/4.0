@@ -246,9 +246,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Express
       const serverAdapter = new ExpressAdapter();
       serverAdapter.setBasePath('/admin/queues');
 
-      const bullQueues = queueService.getAllQueues().map(
-        (q) => new BullMQAdapter(q, { readOnlyMode: false })
-      );
+      const bullQueues = queueService
+        .getAllQueues()
+        .map((q) => new BullMQAdapter(q, { readOnlyMode: false }));
 
       createBullBoard({
         queues: bullQueues,

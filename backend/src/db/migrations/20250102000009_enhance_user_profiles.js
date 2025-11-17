@@ -86,8 +86,14 @@ exports.up = async function (knex) {
     ],
     ['phone_verified', (t) => t.boolean('phone_verified').defaultTo(false).comment('手机是否验证')],
     ['email_verified', (t) => t.boolean('email_verified').defaultTo(false).comment('邮箱是否验证')],
-    ['phone_verified_at', (t) => t.timestamp('phone_verified_at').nullable().comment('手机验证时间')],
-    ['email_verified_at', (t) => t.timestamp('email_verified_at').nullable().comment('邮箱验证时间')],
+    [
+      'phone_verified_at',
+      (t) => t.timestamp('phone_verified_at').nullable().comment('手机验证时间')
+    ],
+    [
+      'email_verified_at',
+      (t) => t.timestamp('email_verified_at').nullable().comment('邮箱验证时间')
+    ],
     ['profile_public', (t) => t.boolean('profile_public').defaultTo(true).comment('资料是否公开')],
     ['show_email', (t) => t.boolean('show_email').defaultTo(false).comment('是否显示邮箱')],
     ['show_phone', (t) => t.boolean('show_phone').defaultTo(false).comment('是否显示手机号')],
@@ -129,7 +135,10 @@ exports.up = async function (knex) {
     ['last_login_at', (t) => t.timestamp('last_login_at').nullable().comment('最后登录时间')],
     ['last_login_ip', (t) => t.string('last_login_ip', 45).nullable().comment('最后登录IP')],
     ['login_devices', (t) => t.json('login_devices').nullable().comment('登录设备信息')],
-    ['profile_updated_at', (t) => t.timestamp('profile_updated_at').nullable().comment('资料更新时间')]
+    [
+      'profile_updated_at',
+      (t) => t.timestamp('profile_updated_at').nullable().comment('资料更新时间')
+    ]
   ];
 
   for (const [column, builder] of columnDefinitions) {

@@ -114,7 +114,8 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 
         metricsService.recordHttpRequest(method, labelPath, statusCode ?? 0, durationSeconds);
 
-        const shouldRetry = attempt < finalMaxRetries && isRetryableError(error, finalRetryOnStatus);
+        const shouldRetry =
+          attempt < finalMaxRetries && isRetryableError(error, finalRetryOnStatus);
 
         logger.warn('[HTTP] 外部调用失败', {
           service: serviceName,
@@ -188,4 +189,3 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 export const defaultHttpClient = createHttpClient({
   serviceName: 'default_external'
 });
-

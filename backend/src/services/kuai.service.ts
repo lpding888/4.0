@@ -128,17 +128,14 @@ class KuaiService {
     try {
       logger.info('[KuaiService] 查询视频任务状态', { vendorTaskId });
 
-      const data = await this.client.get<KuaiStatusResponse>(
-        `${this.baseUrl}/v1/video/query`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            Accept: 'application/json'
-          },
-          params: { id: vendorTaskId },
-          timeoutMs: 10_000
-        }
-      );
+      const data = await this.client.get<KuaiStatusResponse>(`${this.baseUrl}/v1/video/query`, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          Accept: 'application/json'
+        },
+        params: { id: vendorTaskId },
+        timeoutMs: 10_000
+      });
       if (data) {
         logger.info('[KuaiService] 视频状态查询成功', {
           vendorTaskId: data.id,

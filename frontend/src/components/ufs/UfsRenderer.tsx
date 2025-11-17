@@ -9,6 +9,7 @@
 import React, { useEffect } from 'react';
 import { useForm, Controller, UseFormReturn } from 'react-hook-form';
 import {
+  ConfigProvider,
   Form,
   Input,
   InputNumber,
@@ -22,9 +23,8 @@ import {
   Space,
   message,
 } from 'antd';
-import { UploadOutlined, InboxOutlined } from '@ant-design/icons';
-import type { UploadFile } from 'antd/es/upload/interface';
-import { UFSSchema, UFSField, UFSFieldType, UFSVisibleWhen } from '@/lib/types/ufs';
+import { UploadOutlined } from '@ant-design/icons';
+import { UFSSchema, UFSField, UFSFieldType } from '@/lib/types/ufs';
 import dayjs from 'dayjs';
 
 /**
@@ -59,7 +59,12 @@ export default function UfsRenderer({
     mode: 'onChange', // 实时校验
   });
 
-  const { control, handleSubmit, watch, formState: { errors } } = form;
+  const {
+    control,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = form;
 
   // 监听表单值变化
   const watchedValues = watch();
@@ -91,12 +96,15 @@ export default function UfsRenderer({
   };
 
   return (
-    <Form layout="vertical" onFinish={handleSubmit(onFormSubmit, onFormError)}>
+    <ConfigProvider autoInsertSpaceInButton={false}>
+      <Form layout="vertical" onFinish={handleSubmit(onFormSubmit, onFormError)}>
       {schema.fields.map((field) => {
         // 检查字段是否应该显示
         if (!shouldFieldBeVisible(field, watchedValues)) {
           return null;
         }
+
+        const labelId = `${field.key}-label`;
 
         return (
           <Controller
@@ -106,30 +114,34 @@ export default function UfsRenderer({
             rules={buildValidationRules(field)}
             render={({ field: controllerField, fieldState }) => (
               <Form.Item
-                label={field.label}
+                label={<span id={labelId}>{field.label}</span>}
                 validateStatus={fieldState.error ? 'error' : ''}
                 help={fieldState.error?.message || field.description}
                 required={field.validation?.required}
+                htmlFor={field.key}
               >
-                {renderField(field, controllerField, readOnly, form)}
-              </Form.Item>
-            )}
-          />
-        );
-      })}
+            {renderField(field, controllerField, readOnly, form, labelId)}
+          </Form.Item>
+        )}
+      />
+    );
+  })}
 
       {/* 提交按钮 */}
       {showSubmitButton && !readOnly && (
         <Form.Item>
           <Space>
-            <Button type="primary" htmlType="submit">
+            <Button type="primary" htmlType="submit" autoInsertSpaceInButton={false}>
               {submitButtonText}
             </Button>
-            <Button onClick={() => form.reset()}>重置</Button>
+            <Button onClick={() => form.reset()} autoInsertSpaceInButton={false}>
+              重置
+            </Button>
           </Space>
         </Form.Item>
       )}
-    </Form>
+      </Form>
+    </ConfigProvider>
   );
 }
 
@@ -278,11 +290,13 @@ function renderField(
   field: UFSField,
   controllerField: any,
   readOnly: boolean,
-  form: UseFormReturn
+  form: UseFormReturn,
+  labelId?: string
 ): React.ReactNode {
   const commonProps = {
     disabled: readOnly || field.disabled,
     placeholder: field.placeholder,
+    id: field.key,
   };
 
   switch (field.type) {
@@ -364,6 +378,7 @@ function renderField(
           checked={controllerField.value}
           onChange={controllerField.onChange}
           disabled={commonProps.disabled}
+          aria-labelledby={labelId}
         />
       );
 

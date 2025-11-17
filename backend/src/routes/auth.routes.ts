@@ -38,7 +38,11 @@ const sendCodeRateLimiter = securityRateLimit({
  * POST /api/auth/register
  */
 router.post('/register', authRateLimiter, authController.register.bind(authController));
-router.post('/email/register', authRateLimiter, authController.registerWithEmail.bind(authController));
+router.post(
+  '/email/register',
+  authRateLimiter,
+  authController.registerWithEmail.bind(authController)
+);
 
 /**
  * 用户登录
@@ -46,7 +50,11 @@ router.post('/email/register', authRateLimiter, authController.registerWithEmail
  */
 router.post('/login', authRateLimiter, authController.loginCode.bind(authController));
 router.post('/login/password', authRateLimiter, authController.loginPassword.bind(authController));
-router.post('/email/login', authRateLimiter, authController.loginWithEmailCode.bind(authController));
+router.post(
+  '/email/login',
+  authRateLimiter,
+  authController.loginWithEmailCode.bind(authController)
+);
 
 /**
  * 刷新Token
@@ -61,10 +69,18 @@ router.post('/refresh', authRateLimiter, authController.refresh.bind(authControl
 router.post('/logout', authenticate, authController.logout.bind(authController));
 // 发送验证码
 router.post('/send-code', sendCodeRateLimiter, authController.sendCode.bind(authController));
-router.post('/email/send-code', sendCodeRateLimiter, authController.sendEmailCode.bind(authController));
+router.post(
+  '/email/send-code',
+  sendCodeRateLimiter,
+  authController.sendEmailCode.bind(authController)
+);
 
 // 发送邮箱验证码
-router.post('/send-email-code', sendCodeRateLimiter, authController.sendEmailCode.bind(authController));
+router.post(
+  '/send-email-code',
+  sendCodeRateLimiter,
+  authController.sendEmailCode.bind(authController)
+);
 
 // 邮箱验证码登录
 router.post('/login/email', authRateLimiter, authController.loginEmail.bind(authController));

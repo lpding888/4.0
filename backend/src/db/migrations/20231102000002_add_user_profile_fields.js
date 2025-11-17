@@ -100,9 +100,7 @@ exports.up = async function (knex) {
   await ensureIndex('idx_users_last_login', (table) =>
     table.index('last_login_at', 'idx_users_last_login')
   );
-  await ensureIndex('idx_users_created', (table) =>
-    table.index('created_at', 'idx_users_created')
-  );
+  await ensureIndex('idx_users_created', (table) => table.index('created_at', 'idx_users_created'));
 };
 
 exports.down = async function (knex) {

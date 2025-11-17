@@ -170,16 +170,30 @@ describe('IndexedDB聊天存储', () => {
   });
 
   test('应该能够保存和获取聊天会话', async () => {
-    // Mock IndexedDB operations
+    const storeData: Record<string, any> = {};
+
+    const mockObjectStore = {
+      put: jest.fn().mockImplementation((data) => {
+        const mockRequest = { onsuccess: null as ((event: any) => void) | null, onerror: null as ((event: any) => void) | null };
+        setTimeout(() => {
+          storeData[data.id] = data;
+          mockRequest.onsuccess?.({ target: { result: data.id } });
+        }, 10);
+        return mockRequest;
+      }),
+      get: jest.fn().mockImplementation((key) => {
+        const mockRequest = { result: storeData[key], onsuccess: null as ((event: any) => void) | null, onerror: null as ((event: any) => void) | null };
+        setTimeout(() => {
+          mockRequest.onsuccess?.({ target: mockRequest });
+        }, 10);
+        return mockRequest;
+      }),
+    };
+
     const mockDB = {
       transaction: jest.fn().mockReturnValue({
-        objectStore: jest.fn().mockReturnValue({
-          put: jest.fn().mockImplementation((data, onSuccess) => {
-            setTimeout(() => onSuccess?.({ result: data.id }), 10);
-            return { onsuccess: { call: jest.fn() }, onerror: { call: jest.fn() } };
-          })
-        })
-      })
+        objectStore: jest.fn().mockReturnValue(mockObjectStore),
+      }),
     };
 
     mockIndexedDB.open = jest.fn().mockImplementation((dbName, version) => {
@@ -208,25 +222,6 @@ describe('IndexedDB聊天存储', () => {
 
     // 保存会话
     await saveChat(chatSession);
-
-    // Mock get operation
-    mockDB.transaction = jest.fn().mockReturnValue({
-      objectStore: jest.fn().mockReturnValue({
-        get: jest.fn().mockImplementation((key) => {
-          const mockRequest = {
-            result: key === 'test-session-1' ? chatSession : undefined,
-            onsuccess: null as ((event: any) => void) | null,
-            onerror: null as ((event: any) => void) | null
-          };
-
-          setTimeout(() => {
-            mockRequest.onsuccess?.({ target: mockRequest });
-          }, 10);
-
-          return mockRequest;
-        })
-      })
-    });
 
     // 获取会话
     const retrievedSession = await getChat('test-session-1');
