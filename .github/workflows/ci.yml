@@ -134,16 +134,31 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build backend image
+      - name: Build backend image (for scanning)
         if: needs.detect-changes.outputs.backend == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          load: true  # 加载到本地 Docker 以便扫描
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan backend image
+        if: needs.detect-changes.outputs.backend == 'true'
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/backend:main-${{ github.sha }}
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Push backend image
+        if: needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          for tag in $(echo "${{ steps.meta-backend.outputs.tags }}" | tr ',' ' '); do
+            docker push "$tag"
+          done
 
       - name: Extract metadata for frontend
         if: needs.detect-changes.outputs.frontend == 'true'
@@ -156,32 +171,31 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build frontend image
+      - name: Build frontend image (for scanning)
         if: needs.detect-changes.outputs.frontend == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          load: true  # 加载到本地 Docker 以便扫描
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan backend image
-        if: needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ghcr.io/${{ github.repository }}/backend:main-${{ github.sha }}
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
-
       - name: Scan frontend image
-        if: needs.detect-changes.outputs.frontend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: needs.detect-changes.outputs.frontend == 'true'
         uses: aquasecurity/trivy-action@0.20.0
         with:
           image-ref: ghcr.io/${{ github.repository }}/frontend:main-${{ github.sha }}
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
+
+      - name: Push frontend image
+        if: needs.detect-changes.outputs.frontend == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          for tag in $(echo "${{ steps.meta-frontend.outputs.tags }}" | tr ',' ' '); do
+            docker push "$tag"
+          done
 
   deploy:
     name: Deploy via Docker Compose
