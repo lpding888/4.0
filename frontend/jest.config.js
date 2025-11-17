@@ -28,7 +28,7 @@ const customJestConfig = {
     '!**/node_modules/**'
   ],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
+  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
