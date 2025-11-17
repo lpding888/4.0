@@ -69,11 +69,11 @@ export default function LoginPage() {
       }
       setSendingCode(true);
       const response: any = await api.auth.sendCode(phone);
-      if (response?.success) {
+      if (response.data?.success) {
         message.success('验证码已发送');
         setCodeCountdown(60);
       } else {
-        message.error(response?.error?.message || '验证码发送失败');
+        message.error(response.data?.error?.message || '验证码发送失败');
       }
     } catch (err: any) {
       message.error(err?.message || '验证码发送失败');
@@ -86,10 +86,10 @@ export default function LoginPage() {
     try {
       setCodeLoading(true);
       const response: any = await api.auth.loginWithCode(values.phone, values.code);
-      if (!response?.success) {
-        throw new Error(response?.error?.message || '登录失败，请重试');
+      if (!response.data?.success) {
+        throw new Error(response.data?.error?.message || '登录失败，请重试');
       }
-      handleLoginSuccess(response.data ?? response);
+      handleLoginSuccess(response.data.data ?? response.data);
     } catch (err: any) {
       message.error(err?.message || '登录失败，请重试');
     } finally {
@@ -101,10 +101,10 @@ export default function LoginPage() {
     try {
       setPasswordLoading(true);
       const response: any = await api.auth.loginWithPassword(values.phone, values.password);
-      if (!response?.success) {
-        throw new Error(response?.error?.message || '登录失败，请检查账号密码');
+      if (!response.data?.success) {
+        throw new Error(response.data?.error?.message || '登录失败，请检查账号密码');
       }
-      handleLoginSuccess(response.data ?? response);
+      handleLoginSuccess(response.data.data ?? response.data);
     } catch (err: any) {
       message.error(err?.message || '登录失败，请重试');
     } finally {
@@ -121,7 +121,7 @@ export default function LoginPage() {
       }
       setSendingEmailCode(true);
       const response: any = await api.auth.sendEmailCode(email);
-      if (response?.success) {
+      if (response.data?.success) {
         message.success('验证码已发送到邮箱');
         setEmailCodeCountdown(60);
       } else {
@@ -138,10 +138,10 @@ export default function LoginPage() {
     try {
       setEmailLoading(true);
       const response: any = await api.auth.loginWithEmail(values.email, values.code);
-      if (!response?.success) {
-        throw new Error(response?.error?.message || '登录失败，请重试');
+      if (!response.data?.success) {
+        throw new Error(response.data?.error?.message || '登录失败，请重试');
       }
-      handleLoginSuccess(response.data ?? response);
+      handleLoginSuccess(response.data.data ?? response.data);
     } catch (err: any) {
       message.error(err?.message || '登录失败，请重试');
     } finally {
@@ -186,10 +186,10 @@ export default function LoginPage() {
     try {
       setSettingPassword(true);
       const response: any = await api.auth.setPassword(values.password);
-      if (response?.success === false) {
-        throw new Error(response?.error?.message || '密码设置失败');
+      if (response.data?.success === false) {
+        throw new Error(response.data?.error?.message || '密码设置失败');
       }
-      message.success(response?.message || '密码设置成功');
+      message.success(response.data?.message || '密码设置成功');
       setPasswordForm.resetFields();
       setPwdModalOpen(false);
       router.push('/workspace');

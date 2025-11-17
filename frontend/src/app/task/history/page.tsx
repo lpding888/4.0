@@ -38,11 +38,11 @@ export default function TaskHistoryPage() {
       }
 
       const response = await api.task.list(params);
-      if (response?.success && response.data) {
-        setTasks((response.data as any)?.tasks || []);
-        setTotal((response.data as any)?.total || 0);
+      if (response.data?.success && response.data.data) {
+        setTasks((response.data.data as any)?.tasks || []);
+        setTotal((response.data.data as any)?.total || 0);
       } else {
-        throw new Error(response?.message || '获取任务列表失败');
+        throw new Error(response.data?.message || '获取任务列表失败');
       }
     } catch (error) {
       message.error('获取任务列表失败');

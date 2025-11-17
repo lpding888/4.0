@@ -46,13 +46,13 @@ export const useMembershipStore = create<MembershipState>()(
 
           const response = await api.membership.status();
 
-          if (response?.success && response.data) {
+          if (response.data?.success && response.data.data) {
             set({
-              membershipStatus: response.data,
+              membershipStatus: response.data.data,
               loading: false
             });
           } else {
-            throw new Error(response?.message || '获取会员状态失败');
+            throw new Error(response.data?.message || '获取会员状态失败');
           }
         } catch (error: any) {
           console.error('获取会员状态失败:', error);
@@ -70,13 +70,13 @@ export const useMembershipStore = create<MembershipState>()(
 
           const response = await api.membership.purchase(channel);
 
-          if (response?.success) {
+          if (response.data?.success) {
             // 重新获取会员状态
             await get().fetchMembershipStatus();
             set({ purchasing: false });
             return true;
           } else {
-            throw new Error(response?.message || '购买会员失败');
+            throw new Error(response.data?.message || '购买会员失败');
           }
         } catch (error: any) {
           console.error('购买会员失败:', error);

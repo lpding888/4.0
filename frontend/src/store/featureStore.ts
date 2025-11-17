@@ -75,8 +75,8 @@ export const useFeatureStore = create<FeatureState>()(
 
           const response = await api.features.getAll(requestParams);
 
-          if (response?.success && response.data) {
-            let features = response.data.features || response.data;
+          if (response.data?.success && response.data.data) {
+            let features = response.data.data.features || response.data.data;
 
             // 客户端搜索过滤
             if (filters.search) {
@@ -114,14 +114,14 @@ export const useFeatureStore = create<FeatureState>()(
 
           const response = await api.features.getFormSchema(featureId);
 
-          if (response?.success) {
-            const { success: _ignored, message: _msg, ...schema } = response as any;
+          if (response.data?.success) {
+            const { success: _ignored, message: _msg, ...schema } = response.data as any;
             set({
               formSchema: schema,
               loading: false
             });
           } else {
-            throw new Error(response?.message || '获取表单配置失败');
+            throw new Error(response.data?.message || '获取表单配置失败');
           }
         } catch (error: any) {
           console.error('获取表单配置失败:', error);
