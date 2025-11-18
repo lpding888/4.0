@@ -125,7 +125,10 @@
   "overrides": {
     "canvas": "3.2.0",
     "cross-spawn": "7.0.6",
-    "esbuild": "0.24.0",
-    "glob": "10.5.0"
+    "esbuild": "0.27.0",
+    "glob": "10.5.0",
+    "test-exclude": {
+      "glob": "7.2.3"
+    }
   }
 }
