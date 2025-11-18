@@ -222,6 +222,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_PATH
           script: |
             set -euo pipefail
 
