@@ -69,11 +69,11 @@ export default function LoginPage() {
       }
       setSendingCode(true);
       const response: any = await api.auth.sendCode(phone);
-      if (response.data?.success) {
+      if (response?.success) {
         message.success('验证码已发送');
         setCodeCountdown(60);
       } else {
-        message.error(response.data?.error?.message || '验证码发送失败');
+        message.error(response?.error?.message || '验证码发送失败');
       }
     } catch (err: any) {
       message.error(err?.message || '验证码发送失败');
@@ -121,7 +121,7 @@ export default function LoginPage() {
       }
       setSendingEmailCode(true);
       const response: any = await api.auth.sendEmailCode(email);
-      if (response.data?.success) {
+      if (response?.success) {
         message.success('验证码已发送到邮箱');
         setEmailCodeCountdown(60);
       } else {
