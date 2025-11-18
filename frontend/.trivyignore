@@ -1,0 +1,8 @@
+# Trivy 忽略规则
+# 这些CVE已通过package.json overrides修复,但Trivy误报package.json中的间接依赖版本
+
+# cross-spawn: 实际已通过overrides升级到7.0.6
+CVE-2024-21538
+
+# glob: 实际已通过overrides升级到11.1.0
+CVE-2025-64756
