@@ -29,9 +29,10 @@ COPY --from=build /app/src/db/migrations ./src/db/migrations
 COPY knexfile.js ./
 COPY docker-entrypoint.sh ./
 
-# 设置启动脚本权限
-RUN chmod +x docker-entrypoint.sh && \
-    chown api:api docker-entrypoint.sh
+# 创建必要的目录并设置权限
+RUN mkdir -p uploads logs cache && \
+    chmod +x docker-entrypoint.sh && \
+    chown -R api:api /app
 
 USER api
 EXPOSE 3000
