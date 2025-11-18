@@ -241,13 +241,13 @@ jobs:
             fi
 
             echo "拉取镜像..."
-            $DC -f docker-compose.prod.yml pull || true
+            sudo $DC -f docker-compose.prod.yml pull || true
 
             echo "启动服务..."
-            $DC -f docker-compose.prod.yml up -d --build
+            sudo $DC -f docker-compose.prod.yml up -d --build
 
             echo "列出服务状态..."
-            $DC -f docker-compose.prod.yml ps
+            sudo $DC -f docker-compose.prod.yml ps
 
             echo "清理无用镜像..."
-            docker image prune -f || true
+            sudo docker image prune -f || true
