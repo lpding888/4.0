@@ -143,6 +143,7 @@ jobs:
           load: true  # 加载到本地 Docker 以便扫描
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
+          no-cache: true  # 强制重新构建，不使用缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -182,6 +183,7 @@ jobs:
           load: true  # 加载到本地 Docker 以便扫描
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
+          no-cache: true  # 强制重新构建，不使用缓存
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
