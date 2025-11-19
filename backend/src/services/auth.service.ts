@@ -359,24 +359,34 @@ class AuthService implements AuthProvider {
     const code = generateCode(6);
     const expireAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    await db('verification_codes').insert({
-      phone: null,
-      email: normalized,
-      code,
-      ip,
-      channel: 'email',
-      expireAt,
-      used: false,
-      created_at: new Date(),
-      updated_at: new Date()
-    });
+    // 艹！先写数据库和缓存，确保数据一致性
+    // 只有在这些都成功后才发送邮件，避免邮件发送成功但数据未保存的情况
+    try {
+      await db('verification_codes').insert({
+        phone: null,
+        email: normalized,
+        code,
+        ip,
+        channel: 'email',
+        expireAt,
+        used: false,
+        created_at: new Date(),
+        updated_at: new Date()
+      });
 
-    await sendVerificationEmail(normalized, code);
-    await cacheService.set(`email:${normalized}`, code, { ttl: 5 * 60, skipMemoryCache: true });
+      await cacheService.set(`email:${normalized}`, code, { ttl: 5 * 60, skipMemoryCache: true });
 
-    logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);
+      // 最后发送邮件
+      await sendVerificationEmail(normalized, code);
 
-    return { expireIn: 300 };
+      logger.info(`[AuthService] 邮箱验证码已发送: email=${normalized}, ip=${ip}`);
+
+      return { expireIn: 300 };
+    } catch (error) {
+      // 如果数据库或缓存操作失败，记录错误但不发送邮件
+      logger.error(`[AuthService] 邮箱验证码保存失败: email=${normalized}, error=${error}`);
+      throw error;
+    }
   }
 
   /**

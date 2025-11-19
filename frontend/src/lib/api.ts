@@ -261,17 +261,27 @@ class APIClient {
 
   // 认证相关
   auth = {
+    // ========== 验证码发送 ==========
     sendCode: (phone: string) =>
       this.client.post<APIResponse>('/auth/send-code', { phone }),
 
     sendEmailCode: (email: string, scene?: string) =>
       this.client.post<APIResponse>('/auth/email/send-code', { email, scene }),
 
-    loginWithCode: (phone: string, code: string) =>
-      this.client.post<APIResponse>('/auth/login', { phone, code }),
+    // ========== 登录接口 ==========
+    loginWithCode: (phone: string, code: string, referrerId?: string | null) =>
+      this.client.post<APIResponse>('/auth/login', {
+        phone,
+        code,
+        referrer_id: referrerId ?? null
+      }),
 
-    login: (phone: string, code: string) =>
-      this.client.post<APIResponse>('/auth/login', { phone, code }),
+    login: (phone: string, code: string, referrerId?: string | null) =>
+      this.client.post<APIResponse>('/auth/login', {
+        phone,
+        code,
+        referrer_id: referrerId ?? null
+      }),
 
     loginWithPassword: (phone: string, password: string) =>
       this.client.post<APIResponse>('/auth/login/password', { phone, password }),
@@ -283,6 +293,17 @@ class APIClient {
       this.client.post<APIResponse>('/auth/email/login', {
         email,
         code,
+        referrer_id: referrerId ?? null,
+      }),
+
+    loginWithEmail: (email: string, code: string) =>
+      this.client.post<APIResponse>('/auth/login/email', { email, code }),
+
+    // ========== 注册接口 ==========
+    register: (phone: string, password: string, referrerId?: string | null) =>
+      this.client.post<APIResponse>('/auth/register', {
+        phone,
+        password,
         referrer_id: referrerId ?? null,
       }),
 
@@ -307,9 +328,6 @@ class APIClient {
       this.client.post<APIResponse>('/auth/reset-password', params),
 
     me: () => this.client.get<APIResponse>('/auth/me'),
-
-    loginWithEmail: (email: string, code: string) =>
-      this.client.post<APIResponse>('/auth/login/email', { email, code }),
   };
 
   // 会员相关
