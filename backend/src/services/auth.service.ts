@@ -394,12 +394,18 @@ class AuthService implements AuthProvider {
     }
 
     const normalized = this.normalizeEmail(email);
+    logger.info(`[AuthService] 邮箱登录: email=${normalized}, code=${code}`);
+
     const record = await this.verifyEmailCode(normalized, code);
+    logger.info(`[AuthService] 验证码验证成功: recordId=${record.id}`);
 
     let user = await userRepo.findUserByEmail(normalized);
+    logger.info(`[AuthService] 查找现有用户: user=${user ? user.id : 'null'}`);
 
     if (!user) {
       const userId = generateId();
+      logger.info(`[AuthService] 创建新用户: userId=${userId}, email=${normalized}`);
+
       await db('users').insert({
         id: userId,
         email: normalized,
@@ -413,8 +419,12 @@ class AuthService implements AuthProvider {
         created_at: new Date(),
         updated_at: new Date()
       });
+
+      logger.info(`[AuthService] 用户插入完成，重新查询: userId=${userId}`);
       user = await userRepo.findUserById(userId);
+      logger.info(`[AuthService] 重新查询结果: user=${user ? user.id : 'null'}`);
     } else if (!user.email_verified) {
+      logger.info(`[AuthService] 更新邮箱验证状态: userId=${user.id}`);
       await userRepo.updateUser(user.id, {
         email_verified: true,
         email_verified_at: new Date()
@@ -423,9 +433,11 @@ class AuthService implements AuthProvider {
     }
 
     if (!user) {
+      logger.error(`[AuthService] 邮箱用户创建失败: email=${normalized}`);
       throw new Error('邮箱用户创建失败');
     }
 
+    logger.info(`[AuthService] 标记验证码已使用: recordId=${record.id}`);
     await this.markCodeUsed(record.id);
     await cacheService.delete(`email:${normalized}`);
 
