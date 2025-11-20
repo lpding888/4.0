@@ -1,6 +1,10 @@
 import 'dotenv/config';
+import { initSentry } from './config/sentry.js'; // Sentry 必须最先初始化
 import logger from './utils/logger.js';
 import { createApp, startSchedulers, stopSchedulers } from './app.js';
+
+// 初始化 Sentry 错误追踪
+initSentry();
 import { closeRedis } from './config/redis.js';
 import { db } from './config/database.js';
 import queueService from './services/queue.service.js';
